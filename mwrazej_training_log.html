@@ -44,11 +44,17 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .btn-danger:hover{background:rgba(255,82,82,.1)}
 .stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.stat-card::before{content:'';position:absolute;top:0;left:0;bottom:0;width:3px}
 .stat-card.pk::before{background:var(--pink)}
 .stat-card.bl::before{background:var(--blue)}
 .stat-card.gr::before{background:var(--green)}
 .stat-card.am::before{background:var(--amber)}
+.stat-card.pu::before{background:#7c4dff}
+.stat-icon{position:absolute;top:12px;right:12px;opacity:0.75}
+.stat-card.pk .stat-icon{color:var(--pink)}
+.stat-card.bl .stat-icon{color:var(--blue)}
+.stat-card.pu .stat-icon{color:#7c4dff}
+.stat-card.gr .stat-icon{color:var(--green)}
 .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .stat-val{font-size:22px;font-weight:700;color:var(--text);line-height:1}
 .stat-sub{font-size:10px;color:var(--muted);margin-top:4px}
@@ -78,7 +84,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .act-info{font-size:12px;color:var(--text);transition:.12s}
 .act-meta{font-size:10px;color:var(--muted);margin-top:2px}
 .act-date{font-size:10px;color:var(--muted)}
-.bar-chart{height:110px;display:flex;align-items:flex-end;gap:4px;margin-top:6px;position:relative}
+.bar-chart{height:120px;display:flex;align-items:flex-end;gap:4px;margin-top:6px;position:relative;padding-left:18px}
 .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
 .bar-stack{width:100%;display:flex;flex-direction:column;border-radius:3px 3px 0 0;overflow:hidden;cursor:pointer}
 .bar-lbl{font-size:9px;color:var(--muted);text-align:center}
@@ -163,8 +169,28 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   .stat-grid{grid-template-columns:1fr 1fr}
 }
 </style>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
+<!-- Login screen -->
+<div id="login-overlay" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:28px">
+  <div style="text-align:center">
+    <div style="font-size:28px;font-weight:800;color:var(--pink);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">M Wrazej Training Log</div>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.5px">The complete endurance athlete.</div>
+  </div>
+  <button onclick="signInWithGoogle()" style="display:flex;align-items:center;gap:12px;background:#fff;color:#222;border:none;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 2px 16px rgba(0,0,0,.4)">
+    <svg viewBox="0 0 24 24" width="20" height="20"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+    Sign in with Google
+  </button>
+</div>
+<!-- Loading screen -->
+<div id="loading-overlay" style="position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:9998">
+  <div style="color:var(--muted);font-size:13px;letter-spacing:.5px">Loading your training data…</div>
+</div>
+
 <div class="app" id="app">
 <aside class="sidebar">
   <div class="sidebar-brand">Run Training Log<div class="sidebar-sub">M Wrazej</div></div>
@@ -199,6 +225,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="export-btn" onclick="document.getElementById('import-input').click()" style="flex:1">Import</button>
       <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <img id="user-avatar" style="display:none;width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
+      <div id="user-display-name" style="flex:1;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <button onclick="signOutUser()" title="Sign out" style="background:transparent;border:none;color:var(--muted2);cursor:pointer;padding:3px;border-radius:4px;font-size:16px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">⏻</button>
+    </div>
   </div>
 </aside>
 
@@ -209,31 +240,47 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="page-header">
     <div><div class="page-title">M Wrazej Training Log</div><div class="page-sub">The complete endurance athlete.</div></div>
   </div>
-  <div class="section-title">Running Stats — This Week</div>
+  <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Running Stats</div>
   <div class="stat-grid">
-    <div class="stat-card pk"><div class="stat-label">Weekly Distance</div><div class="stat-val" id="s-wkm">0.0 km</div><div class="stat-sub" id="s-wavg">Avg — km/wk</div></div>
-    <div class="stat-card bl"><div class="stat-label">Weekly Vert</div><div class="stat-val" id="s-wvert">0 m</div><div class="stat-sub">Meters climbed</div></div>
-    <div class="stat-card gr"><div class="stat-label">Time on Feet</div><div class="stat-val" id="s-wtime">0h 0m</div><div class="stat-sub">This week</div></div>
-    <div class="stat-card am"><div class="stat-label">Longest Run</div><div class="stat-val" id="s-long">0.0 km</div><div class="stat-sub">All time</div></div>
+    <div class="stat-card pk">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="stat-label">Weekly Mileage</div><div class="stat-val" id="s-wkm">0.0</div><div class="stat-sub" id="s-wavg">Avg — km/wk</div></div>
+    <div class="stat-card bl">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 20 2 20"/></svg></div>
+      <div class="stat-label">Weekly Vert</div><div class="stat-val" id="s-wvert">0 m</div><div class="stat-sub">Meters climbed</div></div>
+    <div class="stat-card pu">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="stat-label">Time on Feet</div><div class="stat-val" id="s-wtime">0.0</div><div class="stat-sub">Hours logged</div></div>
+    <div class="stat-card bl">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div class="stat-label">Longest Run</div><div class="stat-val" id="s-long">0.0</div><div class="stat-sub">Max km in one go</div></div>
   </div>
-  <div class="section-title">Cross Training Totals — This Week</div>
+  <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Cross Training Totals</div>
   <div class="stat-grid">
-    <div class="stat-card bl"><div class="stat-label">CT Distance</div><div class="stat-val" id="s-ckm">0.0 km</div><div class="stat-sub">Cross training</div></div>
-    <div class="stat-card bl"><div class="stat-label">CT Vert</div><div class="stat-val" id="s-cvert">0 m</div><div class="stat-sub">Meters climbed</div></div>
-    <div class="stat-card bl"><div class="stat-label">CT Time</div><div class="stat-val" id="s-ctime">0h 0m</div><div class="stat-sub">Cross training</div></div>
-    <div class="stat-card pk"><div class="stat-label">Strength Sessions</div><div class="stat-val" id="s-str">0</div><div class="stat-sub">This week</div></div>
+    <div class="stat-card pk">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17L9 4"/><path d="M9 4h6l2 5"/><path d="M11 9l-2 8"/><line x1="9" y1="4" x2="15" y2="4"/></svg></div>
+      <div class="stat-label">Total Hours</div><div class="stat-val" id="s-ctime">0.0</div></div>
+    <div class="stat-card bl">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="stat-label">Total Distance</div><div class="stat-val" id="s-ckm">0.0</div></div>
+    <div class="stat-card pu">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 20 2 20"/></svg></div>
+      <div class="stat-label">Total Vert</div><div class="stat-val" id="s-cvert">0 m</div></div>
+    <div class="stat-card bl">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M18 4v16M6 12h12"/></svg></div>
+      <div class="stat-label">Strength Sessions</div><div class="stat-val" id="s-str">0</div></div>
   </div>
   <div class="two-col">
     <div>
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
-          <div class="card-title">This Week</div>
+          <div class="card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>This Week</div>
           <span class="card-link" onclick="showPage('calendar',document.getElementById('nav-calendar'))">View Calendar ›</span>
         </div>
         <div class="week-row" id="week-row"></div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">Volume History</div></div>
+        <div class="card-header"><div class="card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Volume History</div></div>
         <div class="bar-chart" id="vol-chart"><div class="tooltip" id="vol-tooltip"></div></div>
         <div style="display:flex;gap:4px;margin-top:6px" id="vol-labels"></div>
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
@@ -389,15 +436,76 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <div id="modal-container"></div>
 
 <script>
+// ─── FIREBASE CONFIG ────────────────────────────────────────────────────────
+// Paste your Firebase project config here (from Firebase Console → Project settings)
+var FIREBASE_CONFIG = {
+  apiKey:            "PASTE_YOUR_API_KEY",
+  authDomain:        "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "PASTE_YOUR_PROJECT_ID",
+  storageBucket:     "PASTE_YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
+  appId:             "PASTE_YOUR_APP_ID"
+};
+// ────────────────────────────────────────────────────────────────────────────
+
+firebase.initializeApp(FIREBASE_CONFIG);
+var fbAuth  = firebase.auth();
+var fbStore = firebase.firestore();
+var currentUser = null;
+var saveTimer   = null;
+
+function getDocRef(){
+  return fbStore.collection('users').doc(currentUser.uid).collection('db').doc('data');
+}
+
+function load(){
+  document.getElementById('loading-overlay').style.display='flex';
+  getDocRef().get().then(function(doc){
+    if(doc.exists) DB=Object.assign(DB,doc.data());
+    document.getElementById('loading-overlay').style.display='none';
+    renderAll();
+  }).catch(function(err){
+    console.error('Load error:',err);
+    document.getElementById('loading-overlay').style.display='none';
+    renderAll();
+  });
+}
+
+function save(){
+  if(!currentUser)return;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){
+    getDocRef().set(JSON.parse(JSON.stringify(DB))).catch(function(err){console.error('Save error:',err);});
+  },800);
+}
+
+function signInWithGoogle(){
+  fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(err){alert('Sign-in failed: '+err.message);});
+}
+
+function signOutUser(){
+  if(confirm('Sign out?')) fbAuth.signOut();
+}
+
+fbAuth.onAuthStateChanged(function(user){
+  currentUser=user;
+  if(user){
+    document.getElementById('login-overlay').style.display='none';
+    document.getElementById('user-display-name').textContent=user.displayName||user.email;
+    var av=document.getElementById('user-avatar');
+    if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
+    // Reset DB before loading fresh data
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0}};
+    load();
+  }else{
+    document.getElementById('login-overlay').style.display='flex';
+    document.getElementById('loading-overlay').style.display='none';
+  }
+});
+
 var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0}};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
-
-function load(){
-  try{var r=localStorage.getItem('mwrazej_db_v3');if(r)DB=Object.assign(DB,JSON.parse(r));}catch(e){}
-  renderAll();
-}
-function save(){try{localStorage.setItem('mwrazej_db_v3',JSON.stringify(DB));}catch(e){}}
 
 function exportData(){
   var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
@@ -441,13 +549,13 @@ function renderDash(){
   var cvert=wc.reduce((s,r)=>s+pi(r.vert),0);
   var cmin=wc.reduce((s,r)=>s+pi(r.dur),0);
   var wstr=DB.strengths.filter(r=>inThisWeek(r.date)).length;
-  setText('s-wkm',wkm.toFixed(1)+' km');
+  setText('s-wkm',wkm.toFixed(1));
   setText('s-wvert',wvert+' m');
-  setText('s-wtime',minsToHM(wmin));
-  setText('s-long',longest.toFixed(1)+' km');
-  setText('s-ckm',ckm.toFixed(1)+' km');
+  setText('s-wtime',(wmin/60).toFixed(1));
+  setText('s-long',longest.toFixed(1));
+  setText('s-ctime',(cmin/60).toFixed(1));
+  setText('s-ckm',ckm.toFixed(1));
   setText('s-cvert',cvert+' m');
-  setText('s-ctime',minsToHM(cmin));
   setText('s-str',wstr+'');
   var weeks=getWeeklyTotals();
   var avg=weeks.length?weeks.reduce((s,w)=>s+w.rkm,0)/weeks.length:0;
@@ -484,8 +592,9 @@ function getWeeklyTotals(){
     else{byWeek[key].ckm+=pf(r.dist);byWeek[key].cmin+=pi(r.dur);}
   });
   var wks=Object.values(byWeek).sort((a,b)=>a.key.localeCompare(b.key));
-  wks.forEach(w=>{var d=new Date(w.key);w.lbl=(d.getMonth()+1)+'/'+(d.getDate());});
-  return wks.slice(-8);
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  wks.forEach(w=>{var d=new Date(w.key);w.lbl=months[d.getMonth()]+' '+(d.getDate());});
+  return wks.slice(-12);
 }
 
 function renderVolChart(){
@@ -496,10 +605,28 @@ function renderVolChart(){
   labels.innerHTML='';
   if(!wks.length){chart.innerHTML+='<div class="empty-state" style="width:100%">Log runs to see history</div>';return;}
   var maxKm=Math.max(...wks.map(w=>w.rkm+w.ckm),1);
+  var chartH=120;
+  // Add y-axis gridlines
+  var ySteps=[0,15,30,45,60];
+  var gridDiv=document.createElement('div');
+  gridDiv.style.cssText='position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;';
+  ySteps.forEach(function(v){
+    var pct=1-(v/Math.max(maxKm,60));
+    var top=pct*chartH;
+    var line=document.createElement('div');
+    line.style.cssText='position:absolute;left:0;right:0;border-top:1px solid var(--border);display:flex;align-items:center;';
+    line.style.top=top+'px';
+    var lbl=document.createElement('span');
+    lbl.style.cssText='font-size:8px;color:var(--muted2);padding-right:2px;line-height:1;position:absolute;right:100%;white-space:nowrap;';
+    lbl.textContent=v;
+    line.appendChild(lbl);
+    gridDiv.appendChild(line);
+  });
+  chart.appendChild(gridDiv);
   var curKey=(()=>{var d=new Date(),day=d.getDay()||7,m=new Date(d);m.setDate(d.getDate()-day+1);return m.toISOString().slice(0,10);})();
   wks.forEach(w=>{
-    var rh=Math.max((w.rkm/maxKm)*90,w.rkm>0?2:0);
-    var ch=Math.max((w.ckm/maxKm)*90,w.ckm>0?2:0);
+    var rh=Math.max((w.rkm/Math.max(maxKm,60))*chartH,w.rkm>0?2:0);
+    var ch=Math.max((w.ckm/Math.max(maxKm,60))*chartH,w.ckm>0?2:0);
     var isCur=w.key===curKey;
     var bw=document.createElement('div');
     bw.className='bar-wrap';
@@ -530,14 +657,16 @@ function renderRecentActs(){
     var days=Math.round((new Date()-new Date(r.date))/86400000);
     var lbl=days===0?'Today':days===1?'Yesterday':days+' days ago';
     var distVal=pf(r.dist);
-    var title=r._type==='run'?(distVal>0?distVal.toFixed(1)+' km ':'')+' Run'
+    var terrain=r.terrain||'';
+    var title=r._type==='run'?(distVal>0?distVal.toFixed(1)+' km ':'')+(terrain?terrain+' ':'')+'Run'
       :r._type==='cross'?(distVal>0?distVal.toFixed(1)+' km ':'')+' '+(r.subtype||'Cross Train')
       :r._type==='strength'?(r.subtype||'Strength')
       :(r.subtype||'Recovery');
+    var iconColor=r._type==='run'?'var(--pink)':r._type==='cross'?'var(--blue)':r._type==='strength'?'var(--amber)':'var(--green)';
     return`<div class="act-row" onclick="viewAct('${r.id}','${r._type}')">
       <div style="display:flex;align-items:center;gap:8px">
-        <div class="act-dot ${r._type}"></div>
-        <div><div class="act-info">${title}</div><div class="act-meta">${r.vert>0?r.vert+'m vert · ':''}${pi(r.dur)>0?minsToHM(pi(r.dur)):''}${r.notes?' · '+r.notes.slice(0,24):''}</div></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2.5" flex-shrink="0" style="flex-shrink:0"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <div><div class="act-info">${title}</div></div>
       </div>
       <div class="act-date">${lbl}</div>
     </div>`;
@@ -1141,7 +1270,7 @@ function renderPaceChart(){
   el.innerHTML=`<table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0"><td style="padding:5px 0;color:var(--muted)">Pace (min/km)</td><td style="text-align:right;color:var(--muted)">Finish Time</td><td style="text-align:right;color:var(--muted)">km/h</td></tr>${rows}</table>`;
 }
 
-load();
+// Data loads via fbAuth.onAuthStateChanged above
 </script>
 </body>
 </html>
