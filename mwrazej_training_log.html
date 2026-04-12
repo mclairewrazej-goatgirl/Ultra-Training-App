@@ -86,7 +86,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .act-date{font-size:10px;color:var(--muted)}
 .bar-chart{height:120px;display:flex;align-items:flex-end;gap:4px;margin-top:6px;position:relative;padding-left:18px}
 .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
-.bar-stack{width:100%;display:flex;flex-direction:column;border-radius:3px 3px 0 0;overflow:hidden;cursor:pointer}
+.bar-stack{width:100%;display:flex;flex-direction:column;border-radius:3px 3px 0 0;overflow:hidden;cursor:pointer;position:relative}
+.goal-marker{position:absolute;left:0;right:0;height:2px;background:#7c4dff;box-shadow:0 0 0 1px rgba(124,77,255,.2)}
 .bar-lbl{font-size:9px;color:var(--muted);text-align:center}
 .tooltip{position:absolute;background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:8px 12px;font-size:11px;pointer-events:none;z-index:10;white-space:nowrap;display:none;bottom:calc(100% + 6px);left:0}
 .filter-tabs{display:flex;gap:2px;background:var(--surface);border-radius:8px;padding:3px;margin-bottom:16px;border:1px solid var(--border);width:fit-content;flex-wrap:wrap}
@@ -322,6 +323,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--pink);border-radius:2px"></div><span style="color:var(--muted)">Run</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--blue);border-radius:2px"></div><span style="color:var(--muted)">Cross Train</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:2px;background:#7c4dff"></div><span style="color:var(--muted)">Goal Volume</span></div>
         </div>
       </div>
     </div>
@@ -448,7 +450,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
   </div>
-  <div class="section-title">This Week vs Goals</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <div class="section-title" id="goals-week-title" style="margin-bottom:0">Week vs Goals</div>
+    <div class="header-btns">
+      <button class="btn btn-outline btn-sm" onclick="changeGoalsWeek(-1)">‹ Prev Week</button>
+      <button class="btn btn-outline btn-sm" onclick="resetGoalsWeekToCurrent()">Current Week</button>
+      <button class="btn btn-outline btn-sm" onclick="changeGoalsWeek(1)">Next Week ›</button>
+    </div>
+  </div>
   <div class="goals-grid" id="goals-display"></div>
 </div>
 
@@ -550,7 +559,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},logName:''};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},weeklyGoals:{},logName:''};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -558,9 +567,10 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},logName:''};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},weeklyGoals:{},logName:''};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
+var goalsWeekOffset=0;
 
 function exportData(){
   var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
@@ -592,6 +602,34 @@ function getWeekBounds(){
   return{mon,sun};
 }
 function inThisWeek(ds){var d=new Date(ds),b=getWeekBounds();return d>=b.mon&&d<=b.sun;}
+
+function getWeekKeyFromDate(ds){
+  var d=ds?new Date(ds):new Date();
+  var day=d.getDay()||7;
+  var mon=new Date(d);
+  mon.setDate(d.getDate()-day+1);
+  mon.setHours(0,0,0,0);
+  return mon.toISOString().slice(0,10);
+}
+
+function getGoalsForWeek(weekKey){
+  if(!DB.weeklyGoals)DB.weeklyGoals={};
+  var weekGoals=DB.weeklyGoals[weekKey];
+  if(weekGoals)return weekGoals;
+  return DB.goals||{dist:0,time:0,vert:0,cdist:0,ctime:0};
+}
+
+function getGoalsWeekBounds(){
+  var now=new Date();
+  var day=now.getDay()||7;
+  var mon=new Date(now);
+  mon.setDate(now.getDate()-day+1+(goalsWeekOffset*7));
+  mon.setHours(0,0,0,0);
+  var sun=new Date(mon);
+  sun.setDate(mon.getDate()+6);
+  sun.setHours(23,59,59,999);
+  return {mon,sun,key:mon.toISOString().slice(0,10)};
+}
 
 function renderDash(){
   var wr=DB.runs.filter(r=>inThisWeek(r.date));
@@ -642,13 +680,18 @@ function getWeeklyTotals(){
     var d=new Date(r.date),day=d.getDay()||7;
     var mon=new Date(d);mon.setDate(d.getDate()-day+1);
     var key=mon.toISOString().slice(0,10);
-    if(!byWeek[key])byWeek[key]={key,rkm:0,rmin:0,ckm:0,cmin:0,lbl:''};
+    if(!byWeek[key])byWeek[key]={key,rkm:0,rmin:0,ckm:0,cmin:0,gkm:0,lbl:''};
     if(r.actType==='run'){byWeek[key].rkm+=pf(r.dist);byWeek[key].rmin+=pi(r.dur);}
     else{byWeek[key].ckm+=pf(r.dist);byWeek[key].cmin+=pi(r.dur);}
   });
   var wks=Object.values(byWeek).sort((a,b)=>a.key.localeCompare(b.key));
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  wks.forEach(w=>{var d=new Date(w.key);w.lbl=months[d.getMonth()]+' '+(d.getDate());});
+  wks.forEach(w=>{
+    var d=new Date(w.key);
+    w.lbl=months[d.getMonth()]+' '+(d.getDate());
+    var wg=getGoalsForWeek(w.key);
+    w.gkm=pf(wg.dist)+pf(wg.cdist);
+  });
   return wks.slice(-12);
 }
 
@@ -659,7 +702,7 @@ function renderVolChart(){
   chart.innerHTML='<div class="tooltip" id="vol-tooltip"></div>';
   labels.innerHTML='';
   if(!wks.length){chart.innerHTML+='<div class="empty-state" style="width:100%">Log runs to see history</div>';return;}
-  var maxKm=Math.max(...wks.map(w=>w.rkm+w.ckm),1);
+  var maxKm=Math.max(...wks.map(w=>Math.max(w.rkm+w.ckm,w.gkm||0)),1);
   var chartH=120;
   // Add y-axis gridlines
   var ySteps=[0,15,30,45,60];
@@ -685,10 +728,12 @@ function renderVolChart(){
     var isCur=w.key===curKey;
     var bw=document.createElement('div');
     bw.className='bar-wrap';
-    bw.innerHTML=`<div class="bar-stack" style="height:${rh+ch}px;opacity:${isCur?1:.75}"><div style="height:${ch}px;background:var(--blue);min-height:${ch>0?2:0}px"></div><div style="height:${rh}px;background:var(--pink);min-height:${rh>0?2:0}px"></div></div>`;
+    var gh=Math.max((pf(w.gkm)/Math.max(maxKm,60))*chartH,pf(w.gkm)>0?2:0);
+    var goalTop=Math.max(chartH-gh,0);
+    bw.innerHTML=`<div class=\"bar-stack\" style=\"height:${rh+ch}px;opacity:${isCur?1:.75}\"><div style=\"height:${ch}px;background:var(--blue);min-height:${ch>0?2:0}px\"></div><div style=\"height:${rh}px;background:var(--pink);min-height:${rh>0?2:0}px\"></div><div class=\"goal-marker\" style=\"top:${goalTop}px;display:${gh>0?'block':'none'}\"></div></div>`;
     bw.addEventListener('mouseenter',function(){
       var tt=document.getElementById('vol-tooltip');
-      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${w.rkm.toFixed(1)} km / ${minsToHHMM(w.rmin)}<br>CT: ${w.ckm.toFixed(1)} km / ${minsToHHMM(w.cmin)}`;
+      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${w.rkm.toFixed(1)} km / ${minsToHHMM(w.rmin)}<br>CT: ${w.ckm.toFixed(1)} km / ${minsToHHMM(w.cmin)}<br>Goal: ${pf(w.gkm).toFixed(1)} km`;
       tt.style.display='block';tt.style.left=(bw.offsetLeft)+'px';
     });
     bw.addEventListener('mouseleave',function(){document.getElementById('vol-tooltip').style.display='none';});
@@ -800,6 +845,7 @@ function renderCalendar(){
     var daySt=DB.strengths.filter(r=>r.date===ds);
     var dayRec=DB.recoveries.filter(r=>r.date===ds);
     var dayPlans=DB.plans.filter(p=>p.date===ds);
+    var dayRaces=DB.races.filter(r=>r.date===ds);
     var isToday=ds===new Date().toISOString().slice(0,10);
     var hasPlan=dayPlans.length>0&&dayRuns.length===0&&dayCross.length===0;
     var cl='cal-cell'+(isToday?' today':hasPlan?' planned':'');
@@ -809,6 +855,7 @@ function renderCalendar(){
     daySt.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','strength')">${r.subtype||'Strength'}</div>`;});
     dayRec.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--green);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','recovery')">${r.subtype||'Recovery'}</div>`;});
     dayPlans.forEach(p=>{var doneIcon=p.completed?'&#10003; ':'';var planColor=p.completed?'var(--green)':'var(--amber)';pips+=`<div class="cal-pip" style="color:${planColor};font-style:italic;cursor:pointer" onclick="event.stopPropagation();viewPlan('${p.id}')">${doneIcon}${p.type}: ${(p.desc||'').slice(0,18)}</div>`;});
+    dayRaces.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--pink2);font-weight:600">🏁 ${r.name}</div>`;});
     html+=`<div class="${cl}" onclick="openModalDate('${ds}')"><div class="cal-num${isToday?' today-num':''}">${d}</div>${pips}</div>`;
   }
   body.innerHTML=html;
@@ -822,11 +869,16 @@ function changeMonth(dir){
 }
 
 function renderGoals(){
-  var g=DB.goals;
+  var b=getGoalsWeekBounds();
+  var g=getGoalsForWeek(b.key);
   var fields=['g-dist','g-time','g-vert','g-cdist','g-ctime'];
   var vals=[g.dist,g.time,g.vert,g.cdist,g.ctime];
-  fields.forEach((id,i)=>{var el=document.getElementById(id);if(el&&vals[i])el.value=vals[i];});
-  var b=getWeekBounds();
+  fields.forEach((id,i)=>{var el=document.getElementById(id);if(el)el.value=vals[i]||'';});
+  var title=document.getElementById('goals-week-title');
+  if(title){
+    var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    title.textContent='Week of '+monthNames[b.mon.getMonth()]+' '+b.mon.getDate()+' vs Goals';
+  }
   var wr=DB.runs.filter(r=>{var d=new Date(r.date);return d>=b.mon&&d<=b.sun;});
   var wkm=wr.reduce((s,r)=>s+pf(r.dist),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
@@ -852,15 +904,22 @@ function renderGoals(){
   }).join('');
 }
 
+function changeGoalsWeek(dir){goalsWeekOffset+=dir;renderGoals();}
+function resetGoalsWeekToCurrent(){goalsWeekOffset=0;renderGoals();}
+
 function saveGoals(){
-  DB.goals={
+  var b=getGoalsWeekBounds();
+  if(!DB.weeklyGoals)DB.weeklyGoals={};
+  var obj={
     dist:parseFloat(document.getElementById('g-dist').value)||0,
     time:parseFloat(document.getElementById('g-time').value)||0,
     vert:parseFloat(document.getElementById('g-vert').value)||0,
     cdist:parseFloat(document.getElementById('g-cdist').value)||0,
     ctime:parseFloat(document.getElementById('g-ctime').value)||0
   };
-  save();renderGoals();alert('Goals saved!');
+  DB.weeklyGoals[b.key]=obj;
+  if(goalsWeekOffset===0)DB.goals=obj;
+  save();renderGoals();renderVolChart();alert('Goals saved for week of '+b.key+'!');
 }
 
 function renderRaces(){
@@ -877,7 +936,7 @@ function renderRaces(){
       <div style="display:flex;align-items:flex-start;justify-content:space-between">
         <div>
           <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">${r.name}</div>
-          <div style="font-size:11px;color:var(--muted)">${r.loc||''}${r.dist?' · '+r.dist+'km':''}</div>
+          <div style="font-size:11px;color:var(--muted)">${r.loc||''}${r.dist?' · '+r.dist+'km':''}${pi(r.vert)>0?' · '+pi(r.vert)+'m':''}</div>
           ${r.goal?`<div style="font-size:11px;color:var(--blue);margin-top:3px">Goal: ${r.goal}</div>`:''}
           ${r.result?`<div style="font-size:12px;color:var(--green);margin-top:4px;font-weight:600">Result: ${r.result}</div>`:''}
           ${r.notes?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${r.notes}</div>`:''}
@@ -1080,7 +1139,10 @@ function buildRaceModal(){return`<div class="modal">
     <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="f-loc"></div>
     <div class="form-group"><label class="form-label">Goal Time</label><input class="form-input" id="f-goal" placeholder="hh:mm:ss"></div>
   </div>
-  <div class="form-group"><label class="form-label">Result (if completed)</label><input class="form-input" id="f-result" placeholder="e.g. 3:42:15 — leave blank if upcoming"></div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Vert (m)</label><input class="form-input" type="number" id="f-race-vert" placeholder="e.g. 1200"></div>
+    <div class="form-group"><label class="form-label">Result (if completed)</label><input class="form-input" id="f-result" placeholder="e.g. 3:42:15 — leave blank if upcoming"></div>
+  </div>
   <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="2"></textarea></div>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
@@ -1155,7 +1217,7 @@ function fillForm(data,type){
     if(cat){cat.value=data._type;updateOtherSubs();setTimeout(()=>{var st=document.getElementById('f-subtype');if(st&&data.subtype)st.value=data.subtype;},10);}
   }
   if(type==='race'){
-    ['f-race-name','f-loc','f-goal','f-result'].forEach(id=>{
+    ['f-race-name','f-loc','f-goal','f-result','f-race-vert'].forEach(id=>{
       var el=document.getElementById(id);
       var key=id.replace('f-race-','').replace('f-','');
       if(el&&data[key])el.value=data[key];
@@ -1241,12 +1303,13 @@ function saveRace(){
     dist:document.getElementById('f-dist')?.value||0,
     loc:document.getElementById('f-loc')?.value||'',
     goal:document.getElementById('f-goal')?.value||'',
+    vert:document.getElementById('f-race-vert')?.value||0,
     result:document.getElementById('f-result')?.value||'',
     notes:document.getElementById('f-notes')?.value||''
   };
   if(editingId){var idx=DB.races.findIndex(r=>r.id===editingId);if(idx>=0)DB.races[idx]=obj;else DB.races.push(obj);}
   else DB.races.push(obj);
-  save();closeAllModals();renderRaces();editingId=null;
+  save();closeAllModals();renderRaces();renderCalendar();editingId=null;
 }
 
 function savePlan(){
@@ -1284,7 +1347,7 @@ function deleteAct(id,type){
 
 function deleteRace(id){
   if(!confirm('Delete this race?'))return;
-  DB.races=DB.races.filter(r=>r.id!==id);save();renderRaces();
+  DB.races=DB.races.filter(r=>r.id!==id);save();renderRaces();renderCalendar();
 }
 
 function editAct(id,type){
@@ -1313,7 +1376,7 @@ function viewAct(id,type){
     :`<span class="badge badge-${type==='cross'?'cross':type==='strength'?'strength':'rec'}">${r.subtype||type}</span>`;
   // Build nutrition summary
   var nutriHtml='';
-  if(isRun&&r.nutritionEntries&&r.nutritionEntries.length>0&&pi(r.dur)>0){
+  if(r.nutritionEntries&&r.nutritionEntries.length>0&&pi(r.dur)>0){
     var hrs=pi(r.dur)/60;
     var totalCarbs=0,totalHyd=0;
     r.nutritionEntries.forEach(function(e){
@@ -1378,11 +1441,25 @@ function viewPlan(id){
       ${typeSelectorHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="cp-actual-dist" value="${pf(p.dist)||''}"></div>
-        <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="cp-actual-dur" value="${pi(p.dur)||''}"></div>
+        <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="cp-actual-dur" value="${pi(p.dur)||''}" oninput="updateCompletionNutritionCalc()"></div>
         <div class="form-group"><label class="form-label">Elev Gain (m)</label><input class="form-input" type="number" id="cp-actual-vert"></div>
         <div class="form-group"><label class="form-label">Avg HR (bpm)</label><input class="form-input" type="number" id="cp-actual-hr"></div>
       </div>
       <div class="form-group" style="margin-top:6px"><label class="form-label">Notes</label><textarea class="form-input" id="cp-completion-notes" rows="2" placeholder="How did it go?"></textarea></div>
+      <div class="form-group" style="margin-top:6px">
+        <label class="checkbox-label"><input type="checkbox" id="cp-add-nutrition" onchange="toggleCompletionNutritionSection()"> Add nutrition?</label>
+      </div>
+      <div id="cp-nutrition-section" style="display:none">
+        <div class="nutri-section">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Nutrition Used</div>
+          <div id="cp-nutri-entries"></div>
+          <button class="btn btn-outline btn-sm" type="button" onclick="addCompletionNutritionEntry()" style="margin-top:4px">+ Add Item</button>
+          <div class="nutri-totals" id="cp-nutri-totals" style="display:none">
+            <div><div class="nutri-val" id="cp-nutri-carbs-hr">—</div><div class="nutri-lbl">g carbs / hr</div></div>
+            <div><div class="nutri-val" id="cp-nutri-hydration-hr">—</div><div class="nutri-lbl">mL hydration / hr</div></div>
+          </div>
+        </div>
+      </div>
       <button class="btn btn-pink" style="width:100%;justify-content:center;margin-top:8px" onclick="saveCompletion('${id}')">Save Completion</button>
     </div>`;
   } else {
@@ -1396,7 +1473,11 @@ function viewPlan(id){
       </div>`;
     }
     var actualTypeLine=(p.actualActivityType&&p.actualActivityType!==p.type)?`<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">Planned: <span style="color:var(--amber)">${p.type}</span> &rarr; Completed as: <span style="color:var(--green)">${p.actualActivityType}</span></div>`:'';
-    completionSection=`<div class="completion-section">${actualTypeLine}${actualLines}${p.completionNotes?`<div style="margin-top:10px;font-size:12px;color:var(--text);line-height:1.6">${p.completionNotes}</div>`:''}</div>`;
+    var completionNutritionLine='';
+    if(Array.isArray(p.completionNutritionEntries)&&p.completionNutritionEntries.length){
+      completionNutritionLine=`<div style="margin-top:10px;font-size:11px;color:var(--muted)">Nutrition entries: ${p.completionNutritionEntries.length}</div>`;
+    }
+    completionSection=`<div class="completion-section">${actualTypeLine}${actualLines}${p.completionNotes?`<div style="margin-top:10px;font-size:12px;color:var(--text);line-height:1.6">${p.completionNotes}</div>`:''}${completionNutritionLine}</div>`;
   }
   var html=`<div class="view-modal">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
@@ -1511,6 +1592,61 @@ function openEditPlan(id){
   document.getElementById('modal-container').appendChild(wrap);
 }
 
+function upsertActivityFromPlan(p){
+  var actualType=(p.actualActivityType||p.type||'Run');
+  var mappedType=actualType==='Cross Train'?'cross':actualType==='Strength'?'strength':actualType==='Recovery'||actualType==='Rest'?'recovery':'run';
+  var existingRun=DB.runs.find(r=>r.planId===p.id);
+  var existingCross=DB.crosses.find(r=>r.planId===p.id);
+  var existingStrength=DB.strengths.find(r=>r.planId===p.id);
+  var existingRecovery=DB.recoveries.find(r=>r.planId===p.id);
+  DB.runs=DB.runs.filter(r=>r.planId!==p.id);
+  DB.crosses=DB.crosses.filter(r=>r.planId!==p.id);
+  DB.strengths=DB.strengths.filter(r=>r.planId!==p.id);
+  DB.recoveries=DB.recoveries.filter(r=>r.planId!==p.id);
+  var baseObj={
+    id:(existingRun||existingCross||existingStrength||existingRecovery||{}).id||uid(),
+    planId:p.id,
+    date:p.date,
+    dist:pf(p.actualDist)||0,
+    dur:pi(p.actualDur)||0,
+    vert:pi(p.actualVert)||0,
+    hr:pi(p.actualHr)||0,
+    notes:p.completionNotes||p.notes||p.desc||''
+  };
+  if(mappedType==='run'){
+    DB.runs.push({
+      ...baseObj,
+      actType:'run',
+      runType:(p.type==='Long Run'?'long':p.type==='Workout'?'workout':'easy'),
+      terrain:'trail',
+      workoutDetails:p.desc||'',
+      nutritionEntries:Array.isArray(p.completionNutritionEntries)?p.completionNutritionEntries:[]
+    });
+    return;
+  }
+  if(mappedType==='cross'){
+    DB.crosses.push({
+      ...baseObj,
+      actType:'cross',
+      subtype:'Cross Train',
+      rpe:0,
+      nutritionEntries:Array.isArray(p.completionNutritionEntries)?p.completionNutritionEntries:[]
+    });
+    return;
+  }
+  if(mappedType==='strength'){
+    DB.strengths.push({
+      id:baseObj.id,planId:p.id,date:p.date,actType:'strength',
+      subtype:'Planned Strength',dur:baseObj.dur,notes:baseObj.notes
+    });
+    return;
+  }
+  DB.recoveries.push({
+    id:baseObj.id,planId:p.id,date:p.date,actType:'recovery',
+    subtype:'Planned Recovery',dur:baseObj.dur,notes:baseObj.notes
+  });
+}
+
 function saveCompletion(planId){
   var p=DB.plans.find(pl=>pl.id===planId);if(!p)return;
   p.completed=true;
@@ -1521,7 +1657,17 @@ function saveCompletion(planId){
   p.actualVert=document.getElementById('cp-actual-vert')?.value||0;
   p.actualHr=document.getElementById('cp-actual-hr')?.value||0;
   p.completionNotes=document.getElementById('cp-completion-notes')?.value||'';
-  save();closeAllModals();renderCalendar();
+  var completionNutritionEntries=[];
+  document.querySelectorAll('.cp-nutri-entry-row').forEach(function(row){
+    var sel=row.querySelector('select');
+    var inp=row.querySelector('input[type=number]');
+    if(sel&&inp&&sel.value&&parseFloat(inp.value)>0){
+      completionNutritionEntries.push({nutritionId:sel.value,qty:parseFloat(inp.value)||0});
+    }
+  });
+  p.completionNutritionEntries=completionNutritionEntries;
+  upsertActivityFromPlan(p);
+  save();closeAllModals();renderAll();
 }
 
 // ─── NUTRITION DATABASE ──────────────────────────────────────────────────────
@@ -1643,6 +1789,53 @@ function updateNutritionCalc(){
   } else {
     totEl.style.display='none';
   }
+}
+
+function toggleCompletionNutritionSection(){
+  var checked=document.getElementById('cp-add-nutrition')?.checked;
+  var ns=document.getElementById('cp-nutrition-section');
+  if(ns)ns.style.display=checked?'block':'none';
+  if(checked&&!document.querySelector('.cp-nutri-entry-row')) addCompletionNutritionEntry();
+}
+
+function addCompletionNutritionEntry(preselectedId,preQty){
+  if(!DB.nutrition||!DB.nutrition.length){
+    alert('No nutrition items found. Add items in the Nutrition tab first.');return;
+  }
+  var container=document.getElementById('cp-nutri-entries');if(!container)return;
+  var opts=DB.nutrition.map(function(n){
+    return`<option value="${n.id}" ${n.id===preselectedId?'selected':''}>${n.name} (${pf(n.carbsPerServing)}g carbs${pf(n.hydrationPerServing)>0?', '+pf(n.hydrationPerServing)+'mL':''})</option>`;
+  }).join('');
+  var row=document.createElement('div');
+  row.className='nutri-entry-row cp-nutri-entry-row';
+  row.innerHTML=`<select class="form-input" onchange="updateCompletionNutritionCalc()">${opts}</select>
+    <input class="form-input" type="number" min="0.5" step="0.5" value="${preQty||1}" placeholder="Qty" style="width:72px" oninput="updateCompletionNutritionCalc()">
+    <button class="btn btn-danger btn-sm" type="button" onclick="this.parentElement.remove();updateCompletionNutritionCalc()">×</button>`;
+  container.appendChild(row);
+  updateCompletionNutritionCalc();
+}
+
+function updateCompletionNutritionCalc(){
+  if(!DB.nutrition)return;
+  var durMin=pi(document.getElementById('cp-actual-dur')?.value);
+  var hrs=durMin>0?durMin/60:0;
+  var totalCarbs=0,totalHyd=0,hasEntries=false;
+  document.querySelectorAll('.cp-nutri-entry-row').forEach(function(row){
+    var sel=row.querySelector('select');
+    var inp=row.querySelector('input[type=number]');
+    if(!sel||!inp)return;
+    var qty=parseFloat(inp.value)||0;
+    if(qty<=0)return;
+    var item=DB.nutrition.find(n=>n.id===sel.value);
+    if(item){totalCarbs+=pf(item.carbsPerServing)*qty;totalHyd+=pf(item.hydrationPerServing)*qty;hasEntries=true;}
+  });
+  var totEl=document.getElementById('cp-nutri-totals');
+  if(!totEl)return;
+  if(hasEntries){
+    totEl.style.display='grid';
+    document.getElementById('cp-nutri-carbs-hr').textContent=hrs>0?(totalCarbs/hrs).toFixed(0)+'':totalCarbs.toFixed(0)+'*';
+    document.getElementById('cp-nutri-hydration-hr').textContent=hrs>0?(totalHyd/hrs).toFixed(0)+'':totalHyd.toFixed(0)+'*';
+  } else totEl.style.display='none';
 }
 
 // Data loads via fbAuth.onAuthStateChanged above
