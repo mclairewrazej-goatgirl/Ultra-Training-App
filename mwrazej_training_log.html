@@ -92,8 +92,12 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .act-date{font-size:10px;color:var(--muted)}
 .bar-chart{height:120px;display:flex;align-items:flex-end;gap:4px;margin-top:6px;position:relative;padding-left:18px}
 .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
-.bar-stack{width:100%;display:flex;flex-direction:column;border-radius:3px 3px 0 0;overflow:hidden;cursor:pointer;position:relative}
-.goal-marker{position:absolute;left:0;right:0;height:2px;background:#7c4dff;box-shadow:0 0 0 1px rgba(124,77,255,.2)}
+.bar-group{width:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px;position:relative;height:120px}
+.bar-col{flex:1;max-width:14px;min-width:6px;border-radius:3px 3px 0 0;cursor:pointer;opacity:.82}
+.bar-col.run{background:var(--pink)}
+.bar-col.cross{background:var(--blue)}
+.bar-col.goal{background:#7c4dff}
+.bar-col.current{opacity:1}
 .bar-lbl{font-size:9px;color:var(--muted);text-align:center}
 .tooltip{position:absolute;background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:8px 12px;font-size:11px;pointer-events:none;z-index:10;white-space:nowrap;display:none;bottom:calc(100% + 6px);left:0}
 .filter-tabs{display:flex;gap:2px;background:var(--surface);border-radius:8px;padding:3px;margin-bottom:16px;border:1px solid var(--border);width:fit-content;flex-wrap:wrap}
@@ -191,7 +195,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .nutri-entry-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .nutri-entry-row select{flex:2;min-width:120px}
 .nutri-entry-row input[type=number]{width:72px;flex-shrink:0}
-.nutri-totals{background:var(--surface2);border-radius:8px;padding:10px 14px;margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.nutri-totals{background:var(--surface2);border-radius:8px;padding:10px 14px;margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .nutri-val{font-size:20px;font-weight:700;color:var(--green)}
 .nutri-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
 .plan-done-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(0,200,150,.15);color:var(--green)}
@@ -258,11 +262,6 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="btn btn-outline btn-sm" style="flex:1;justify-content:center" onclick="openModal('other')">Other</button>
     </div>
     <button class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="openModal('plan')">+ Plan Workout</button>
-    <div style="margin-top:10px;display:flex;gap:6px">
-      <button class="export-btn" onclick="exportData()" style="flex:1">Export</button>
-      <button class="export-btn" onclick="document.getElementById('import-input').click()" style="flex:1">Import</button>
-      <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
-    </div>
     <div style="margin-top:8px">
       <div class="theme-toggle">
         <button class="btn btn-outline btn-sm theme-btn" id="theme-dark-btn" onclick="setTheme('dark')">Dark</button>
@@ -344,7 +343,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--pink);border-radius:2px"></div><span style="color:var(--muted)">Run</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--blue);border-radius:2px"></div><span style="color:var(--muted)">Cross Train</span></div>
-          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:2px;background:#7c4dff"></div><span style="color:var(--muted)">Goal Volume</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#7c4dff;border-radius:2px"></div><span style="color:var(--muted)">Goal Running Volume</span></div>
         </div>
       </div>
     </div>
@@ -785,6 +784,15 @@ function updateVolumeModeButtons(){
   document.getElementById('vol-monthly-btn')?.classList.toggle('btn-outline',volumeMode!=='monthly');
 }
 
+function getCurrentVolumeKey(){
+  if(volumeMode==='monthly'){
+    return new Date(new Date().getFullYear(),new Date().getMonth(),1,12,0,0,0).toISOString().slice(0,10);
+  }
+  var d=new Date(),day=d.getDay()||7,m=new Date(d);
+  m.setDate(d.getDate()-day+1);
+  return m.toISOString().slice(0,10);
+}
+
 function renderVolChart(){
   var wks=volumeMode==='monthly'?getMonthlyTotals():getWeeklyTotals();
   var chart=document.getElementById('vol-chart');
@@ -792,7 +800,7 @@ function renderVolChart(){
   chart.innerHTML='<div class="tooltip" id="vol-tooltip"></div>';
   labels.innerHTML='';
   if(!wks.length){chart.innerHTML+='<div class="empty-state" style="width:100%">Log runs to see history</div>';return;}
-  var maxKm=Math.max(...wks.map(w=>Math.max(w.rkm+w.ckm,w.gkm||0)),1);
+  var maxKm=Math.max(...wks.map(w=>Math.max(w.rkm,w.ckm,w.gkm||0)),1);
   var chartH=120;
   // Add y-axis gridlines
   var ySteps=[0,15,30,45,60];
@@ -811,28 +819,31 @@ function renderVolChart(){
     gridDiv.appendChild(line);
   });
   chart.appendChild(gridDiv);
-  var curKey=volumeMode==='monthly'
-    ?new Date(new Date().getFullYear(),new Date().getMonth(),1,12,0,0,0).toISOString().slice(0,10)
-    :(function(){var d=new Date(),day=d.getDay()||7,m=new Date(d);m.setDate(d.getDate()-day+1);return m.toISOString().slice(0,10);})();
+  var curKey=getCurrentVolumeKey();
+  var currentMonthName=new Date().toLocaleDateString('en-US',{month:'long'});
   wks.forEach(w=>{
     var rh=Math.max((w.rkm/Math.max(maxKm,60))*chartH,w.rkm>0?2:0);
     var ch=Math.max((w.ckm/Math.max(maxKm,60))*chartH,w.ckm>0?2:0);
+    var gh=Math.max((pf(w.gkm)/Math.max(maxKm,60))*chartH,pf(w.gkm)>0?2:0);
     var isCur=w.key===curKey;
     var bw=document.createElement('div');
     bw.className='bar-wrap';
-    var gh=Math.max((pf(w.gkm)/Math.max(maxKm,60))*chartH,pf(w.gkm)>0?2:0);
-    var goalTop=Math.max(chartH-gh,0);
-    bw.innerHTML=`<div class=\"bar-stack\" style=\"height:${rh+ch}px;opacity:${isCur?1:.75}\"><div style=\"height:${ch}px;background:var(--blue);min-height:${ch>0?2:0}px\"></div><div style=\"height:${rh}px;background:var(--pink);min-height:${rh>0?2:0}px\"></div><div class=\"goal-marker\" style=\"top:${goalTop}px;display:${gh>0?'block':'none'}\"></div></div>`;
+    bw.innerHTML=`<div class=\"bar-group\">
+      <div class=\"bar-col run ${isCur?'current':''}\" style=\"height:${rh}px;min-height:${rh>0?2:0}px\"></div>
+      <div class=\"bar-col cross ${isCur?'current':''}\" style=\"height:${ch}px;min-height:${ch>0?2:0}px\"></div>
+      <div class=\"bar-col goal ${isCur?'current':''}\" style=\"height:${gh}px;min-height:${gh>0?2:0}px\"></div>
+    </div>`;
     bw.addEventListener('mouseenter',function(){
       var tt=document.getElementById('vol-tooltip');
-      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${w.rkm.toFixed(1)} km / ${minsToHHMM(w.rmin)}<br>CT: ${w.ckm.toFixed(1)} km / ${minsToHHMM(w.cmin)}<br>Goal: ${pf(w.gkm).toFixed(1)} km`;
+      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${w.rkm.toFixed(1)} km / ${minsToHHMM(w.rmin)}<br>CT: ${w.ckm.toFixed(1)} km / ${minsToHHMM(w.cmin)}<br>Goal Run Vol: ${pf(w.gkm).toFixed(1)} km`;
       tt.style.display='block';tt.style.left=(bw.offsetLeft)+'px';
     });
     bw.addEventListener('mouseleave',function(){document.getElementById('vol-tooltip').style.display='none';});
     chart.appendChild(bw);
     var lw=document.createElement('div');
     lw.style.cssText='flex:1;text-align:center;font-size:9px;color:var(--muted)';
-    lw.textContent=w.lbl;labels.appendChild(lw);
+    lw.textContent=isCur?(volumeMode==='monthly'?currentMonthName:'Current Week'):w.lbl;
+    labels.appendChild(lw);
   });
 }
 
@@ -1175,6 +1186,7 @@ function buildRunModal(){return`<div class="modal">
       <div class="nutri-totals" id="nutri-totals" style="display:none">
         <div><div class="nutri-val" id="nutri-carbs-hr">—</div><div class="nutri-lbl">g carbs / hr</div></div>
         <div><div class="nutri-val" id="nutri-hydration-hr">—</div><div class="nutri-lbl">mL hydration / hr</div></div>
+        <div><div class="nutri-val" id="nutri-sodium-hr">—</div><div class="nutri-lbl">mg sodium / hr</div></div>
       </div>
     </div>
   </div>
@@ -1470,13 +1482,18 @@ function viewAct(id,type){
   var nutriHtml='';
   if(r.nutritionEntries&&r.nutritionEntries.length>0&&pi(r.dur)>0){
     var hrs=pi(r.dur)/60;
-    var totalCarbs=0,totalHyd=0;
+    var totalCarbs=0,totalHyd=0,totalSodium=0;
     r.nutritionEntries.forEach(function(e){
       var item=DB.nutrition.find(n=>n.id===e.nutritionId);
-      if(item){totalCarbs+=(pf(item.carbsPerServing)*pf(e.qty));totalHyd+=(pf(item.hydrationPerServing)*pf(e.qty));}
+      if(item){
+        totalCarbs+=(pf(item.carbsPerServing)*pf(e.qty));
+        totalHyd+=(pf(item.hydrationPerServing)*pf(e.qty));
+        totalSodium+=(pf(item.sodiumPerServing)*pf(e.qty));
+      }
     });
     var carbsHr=hrs>0?(totalCarbs/hrs).toFixed(0):'—';
     var hydHr=hrs>0?(totalHyd/hrs).toFixed(0):'—';
+    var sodiumHr=hrs>0?(totalSodium/hrs).toFixed(0):'—';
     var itemLines=r.nutritionEntries.map(function(e){
       var item=DB.nutrition.find(n=>n.id===e.nutritionId);
       return item?`<div style="font-size:11px;color:var(--muted)">${pf(e.qty)} × ${item.name}</div>`:'';
@@ -1484,9 +1501,10 @@ function viewAct(id,type){
     nutriHtml=`<div style="background:var(--surface2);border-radius:8px;padding:12px;margin-top:12px">
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Nutrition</div>
       ${itemLines}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px">
         <div><div style="font-size:18px;font-weight:700;color:var(--green)">${carbsHr}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">g carbs / hr</div></div>
         <div><div style="font-size:18px;font-weight:700;color:var(--blue)">${hydHr}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">mL / hr</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--amber)">${sodiumHr}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">mg sodium / hr</div></div>
       </div>
     </div>`;
   }
@@ -1549,6 +1567,7 @@ function viewPlan(id){
           <div class="nutri-totals" id="cp-nutri-totals" style="display:none">
             <div><div class="nutri-val" id="cp-nutri-carbs-hr">—</div><div class="nutri-lbl">g carbs / hr</div></div>
             <div><div class="nutri-val" id="cp-nutri-hydration-hr">—</div><div class="nutri-lbl">mL hydration / hr</div></div>
+            <div><div class="nutri-val" id="cp-nutri-sodium-hr">—</div><div class="nutri-lbl">mg sodium / hr</div></div>
           </div>
         </div>
       </div>
@@ -1588,6 +1607,7 @@ function viewPlan(id){
     ${!p.completed?`<div style="margin-top:14px"><label class="checkbox-label" style="font-size:13px"><input type="checkbox" id="cb-completed" onchange="document.getElementById('completion-section').style.display=this.checked?'block':'none'"> Mark as completed</label></div>`:''}
     ${completionSection}
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      ${p.completed?`<button class="btn btn-outline btn-sm" onclick="closeAllModals();uncompletePlan('${id}')">Mark Incomplete</button>`:''}
       <button class="btn btn-outline btn-sm" onclick="closeAllModals();openEditPlan('${id}')">Edit Plan</button>
       <button class="btn btn-danger btn-sm" onclick="closeAllModals();deletePlan('${id}')">Delete</button>
       <button class="btn btn-outline btn-sm" onclick="closeAllModals()">Close</button>
@@ -1601,6 +1621,24 @@ function viewPlan(id){
 }
 
 function deletePlan(id){DB.plans=DB.plans.filter(p=>p.id!==id);save();renderCalendar();}
+
+function uncompletePlan(id){
+  var p=DB.plans.find(pl=>pl.id===id);if(!p)return;
+  p.completed=false;
+  p.actualActivityType='';
+  p.actualDist=0;
+  p.actualDur=0;
+  p.actualVert=0;
+  p.actualHr=0;
+  p.completionNotes='';
+  p.completionNutritionEntries=[];
+  DB.runs=DB.runs.filter(r=>r.planId!==p.id);
+  DB.crosses=DB.crosses.filter(r=>r.planId!==p.id);
+  DB.strengths=DB.strengths.filter(r=>r.planId!==p.id);
+  DB.recoveries=DB.recoveries.filter(r=>r.planId!==p.id);
+  save();
+  renderAll();
+}
 
 function calcTab(t,el){
   document.querySelectorAll('#calc-tabs .ftab').forEach(x=>x.classList.remove('active'));
@@ -1774,7 +1812,7 @@ function renderNutrition(){
     return`<div class="nutri-db-row">
       <div>
         <div class="nutri-db-name">${item.name}</div>
-        <div class="nutri-db-meta">${pf(item.carbsPerServing)>0?pf(item.carbsPerServing)+' g carbs':'0 g carbs'} &nbsp;·&nbsp; ${pf(item.hydrationPerServing)>0?pf(item.hydrationPerServing)+' mL':' 0 mL'} &nbsp;·&nbsp; per ${item.servingUnit||'serving'}</div>
+        <div class="nutri-db-meta">${pf(item.carbsPerServing)>0?pf(item.carbsPerServing)+' g carbs':'0 g carbs'} &nbsp;·&nbsp; ${pf(item.hydrationPerServing)>0?pf(item.hydrationPerServing)+' mL':'0 mL'} &nbsp;·&nbsp; ${pf(item.sodiumPerServing)>0?pf(item.sodiumPerServing)+' mg sodium':'0 mg sodium'} &nbsp;·&nbsp; per ${item.servingUnit||'serving'}</div>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="openNutritionItemModal('${item.id}')">Edit</button>
@@ -1792,9 +1830,10 @@ function openNutritionItemModal(id){
   wrap.innerHTML=`<div class="modal" style="max-width:420px">
     <div class="modal-title">${item?'Edit':'Add'} Nutrition Item <button class="modal-close" onclick="closeAllModals()">×</button></div>
     <div class="form-group"><label class="form-label">Item Name</label><input class="form-input" id="ni-name" placeholder="e.g. Maurten Gel 100, Tailwind" value="${item?item.name:''}"></div>
-    <div class="form-row">
+    <div class="form-row3">
       <div class="form-group"><label class="form-label">Carbs per serving (g)</label><input class="form-input" type="number" step="0.5" id="ni-carbs" placeholder="25" value="${item?item.carbsPerServing:''}"></div>
       <div class="form-group"><label class="form-label">Hydration per serving (mL)</label><input class="form-input" type="number" step="10" id="ni-hydration" placeholder="500" value="${item?item.hydrationPerServing:''}"></div>
+      <div class="form-group"><label class="form-label">Electrolytes / Sodium (mg)</label><input class="form-input" type="number" step="10" id="ni-sodium" placeholder="300" value="${item?item.sodiumPerServing:''}"></div>
     </div>
     <div class="form-group"><label class="form-label">Serving unit</label><input class="form-input" id="ni-unit" placeholder="e.g. gel, bottle, scoop, sachet" value="${item?item.servingUnit:''}"></div>
     <div class="modal-footer">
@@ -1815,6 +1854,7 @@ function saveNutritionItem(id){
     name,
     carbsPerServing:parseFloat(document.getElementById('ni-carbs')?.value)||0,
     hydrationPerServing:parseFloat(document.getElementById('ni-hydration')?.value)||0,
+    sodiumPerServing:parseFloat(document.getElementById('ni-sodium')?.value)||0,
     servingUnit:(document.getElementById('ni-unit')?.value||'serving').trim()
   };
   if(id){var idx=DB.nutrition.findIndex(n=>n.id===id);if(idx>=0)DB.nutrition[idx]=obj;else DB.nutrition.push(obj);}
@@ -1843,7 +1883,7 @@ function addNutritionEntry(preselectedId,preQty){
   }
   var container=document.getElementById('nutri-entries');if(!container)return;
   var opts=DB.nutrition.map(function(n){
-    return`<option value="${n.id}" ${n.id===preselectedId?'selected':''}>${n.name} (${pf(n.carbsPerServing)}g carbs${pf(n.hydrationPerServing)>0?', '+pf(n.hydrationPerServing)+'mL':''})</option>`;
+    return`<option value="${n.id}" ${n.id===preselectedId?'selected':''}>${n.name} (${pf(n.carbsPerServing)}g carbs${pf(n.hydrationPerServing)>0?', '+pf(n.hydrationPerServing)+'mL':''}${pf(n.sodiumPerServing)>0?', '+pf(n.sodiumPerServing)+'mg Na':''})</option>`;
   }).join('');
   var row=document.createElement('div');
   row.className='nutri-entry-row';
@@ -1858,7 +1898,7 @@ function updateNutritionCalc(){
   if(!DB.nutrition)return;
   var durMin=pi(document.getElementById('f-dur')?.value);
   var hrs=durMin>0?durMin/60:0;
-  var totalCarbs=0,totalHyd=0,hasEntries=false;
+  var totalCarbs=0,totalHyd=0,totalSodium=0,hasEntries=false;
   document.querySelectorAll('.nutri-entry-row').forEach(function(row){
     var sel=row.querySelector('select');
     var inp=row.querySelector('input[type=number]');
@@ -1866,7 +1906,12 @@ function updateNutritionCalc(){
     var qty=parseFloat(inp.value)||0;
     if(qty<=0)return;
     var item=DB.nutrition.find(n=>n.id===sel.value);
-    if(item){totalCarbs+=pf(item.carbsPerServing)*qty;totalHyd+=pf(item.hydrationPerServing)*qty;hasEntries=true;}
+    if(item){
+      totalCarbs+=pf(item.carbsPerServing)*qty;
+      totalHyd+=pf(item.hydrationPerServing)*qty;
+      totalSodium+=pf(item.sodiumPerServing)*qty;
+      hasEntries=true;
+    }
   });
   var totEl=document.getElementById('nutri-totals');
   if(!totEl)return;
@@ -1874,9 +1919,11 @@ function updateNutritionCalc(){
     totEl.style.display='grid';
     document.getElementById('nutri-carbs-hr').textContent=hrs>0?(totalCarbs/hrs).toFixed(0)+'':totalCarbs.toFixed(0)+'*';
     document.getElementById('nutri-hydration-hr').textContent=hrs>0?(totalHyd/hrs).toFixed(0)+'':totalHyd.toFixed(0)+'*';
+    document.getElementById('nutri-sodium-hr').textContent=hrs>0?(totalSodium/hrs).toFixed(0)+'':totalSodium.toFixed(0)+'*';
     if(hrs===0){
       document.getElementById('nutri-carbs-hr').title='Enter duration to see per-hour values';
       document.getElementById('nutri-hydration-hr').title='Enter duration to see per-hour values';
+      document.getElementById('nutri-sodium-hr').title='Enter duration to see per-hour values';
     }
   } else {
     totEl.style.display='none';
@@ -1896,7 +1943,7 @@ function addCompletionNutritionEntry(preselectedId,preQty){
   }
   var container=document.getElementById('cp-nutri-entries');if(!container)return;
   var opts=DB.nutrition.map(function(n){
-    return`<option value="${n.id}" ${n.id===preselectedId?'selected':''}>${n.name} (${pf(n.carbsPerServing)}g carbs${pf(n.hydrationPerServing)>0?', '+pf(n.hydrationPerServing)+'mL':''})</option>`;
+    return`<option value="${n.id}" ${n.id===preselectedId?'selected':''}>${n.name} (${pf(n.carbsPerServing)}g carbs${pf(n.hydrationPerServing)>0?', '+pf(n.hydrationPerServing)+'mL':''}${pf(n.sodiumPerServing)>0?', '+pf(n.sodiumPerServing)+'mg Na':''})</option>`;
   }).join('');
   var row=document.createElement('div');
   row.className='nutri-entry-row cp-nutri-entry-row';
@@ -1911,7 +1958,7 @@ function updateCompletionNutritionCalc(){
   if(!DB.nutrition)return;
   var durMin=pi(document.getElementById('cp-actual-dur')?.value);
   var hrs=durMin>0?durMin/60:0;
-  var totalCarbs=0,totalHyd=0,hasEntries=false;
+  var totalCarbs=0,totalHyd=0,totalSodium=0,hasEntries=false;
   document.querySelectorAll('.cp-nutri-entry-row').forEach(function(row){
     var sel=row.querySelector('select');
     var inp=row.querySelector('input[type=number]');
@@ -1919,7 +1966,12 @@ function updateCompletionNutritionCalc(){
     var qty=parseFloat(inp.value)||0;
     if(qty<=0)return;
     var item=DB.nutrition.find(n=>n.id===sel.value);
-    if(item){totalCarbs+=pf(item.carbsPerServing)*qty;totalHyd+=pf(item.hydrationPerServing)*qty;hasEntries=true;}
+    if(item){
+      totalCarbs+=pf(item.carbsPerServing)*qty;
+      totalHyd+=pf(item.hydrationPerServing)*qty;
+      totalSodium+=pf(item.sodiumPerServing)*qty;
+      hasEntries=true;
+    }
   });
   var totEl=document.getElementById('cp-nutri-totals');
   if(!totEl)return;
@@ -1927,6 +1979,7 @@ function updateCompletionNutritionCalc(){
     totEl.style.display='grid';
     document.getElementById('cp-nutri-carbs-hr').textContent=hrs>0?(totalCarbs/hrs).toFixed(0)+'':totalCarbs.toFixed(0)+'*';
     document.getElementById('cp-nutri-hydration-hr').textContent=hrs>0?(totalHyd/hrs).toFixed(0)+'':totalHyd.toFixed(0)+'*';
+    document.getElementById('cp-nutri-sodium-hr').textContent=hrs>0?(totalSodium/hrs).toFixed(0)+'':totalSodium.toFixed(0)+'*';
   } else totEl.style.display='none';
 }
 
