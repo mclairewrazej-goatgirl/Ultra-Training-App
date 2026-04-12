@@ -14,6 +14,12 @@
   --text:#e8eaf6;--muted:#7b82a0;--muted2:#4a5068;
   --green:#00c896;--amber:#ffab40;--red:#ff5252;
 }
+body[data-theme='light']{
+  --bg:#f5f7fb;--surface:#ffffff;--surface2:#eef2fa;--surface3:#e6ebf5;
+  --border:#d9dfec;--border2:#c6d0e6;
+  --text:#101828;--muted:#667085;--muted2:#98a2b3;
+  --pink3:rgba(233,30,140,.08);--blue3:rgba(0,180,216,.1);
+}
 body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;font-size:14px}
 .app{display:flex;min-height:100vh}
 .sidebar{width:210px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;height:100vh;overflow-y:auto}
@@ -194,6 +200,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .nutri-db-row:hover{border-color:var(--border2)}
 .nutri-db-name{font-size:13px;font-weight:600;color:var(--text)}
 .nutri-db-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.theme-toggle{display:flex;gap:6px}
+.theme-btn{flex:1}
 </style>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -249,10 +257,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="btn btn-blue btn-sm" style="flex:1;justify-content:center" onclick="openModal('cross')">Cross Train</button>
       <button class="btn btn-outline btn-sm" style="flex:1;justify-content:center" onclick="openModal('other')">Other</button>
     </div>
+    <button class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="openModal('plan')">+ Plan Workout</button>
     <div style="margin-top:10px;display:flex;gap:6px">
       <button class="export-btn" onclick="exportData()" style="flex:1">Export</button>
       <button class="export-btn" onclick="document.getElementById('import-input').click()" style="flex:1">Import</button>
       <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+    <div style="margin-top:8px">
+      <div class="theme-toggle">
+        <button class="btn btn-outline btn-sm theme-btn" id="theme-dark-btn" onclick="setTheme('dark')">Dark</button>
+        <button class="btn btn-outline btn-sm theme-btn" id="theme-light-btn" onclick="setTheme('light')">Light</button>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
       <img id="user-avatar" style="display:none;width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
@@ -317,7 +332,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="week-row" id="week-row"></div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Volume History</div></div>
+        <div class="card-header">
+          <div class="card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Volume History</div>
+          <div class="header-btns">
+            <button class="btn btn-outline btn-sm" id="vol-weekly-btn" onclick="setVolumeMode('weekly')">Weekly</button>
+            <button class="btn btn-outline btn-sm" id="vol-monthly-btn" onclick="setVolumeMode('monthly')">Monthly</button>
+          </div>
+        </div>
         <div class="bar-chart" id="vol-chart"><div class="tooltip" id="vol-tooltip"></div></div>
         <div style="display:flex;gap:4px;margin-top:6px" id="vol-labels"></div>
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
@@ -342,6 +363,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="btn btn-pink" onclick="openModal('run')">+ Log Run</button>
       <button class="btn btn-blue" onclick="openModal('cross')">Cross Train</button>
       <button class="btn btn-outline" onclick="openModal('other')">Strength / Recovery</button>
+      <button class="btn btn-outline" onclick="openModal('plan')">Plan Workout</button>
     </div>
   </div>
   <div class="filter-tabs" id="log-filters">
@@ -521,6 +543,7 @@ function load(){
   document.getElementById('loading-overlay').style.display='flex';
   getDocRef().get().then(function(doc){
     if(doc.exists) DB=Object.assign(DB,doc.data());
+    document.body.setAttribute('data-theme',DB.theme==='light'?'light':'dark');
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
     applyLogName();
@@ -529,6 +552,7 @@ function load(){
   }).catch(function(err){
     console.error('Load error:',err);
     document.getElementById('loading-overlay').style.display='none';
+    document.body.setAttribute('data-theme',DB.theme==='light'?'light':'dark');
     renderAll();
     applyLogName();
     navigateToHash();
@@ -559,7 +583,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},weeklyGoals:{},logName:''};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},weeklyGoals:{},logName:'',theme:'dark'};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -567,10 +591,11 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},weeklyGoals:{},logName:''};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},weeklyGoals:{},logName:'',theme:'dark'};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
+var volumeMode='weekly';
 
 function exportData(){
   var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
@@ -591,9 +616,16 @@ function importData(e){
   e.target.value='';
 }
 
-function renderAll(){renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();}
+function renderAll(){renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();}
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+function parseLocalDate(ds){
+  if(!ds)return new Date('');
+  var parts=(ds+'').split('-').map(Number);
+  if(parts.length!==3||parts.some(isNaN))return new Date(ds);
+  return new Date(parts[0],parts[1]-1,parts[2],12,0,0,0);
+}
 
 function getWeekBounds(){
   var d=new Date(),day=d.getDay()||7;
@@ -601,15 +633,32 @@ function getWeekBounds(){
   var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
   return{mon,sun};
 }
-function inThisWeek(ds){var d=new Date(ds),b=getWeekBounds();return d>=b.mon&&d<=b.sun;}
+function inThisWeek(ds){var d=parseLocalDate(ds),b=getWeekBounds();return d>=b.mon&&d<=b.sun;}
 
 function getWeekKeyFromDate(ds){
-  var d=ds?new Date(ds):new Date();
+  var d=ds?parseLocalDate(ds):new Date();
   var day=d.getDay()||7;
   var mon=new Date(d);
   mon.setDate(d.getDate()-day+1);
   mon.setHours(0,0,0,0);
   return mon.toISOString().slice(0,10);
+}
+
+function setTheme(theme){
+  DB.theme=theme==='light'?'light':'dark';
+  document.body.setAttribute('data-theme',DB.theme);
+  updateThemeButtons();
+  save();
+}
+
+function updateThemeButtons(){
+  var dark=document.getElementById('theme-dark-btn');
+  var light=document.getElementById('theme-light-btn');
+  if(!dark||!light)return;
+  dark.classList.toggle('btn-pink',DB.theme!=='light');
+  dark.classList.toggle('btn-outline',DB.theme==='light');
+  light.classList.toggle('btn-pink',DB.theme==='light');
+  light.classList.toggle('btn-outline',DB.theme!=='light');
 }
 
 function getGoalsForWeek(weekKey){
@@ -677,7 +726,7 @@ function renderWeekRow(){
 function getWeeklyTotals(){
   var byWeek={};
   [...DB.runs,...DB.crosses].forEach(r=>{
-    var d=new Date(r.date),day=d.getDay()||7;
+    var d=parseLocalDate(r.date),day=d.getDay()||7;
     var mon=new Date(d);mon.setDate(d.getDate()-day+1);
     var key=mon.toISOString().slice(0,10);
     if(!byWeek[key])byWeek[key]={key,rkm:0,rmin:0,ckm:0,cmin:0,gkm:0,lbl:''};
@@ -695,8 +744,49 @@ function getWeeklyTotals(){
   return wks.slice(-12);
 }
 
+function getMonthlyTotals(){
+  var byMonth={};
+  [...DB.runs,...DB.crosses].forEach(r=>{
+    var d=parseLocalDate(r.date);
+    var monthStart=new Date(d.getFullYear(),d.getMonth(),1,12,0,0,0);
+    var key=monthStart.toISOString().slice(0,10);
+    if(!byMonth[key])byMonth[key]={key,rkm:0,rmin:0,ckm:0,cmin:0,gkm:0,lbl:''};
+    if(r.actType==='run'){byMonth[key].rkm+=pf(r.dist);byMonth[key].rmin+=pi(r.dur);}
+    else{byMonth[key].ckm+=pf(r.dist);byMonth[key].cmin+=pi(r.dur);}
+  });
+  var months=Object.values(byMonth).sort((a,b)=>a.key.localeCompare(b.key));
+  var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  months.forEach(function(m){
+    var first=parseLocalDate(m.key);
+    m.lbl=monthNames[first.getMonth()]+' '+String(first.getFullYear()).slice(-2);
+    var monthGoal=0;
+    for(var i=1;i<=31;i++){
+      var dt=new Date(first.getFullYear(),first.getMonth(),i,12,0,0,0);
+      if(dt.getMonth()!==first.getMonth())break;
+      var wk=getWeekKeyFromDate(dt.toISOString().slice(0,10));
+      var wg=getGoalsForWeek(wk);
+      monthGoal+=pf(wg.dist)+pf(wg.cdist);
+    }
+    m.gkm=monthGoal/7;
+  });
+  return months.slice(-12);
+}
+
+function setVolumeMode(mode){
+  volumeMode=mode==='monthly'?'monthly':'weekly';
+  updateVolumeModeButtons();
+  renderVolChart();
+}
+
+function updateVolumeModeButtons(){
+  document.getElementById('vol-weekly-btn')?.classList.toggle('btn-pink',volumeMode==='weekly');
+  document.getElementById('vol-weekly-btn')?.classList.toggle('btn-outline',volumeMode!=='weekly');
+  document.getElementById('vol-monthly-btn')?.classList.toggle('btn-pink',volumeMode==='monthly');
+  document.getElementById('vol-monthly-btn')?.classList.toggle('btn-outline',volumeMode!=='monthly');
+}
+
 function renderVolChart(){
-  var wks=getWeeklyTotals();
+  var wks=volumeMode==='monthly'?getMonthlyTotals():getWeeklyTotals();
   var chart=document.getElementById('vol-chart');
   var labels=document.getElementById('vol-labels');
   chart.innerHTML='<div class="tooltip" id="vol-tooltip"></div>';
@@ -721,7 +811,9 @@ function renderVolChart(){
     gridDiv.appendChild(line);
   });
   chart.appendChild(gridDiv);
-  var curKey=(()=>{var d=new Date(),day=d.getDay()||7,m=new Date(d);m.setDate(d.getDate()-day+1);return m.toISOString().slice(0,10);})();
+  var curKey=volumeMode==='monthly'
+    ?new Date(new Date().getFullYear(),new Date().getMonth(),1,12,0,0,0).toISOString().slice(0,10)
+    :(function(){var d=new Date(),day=d.getDay()||7,m=new Date(d);m.setDate(d.getDate()-day+1);return m.toISOString().slice(0,10);})();
   wks.forEach(w=>{
     var rh=Math.max((w.rkm/Math.max(maxKm,60))*chartH,w.rkm>0?2:0);
     var ch=Math.max((w.ckm/Math.max(maxKm,60))*chartH,w.ckm>0?2:0);
@@ -754,7 +846,7 @@ function renderRecentActs(){
   var el=document.getElementById('recent-acts');
   if(!all.length){el.innerHTML='<div class="empty-state">No activities yet</div>';return;}
   el.innerHTML=all.map(r=>{
-    var days=Math.round((new Date()-new Date(r.date))/86400000);
+    var days=Math.round((new Date()-parseLocalDate(r.date))/86400000);
     var lbl=days===0?'Today':days===1?'Yesterday':days+' days ago';
     var distVal=pf(r.dist);
     var terrain=r.terrain||'';
@@ -792,7 +884,7 @@ function renderLog(filter){
       :r._type==='cross'?`<span class="badge badge-cross">${r.subtype||'cross train'}</span>`
       :r._type==='strength'?`<span class="badge badge-strength">${r.subtype||'strength'}</span>`
       :`<span class="badge badge-rec">${r.subtype||'recovery'}</span>`;
-    var d=new Date(r.date);
+    var d=parseLocalDate(r.date);
     var dateStr=d.toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
     return`<div class="log-entry" onclick="viewAct('${r.id}','${r._type}')">
       <div class="log-entry-header">
@@ -879,11 +971,11 @@ function renderGoals(){
     var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     title.textContent='Week of '+monthNames[b.mon.getMonth()]+' '+b.mon.getDate()+' vs Goals';
   }
-  var wr=DB.runs.filter(r=>{var d=new Date(r.date);return d>=b.mon&&d<=b.sun;});
+  var wr=DB.runs.filter(r=>{var d=parseLocalDate(r.date);return d>=b.mon&&d<=b.sun;});
   var wkm=wr.reduce((s,r)=>s+pf(r.dist),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
   var wvert=wr.reduce((s,r)=>s+pi(r.vert),0);
-  var wc=DB.crosses.filter(r=>{var d=new Date(r.date);return d>=b.mon&&d<=b.sun;});
+  var wc=DB.crosses.filter(r=>{var d=parseLocalDate(r.date);return d>=b.mon&&d<=b.sun;});
   var ckm=wc.reduce((s,r)=>s+pf(r.dist),0);
   var cmin=wc.reduce((s,r)=>s+pi(r.dur),0);
   var goals=[
@@ -929,7 +1021,7 @@ function renderRaces(){
   var el=document.getElementById('race-list');
   if(!list.length){el.innerHTML='<div class="empty-state">No races yet. Add one with the button above.</div>';return;}
   el.innerHTML=list.map(r=>{
-    var d=new Date(r.date);
+    var d=parseLocalDate(r.date);
     var days=Math.ceil((d-new Date())/86400000);
     var past=days<0;
     return`<div class="log-entry">
@@ -1402,7 +1494,7 @@ function viewAct(id,type){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div>
         ${distVal>0?`<div class="view-dist ${isRun?'':'blue'}">${distVal.toFixed(1)} <span style="font-size:16px;font-weight:400">km</span></div>`:''}
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">${new Date(r.date).toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${parseLocalDate(r.date).toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
         <div style="margin-top:6px">${typeBadges}</div>
       </div>
       <button class="modal-close" onclick="closeAllModals()" style="font-size:22px">×</button>
