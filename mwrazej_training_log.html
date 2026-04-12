@@ -188,7 +188,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <!-- Login screen -->
 <div id="login-overlay" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:28px">
   <div style="text-align:center">
-    <div style="font-size:28px;font-weight:800;color:var(--pink);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">M Wrazej Training Log</div>
+    <div style="font-size:28px;font-weight:800;color:var(--pink);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px" id="login-title">Training Log</div>
     <div style="font-size:12px;color:var(--muted);letter-spacing:.5px">The complete endurance athlete.</div>
   </div>
   <button onclick="signInWithGoogle()" style="display:flex;align-items:center;gap:12px;background:#fff;color:#222;border:none;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 2px 16px rgba(0,0,0,.4)">
@@ -203,7 +203,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
 <div class="app" id="app">
 <aside class="sidebar">
-  <div class="sidebar-brand">Run Training Log<div class="sidebar-sub">M Wrazej</div></div>
+  <div class="sidebar-brand">Training Log<div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px"><div class="sidebar-sub" id="brand-sub">My Training</div><button onclick="openNameModal()" title="Rename app" style="background:none;border:none;color:var(--muted2);cursor:pointer;padding:0;line-height:1;font-size:13px;flex-shrink:0" onmouseover="this.style.color='var(--pink)'" onmouseout="this.style.color='var(--muted2)'">✎</button></div></div>
   <div class="nav-section">Main</div>
   <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard
@@ -250,13 +250,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="hamburger" onclick="toggleSidebar()" aria-label="Open menu">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
-  <span class="mobile-topbar-title">M Wrazej Training Log</span>
+  <span class="mobile-topbar-title" id="mobile-title">Training Log</span>
 </div>
 
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
   <div class="page-header">
-    <div><div class="page-title">M Wrazej Training Log</div><div class="page-sub">The complete endurance athlete.</div></div>
+    <div><div class="page-title" id="dash-title">Training Log</div><div class="page-sub">The complete endurance athlete.</div></div>
   </div>
   <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Running Stats</div>
   <div class="stat-grid">
@@ -482,11 +482,14 @@ function load(){
     if(doc.exists) DB=Object.assign(DB,doc.data());
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
+    applyLogName();
+    if(!DB.logName) openNameModal();
     navigateToHash();
   }).catch(function(err){
     console.error('Load error:',err);
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
+    applyLogName();
     navigateToHash();
   });
 }
@@ -515,7 +518,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0}};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},logName:''};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -523,7 +526,7 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0}};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],goals:{dist:0,time:0,vert:0,cdist:0,ctime:0},logName:''};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 
@@ -865,6 +868,36 @@ function setText(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
 function pf(v){return parseFloat(v)||0;}
 function pi(v){return parseInt(v)||0;}
 function formatPace(m){var mm=Math.floor(m),s=Math.round((m-mm)*60);return mm+':'+(s<10?'0':'')+s;}
+
+function applyLogName(){
+  var name=DB.logName||'';
+  var full=name?name+' Training Log':'Training Log';
+  document.title=full;
+  var el=document.getElementById('login-title');if(el)el.textContent=full;
+  el=document.getElementById('brand-sub');if(el)el.textContent=name||'My Training';
+  el=document.getElementById('mobile-title');if(el)el.textContent=full;
+  el=document.getElementById('dash-title');if(el)el.textContent=full;
+}
+
+function openNameModal(){
+  closeAllModals();
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal" style="max-width:380px"><div class="modal-title">Customize App Name<button class="modal-close" onclick="closeAllModals()">✕</button></div><div class="form-group"><label class="form-label">Your Name or Label</label><input class="form-input" id="f-logname" type="text" placeholder="e.g. M Wrazej" maxlength="40"></div><div style="font-size:11px;color:var(--muted);margin-bottom:14px">Shown as \u201c[Name] Training Log\u201d across the app.</div><div style="display:flex;gap:8px"><button class="btn btn-pink" style="flex:1;justify-content:center" onclick="saveLogName()">Save</button><button class="btn btn-outline" onclick="closeAllModals()">Cancel</button></div></div>';
+  wrap.addEventListener('click',function(e){if(e.target===wrap)closeAllModals();});
+  document.getElementById('modal-container').appendChild(wrap);
+  var inp=document.getElementById('f-logname');
+  if(inp){inp.value=DB.logName||'';setTimeout(()=>inp.focus(),50);}
+}
+
+function saveLogName(){
+  var val=(document.getElementById('f-logname')?.value||'').trim();
+  if(!val)return;
+  DB.logName=val;
+  save();
+  applyLogName();
+  closeAllModals();
+}
 
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
