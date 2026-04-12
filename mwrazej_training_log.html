@@ -158,14 +158,24 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .empty-state{text-align:center;padding:36px 20px;color:var(--muted);font-size:12px}
 .export-btn{background:transparent;color:var(--muted);border:1px solid var(--border2);padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;transition:.12s}
 .export-btn:hover{color:var(--text)}
+.hamburger{display:none;background:none;border:none;color:var(--text);cursor:pointer;padding:4px;flex-shrink:0}
+.hamburger svg{display:block}
+.mobile-topbar{display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.mobile-topbar-title{font-size:12px;font-weight:700;color:var(--pink);text-transform:uppercase;letter-spacing:1px}
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199}
+#sidebar-overlay.visible{display:block}
 @media(max-width:900px){
   .stat-grid{grid-template-columns:repeat(2,1fr)}
   .two-col{grid-template-columns:1fr}
   .goals-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:600px){
-  .sidebar{width:180px}
-  .main{margin-left:180px;padding:16px}
+  .sidebar{transform:translateX(-100%);transition:transform .2s ease;z-index:200;width:210px}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0;padding:0}
+  .page.active{padding:16px}
+  .mobile-topbar{display:flex}
+  .hamburger{display:block}
   .stat-grid{grid-template-columns:1fr 1fr}
 }
 </style>
@@ -233,7 +243,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </aside>
 
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
 <main class="main" id="main-content">
+<div class="mobile-topbar">
+  <button class="hamburger" onclick="toggleSidebar()" aria-label="Open menu">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <span class="mobile-topbar-title">M Wrazej Training Log</span>
+</div>
 
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
@@ -464,10 +482,12 @@ function load(){
     if(doc.exists) DB=Object.assign(DB,doc.data());
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
+    navigateToHash();
   }).catch(function(err){
     console.error('Load error:',err);
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
+    navigateToHash();
   });
 }
 
@@ -853,7 +873,29 @@ function showPage(id,el){
   if(el)el.classList.add('active');
   if(id==='goals')renderGoals();
   if(id==='calculator'){renderPresets();renderConvTable();renderPaceChart();}
+  history.replaceState(null,'','#'+id);
+  closeSidebar();
 }
+
+function navigateToHash(){
+  var hash=location.hash.replace('#','');
+  var valid=['dashboard','log','calendar','calculator','goals','races'];
+  if(valid.indexOf(hash)!==-1){
+    showPage(hash,document.getElementById('nav-'+hash));
+  }
+}
+
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+
+function closeSidebar(){
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+window.addEventListener('hashchange',navigateToHash);
 
 function openModalDate(ds){openModal('run');setTimeout(()=>{var e=document.getElementById('f-date');if(e)e.value=ds;},50);}
 
