@@ -350,6 +350,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="card-header">
           <div class="card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Volume History</div>
           <div class="header-btns">
+            <button class="btn btn-outline btn-sm" id="vol-dist-btn" onclick="setVolumeMetric('dist')">Distance</button>
+            <button class="btn btn-outline btn-sm" id="vol-time-btn" onclick="setVolumeMetric('time')">Time</button>
+            <button class="btn btn-outline btn-sm" id="vol-vert-btn" onclick="setVolumeMetric('vert')">Vert</button>
             <button class="btn btn-outline btn-sm" id="vol-weekly-btn" onclick="setVolumeMode('weekly')">Weekly</button>
             <button class="btn btn-outline btn-sm" id="vol-monthly-btn" onclick="setVolumeMode('monthly')">Monthly</button>
           </div>
@@ -359,6 +362,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--pink);border-radius:2px"></div><span style="color:var(--muted)">Run</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--blue);border-radius:2px"></div><span style="color:var(--muted)">Cross Train</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(0,180,216,.22);border:1px solid #00b4d8;border-radius:2px"></div><span style="color:var(--muted)">Cross Goal Range</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(124,77,255,.35);border:1px solid #7c4dff;border-radius:2px"></div><span style="color:var(--muted)">Running Goal Range</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--green);border-radius:2px"></div><span style="color:var(--muted)">Total</span></div>
         </div>
@@ -629,6 +633,7 @@ var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
 var volumeMode='weekly';
+var volumeMetric='dist';
 
 function exportData(){
   var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
@@ -649,7 +654,7 @@ function importData(e){
   e.target.value='';
 }
 
-function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();}
+function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();}
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -814,9 +819,17 @@ function getWeeklyTotals(){
     var d=parseLocalDate(r.date),day=d.getDay()||7;
     var mon=new Date(d);mon.setDate(d.getDate()-day+1);
     var key=mon.toISOString().slice(0,10);
-    if(!byWeek[key])byWeek[key]={key,rkm:0,rmin:0,ckm:0,cmin:0,tkm:0,tmin:0,gkm:0,grMin:0,grMax:0,lbl:''};
-    if(r.actType==='run'){byWeek[key].rkm+=pf(r.dist);byWeek[key].rmin+=pi(r.dur);}
-    else{byWeek[key].ckm+=pf(r.dist);byWeek[key].cmin+=pi(r.dur);}
+    if(!byWeek[key])byWeek[key]={
+      key,rkm:0,rmin:0,ckm:0,cmin:0,tkm:0,tmin:0,gkm:0,grMin:0,grMax:0,lbl:'',
+      rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0,
+      grDistMin:0,grDistMax:0,grTimeMin:0,grTimeMax:0,grVertMin:0,grVertMax:0,
+      gcDistMin:0,gcDistMax:0,gcTimeMin:0,gcTimeMax:0,gcVertMin:0,gcVertMax:0
+    };
+    if(r.actType==='run'){
+      byWeek[key].rdist+=pf(r.dist);byWeek[key].rtime+=pi(r.dur);byWeek[key].rvert+=pi(r.vert);
+    }else{
+      byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);
+    }
   });
   var wks=Object.values(byWeek).sort((a,b)=>a.key.localeCompare(b.key));
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -824,11 +837,25 @@ function getWeeklyTotals(){
     var d=new Date(w.key);
     w.lbl=months[d.getMonth()]+' '+(d.getDate());
     var wg=getGoalsForWeek(w.key);
-    w.grMin=wg.run.enabled&&wg.run.metrics.dist?pf(wg.run.dist.min):0;
-    w.grMax=wg.run.enabled&&wg.run.metrics.dist?pf(wg.run.dist.max):0;
+    w.grDistMin=wg.run.enabled&&wg.run.metrics.dist?pf(wg.run.dist.min):0;
+    w.grDistMax=wg.run.enabled&&wg.run.metrics.dist?pf(wg.run.dist.max):0;
+    w.grTimeMin=wg.run.enabled&&wg.run.metrics.time?pf(wg.run.time.min):0;
+    w.grTimeMax=wg.run.enabled&&wg.run.metrics.time?pf(wg.run.time.max):0;
+    w.grVertMin=wg.run.enabled&&wg.run.metrics.vert?pf(wg.run.vert.min):0;
+    w.grVertMax=wg.run.enabled&&wg.run.metrics.vert?pf(wg.run.vert.max):0;
+    w.gcDistMin=wg.cross.enabled&&wg.cross.metrics.dist?pf(wg.cross.dist.min):0;
+    w.gcDistMax=wg.cross.enabled&&wg.cross.metrics.dist?pf(wg.cross.dist.max):0;
+    w.gcTimeMin=wg.cross.enabled&&wg.cross.metrics.time?pf(wg.cross.time.min):0;
+    w.gcTimeMax=wg.cross.enabled&&wg.cross.metrics.time?pf(wg.cross.time.max):0;
+    w.gcVertMin=wg.cross.enabled&&wg.cross.metrics.vert?pf(wg.cross.vert.min):0;
+    w.gcVertMax=wg.cross.enabled&&wg.cross.metrics.vert?pf(wg.cross.vert.max):0;
+    w.grMin=w.grDistMin;
+    w.grMax=w.grDistMax;
     w.gkm=w.grMax;
-    w.tkm=w.rkm+w.ckm;
-    w.tmin=w.rmin+w.cmin;
+    w.rkm=w.rdist;w.rmin=w.rtime;
+    w.ckm=w.cdist;w.cmin=w.ctime;
+    w.tdist=w.rdist+w.cdist;w.ttime=w.rtime+w.ctime;w.tvert=w.rvert+w.cvert;
+    w.tkm=w.tdist;w.tmin=w.ttime;
   });
   return wks.slice(-12);
 }
@@ -839,31 +866,48 @@ function getMonthlyTotals(){
     var d=parseLocalDate(r.date);
     var monthStart=new Date(d.getFullYear(),d.getMonth(),1,12,0,0,0);
     var key=monthStart.toISOString().slice(0,10);
-    if(!byMonth[key])byMonth[key]={key,rkm:0,rmin:0,ckm:0,cmin:0,tkm:0,tmin:0,gkm:0,grMin:0,grMax:0,lbl:''};
-    if(r.actType==='run'){byMonth[key].rkm+=pf(r.dist);byMonth[key].rmin+=pi(r.dur);}
-    else{byMonth[key].ckm+=pf(r.dist);byMonth[key].cmin+=pi(r.dur);}
+    if(!byMonth[key])byMonth[key]={
+      key,rkm:0,rmin:0,ckm:0,cmin:0,tkm:0,tmin:0,gkm:0,grMin:0,grMax:0,lbl:'',
+      rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0,
+      grDistMin:0,grDistMax:0,grTimeMin:0,grTimeMax:0,grVertMin:0,grVertMax:0,
+      gcDistMin:0,gcDistMax:0,gcTimeMin:0,gcTimeMax:0,gcVertMin:0,gcVertMax:0
+    };
+    if(r.actType==='run'){byMonth[key].rdist+=pf(r.dist);byMonth[key].rtime+=pi(r.dur);byMonth[key].rvert+=pi(r.vert);}
+    else{byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);}
   });
   var months=Object.values(byMonth).sort((a,b)=>a.key.localeCompare(b.key));
   var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   months.forEach(function(m){
     var first=parseLocalDate(m.key);
     m.lbl=monthNames[first.getMonth()]+' '+String(first.getFullYear()).slice(-2);
-    var monthGoal=0,monthGoalMin=0;
+    var monthGoalDist=0,monthGoalDistMin=0,monthGoalTime=0,monthGoalTimeMin=0,monthGoalVert=0,monthGoalVertMin=0;
+    var crossGoalDist=0,crossGoalDistMin=0,crossGoalTime=0,crossGoalTimeMin=0,crossGoalVert=0,crossGoalVertMin=0;
     Object.keys(DB.weeklyGoals||{}).forEach(function(weekKey){
       var wkDate=parseLocalDate(weekKey);
       if(wkDate.getFullYear()===first.getFullYear()&&wkDate.getMonth()===first.getMonth()){
         var wg=getGoalsForWeek(weekKey);
         if(wg.run.enabled&&wg.run.metrics.dist){
-          monthGoal+=pf(wg.run.dist.max);
-          monthGoalMin+=pf(wg.run.dist.min);
+          monthGoalDist+=pf(wg.run.dist.max);
+          monthGoalDistMin+=pf(wg.run.dist.min);
         }
+        if(wg.run.enabled&&wg.run.metrics.time){monthGoalTime+=pf(wg.run.time.max);monthGoalTimeMin+=pf(wg.run.time.min);}
+        if(wg.run.enabled&&wg.run.metrics.vert){monthGoalVert+=pf(wg.run.vert.max);monthGoalVertMin+=pf(wg.run.vert.min);}
+        if(wg.cross.enabled&&wg.cross.metrics.dist){crossGoalDist+=pf(wg.cross.dist.max);crossGoalDistMin+=pf(wg.cross.dist.min);}
+        if(wg.cross.enabled&&wg.cross.metrics.time){crossGoalTime+=pf(wg.cross.time.max);crossGoalTimeMin+=pf(wg.cross.time.min);}
+        if(wg.cross.enabled&&wg.cross.metrics.vert){crossGoalVert+=pf(wg.cross.vert.max);crossGoalVertMin+=pf(wg.cross.vert.min);}
       }
     });
-    m.gkm=monthGoal;
-    m.grMin=monthGoalMin;
-    m.grMax=monthGoal;
-    m.tkm=m.rkm+m.ckm;
-    m.tmin=m.rmin+m.cmin;
+    m.grDistMin=monthGoalDistMin;m.grDistMax=monthGoalDist;
+    m.grTimeMin=monthGoalTimeMin;m.grTimeMax=monthGoalTime;
+    m.grVertMin=monthGoalVertMin;m.grVertMax=monthGoalVert;
+    m.gcDistMin=crossGoalDistMin;m.gcDistMax=crossGoalDist;
+    m.gcTimeMin=crossGoalTimeMin;m.gcTimeMax=crossGoalTime;
+    m.gcVertMin=crossGoalVertMin;m.gcVertMax=crossGoalVert;
+    m.grMin=m.grDistMin;m.grMax=m.grDistMax;m.gkm=m.grMax;
+    m.rkm=m.rdist;m.rmin=m.rtime;
+    m.ckm=m.cdist;m.cmin=m.ctime;
+    m.tdist=m.rdist+m.cdist;m.ttime=m.rtime+m.ctime;m.tvert=m.rvert+m.cvert;
+    m.tkm=m.tdist;m.tmin=m.ttime;
   });
   return months.slice(-12);
 }
@@ -874,11 +918,26 @@ function setVolumeMode(mode){
   renderVolChart();
 }
 
+function setVolumeMetric(metric){
+  volumeMetric=(metric==='time'||metric==='vert')?metric:'dist';
+  updateVolumeMetricButtons();
+  renderVolChart();
+}
+
 function updateVolumeModeButtons(){
   document.getElementById('vol-weekly-btn')?.classList.toggle('btn-pink',volumeMode==='weekly');
   document.getElementById('vol-weekly-btn')?.classList.toggle('btn-outline',volumeMode!=='weekly');
   document.getElementById('vol-monthly-btn')?.classList.toggle('btn-pink',volumeMode==='monthly');
   document.getElementById('vol-monthly-btn')?.classList.toggle('btn-outline',volumeMode!=='monthly');
+}
+
+function updateVolumeMetricButtons(){
+  document.getElementById('vol-dist-btn')?.classList.toggle('btn-pink',volumeMetric==='dist');
+  document.getElementById('vol-dist-btn')?.classList.toggle('btn-outline',volumeMetric!=='dist');
+  document.getElementById('vol-time-btn')?.classList.toggle('btn-pink',volumeMetric==='time');
+  document.getElementById('vol-time-btn')?.classList.toggle('btn-outline',volumeMetric!=='time');
+  document.getElementById('vol-vert-btn')?.classList.toggle('btn-pink',volumeMetric==='vert');
+  document.getElementById('vol-vert-btn')?.classList.toggle('btn-outline',volumeMetric!=='vert');
 }
 
 function getCurrentVolumeKey(){
@@ -897,29 +956,45 @@ function renderVolChart(){
   chart.innerHTML='<div class="tooltip" id="vol-tooltip"></div>';
   labels.innerHTML='';
   if(!wks.length){chart.innerHTML+='<div class="empty-state" style="width:100%">Log runs to see history</div>';return;}
-  var goalMins=wks.map(w=>pf(w.grMin));
-  var goalMaxes=wks.map(w=>pf(w.grMax));
-  var hasGoalBand=goalMaxes.some(v=>v>0);
-  var maxKm=Math.max(...wks.map(w=>Math.max(w.rkm,w.ckm,w.tkm,pf(w.grMax))),1);
-  var axisMax=Math.max(10,Math.ceil((maxKm*1.15)/5)*5);
+  var metric=volumeMetric;
+  var metricCfg={
+    dist:{run:'rdist',cross:'cdist',total:'tdist',goalRunMin:'grDistMin',goalRunMax:'grDistMax',goalCrossMin:'gcDistMin',goalCrossMax:'gcDistMax',unit:'km',step:5,minAxis:10,fmt:v=>v.toFixed(1),tt:v=>v.toFixed(1)+' km'},
+    time:{run:'rtime',cross:'ctime',total:'ttime',goalRunMin:'grTimeMin',goalRunMax:'grTimeMax',goalCrossMin:'gcTimeMin',goalCrossMax:'gcTimeMax',unit:'h',step:1,minAxis:1,fmt:v=>v.toFixed(1),tt:v=>v.toFixed(1)+' h'},
+    vert:{run:'rvert',cross:'cvert',total:'tvert',goalRunMin:'grVertMin',goalRunMax:'grVertMax',goalCrossMin:'gcVertMin',goalCrossMax:'gcVertMax',unit:'m',step:100,minAxis:100,fmt:v=>Math.round(v)+'',tt:v=>Math.round(v)+' m'}
+  }[metric];
+  var runGoalMins=wks.map(w=>pf(w[metricCfg.goalRunMin]));
+  var runGoalMaxes=wks.map(w=>pf(w[metricCfg.goalRunMax]));
+  var crossGoalMins=wks.map(w=>pf(w[metricCfg.goalCrossMin]));
+  var crossGoalMaxes=wks.map(w=>pf(w[metricCfg.goalCrossMax]));
+  function metricValue(w,key){
+    var raw=pf(w[key]);
+    if(metric==='time'&&(key===metricCfg.run||key===metricCfg.cross||key===metricCfg.total))return raw/60;
+    return raw;
+  }
+  var hasRunGoalBand=runGoalMaxes.some(v=>v>0);
+  var hasCrossGoalBand=crossGoalMaxes.some(v=>v>0);
+  var maxVal=Math.max(...wks.map(w=>Math.max(metricValue(w,metricCfg.run),metricValue(w,metricCfg.cross),metricValue(w,metricCfg.total),pf(w[metricCfg.goalRunMax]),pf(w[metricCfg.goalCrossMax]))),1);
+  var axisMax=Math.max(metricCfg.minAxis,Math.ceil((maxVal*1.15)/metricCfg.step)*metricCfg.step);
   var chartH=120;
-  // Add y-axis gridlines
   var ySteps=[0,Math.round(axisMax*0.25),Math.round(axisMax*0.5),Math.round(axisMax*0.75),axisMax];
   var gridDiv=document.createElement('div');
   gridDiv.style.cssText='position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;';
-  if(hasGoalBand){
-    var bandMin=Math.max(Math.min(...goalMins.filter(v=>v>0),0),0);
-    var bandMax=Math.max(...goalMaxes);
+  function addGoalBand(mins,maxes,color,border){
+    var positiveMins=mins.filter(v=>v>0);
+    var bandMin=positiveMins.length?Math.min(...positiveMins):0;
+    var bandMax=Math.max(...maxes);
     if(bandMax>0){
       var band=document.createElement('div');
       var top=(1-(bandMax/axisMax))*chartH;
       var bottom=(1-(bandMin/axisMax))*chartH;
-      band.style.cssText='position:absolute;left:0;right:0;background:rgba(124,77,255,.22);border-top:1px dashed #7c4dff;border-bottom:1px dashed #7c4dff;';
+      band.style.cssText='position:absolute;left:0;right:0;border-top:1px dashed '+border+';border-bottom:1px dashed '+border+';background:'+color+';';
       band.style.top=Math.max(0,top)+'px';
       band.style.height=Math.max(2,bottom-top)+'px';
       gridDiv.appendChild(band);
     }
   }
+  if(hasCrossGoalBand)addGoalBand(crossGoalMins,crossGoalMaxes,'rgba(0,180,216,.22)','#00b4d8');
+  if(hasRunGoalBand)addGoalBand(runGoalMins,runGoalMaxes,'rgba(124,77,255,.22)','#7c4dff');
   ySteps.forEach(function(v){
     var pct=1-(v/axisMax);
     var top=pct*chartH;
@@ -928,7 +1003,7 @@ function renderVolChart(){
     line.style.top=top+'px';
     var lbl=document.createElement('span');
     lbl.style.cssText='font-size:8px;color:var(--muted2);padding-right:2px;line-height:1;position:absolute;right:100%;white-space:nowrap;';
-    lbl.textContent=v;
+    lbl.textContent=metric==='dist'?v.toFixed(0):metric==='time'?v.toFixed(1):Math.round(v);
     line.appendChild(lbl);
     gridDiv.appendChild(line);
   });
@@ -936,19 +1011,23 @@ function renderVolChart(){
   var curKey=getCurrentVolumeKey();
   var currentMonthName=new Date().toLocaleDateString('en-US',{month:'long'});
   wks.forEach(w=>{
-    var rh=Math.max((w.rkm/axisMax)*chartH,w.rkm>0?2:0);
-    var ch=Math.max((w.ckm/axisMax)*chartH,w.ckm>0?2:0);
+    var runVal=metricValue(w,metricCfg.run),crossVal=metricValue(w,metricCfg.cross),totalVal=metricValue(w,metricCfg.total);
+    var rh=Math.max((runVal/axisMax)*chartH,runVal>0?2:0);
+    var ch=Math.max((crossVal/axisMax)*chartH,crossVal>0?2:0);
     var isCur=w.key===curKey;
     var bw=document.createElement('div');
     bw.className='bar-wrap';
     bw.innerHTML=`<div class=\"bar-group\">
       <div class=\"bar-col run ${isCur?'current':''}\" style=\"height:${rh}px;min-height:${rh>0?2:0}px\"></div>
       <div class=\"bar-col cross ${isCur?'current':''}\" style=\"height:${ch}px;min-height:${ch>0?2:0}px\"></div>
-      <div class=\"bar-col total ${isCur?'current':''}\" style=\"height:${Math.max((w.tkm/axisMax)*chartH,w.tkm>0?2:0)}px;min-height:${w.tkm>0?2:0}px\"></div>
+      <div class=\"bar-col total ${isCur?'current':''}\" style=\"height:${Math.max((totalVal/axisMax)*chartH,totalVal>0?2:0)}px;min-height:${totalVal>0?2:0}px\"></div>
     </div>`;
     bw.addEventListener('mouseenter',function(){
       var tt=document.getElementById('vol-tooltip');
-      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${w.rkm.toFixed(1)} km / ${minsToHHMM(w.rmin)}<br>CT: ${w.ckm.toFixed(1)} km / ${minsToHHMM(w.cmin)}<br>Total: ${w.tkm.toFixed(1)} km / ${minsToHHMM(w.tmin)}`;
+      var runGoalMin=pf(w[metricCfg.goalRunMin]),runGoalMax=pf(w[metricCfg.goalRunMax]),crossGoalMin=pf(w[metricCfg.goalCrossMin]),crossGoalMax=pf(w[metricCfg.goalCrossMax]);
+      var runGoalLine=runGoalMax>0?`<br>Run Goal: ${metricCfg.fmt(runGoalMin)}-${metricCfg.fmt(runGoalMax)} ${metricCfg.unit}`:'';
+      var crossGoalLine=crossGoalMax>0?`<br>Cross Goal: ${metricCfg.fmt(crossGoalMin)}-${metricCfg.fmt(crossGoalMax)} ${metricCfg.unit}`:'';
+      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${metricCfg.tt(runVal)}<br>CT: ${metricCfg.tt(crossVal)}<br>Total: ${metricCfg.tt(totalVal)}${runGoalLine}${crossGoalLine}`;
       tt.style.display='block';tt.style.left=(bw.offsetLeft)+'px';
     });
     bw.addEventListener('mouseleave',function(){document.getElementById('vol-tooltip').style.display='none';});
