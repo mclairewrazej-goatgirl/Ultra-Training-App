@@ -272,7 +272,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>Nutrition
   </div>
   <div class="sidebar-footer">
-    <button class="btn btn-pink" style="width:100%;justify-content:center;margin-bottom:6px" onclick="openModal('run')">+ Log Run</button>
+    <button class="btn btn-pink" id="btn-log-primary" style="width:100%;justify-content:center;margin-bottom:6px" onclick="openModal('run')"><span id="btn-log-primary-text">+ Log Run</span></button>
     <div style="display:flex;gap:6px">
       <button class="btn btn-blue btn-sm" style="flex:1;justify-content:center" onclick="openModal('cross')">Cross Train</button>
       <button class="btn btn-outline btn-sm" style="flex:1;justify-content:center" onclick="openModal('other')">Other</button>
@@ -283,6 +283,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="btn btn-outline btn-sm theme-btn" id="theme-dark-btn" onclick="setTheme('dark')">Dark</button>
         <button class="btn btn-outline btn-sm theme-btn" id="theme-light-btn" onclick="setTheme('light')">Light</button>
       </div>
+    </div>
+    <div style="margin-top:8px;text-align:center">
+      <button onclick="openSportSelectModal()" style="background:none;border:none;font-size:10px;color:var(--muted2);cursor:pointer;font-family:inherit;letter-spacing:.3px" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">Change Primary Sport</button>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
       <img id="user-avatar" style="display:none;width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
@@ -307,20 +310,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="page-header">
     <div><div class="page-title" id="dash-title">Training Log</div><div class="page-sub">A complete training log for the endurance athlete.</div></div>
   </div>
-  <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Running Stats</div>
+  <div class="section-title" id="dash-primary-sport-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Running Stats</div>
   <div class="stat-grid">
     <div class="stat-card pk">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-      <div class="stat-label">Weekly Mileage</div><div class="stat-val" id="s-wkm">0.0</div><div class="stat-sub" id="s-wavg">Avg — km/wk</div></div>
+      <div class="stat-label">Weekly Distance</div><div class="stat-val" id="s-wkm">0.0</div><div class="stat-sub" id="s-wavg">Avg — km/wk</div></div>
     <div class="stat-card bl">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 20 2 20"/></svg></div>
       <div class="stat-label">Weekly Vert</div><div class="stat-val" id="s-wvert">0 m</div><div class="stat-sub">Meters climbed</div></div>
     <div class="stat-card pu">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <div class="stat-label">Time on Feet</div><div class="stat-val" id="s-wtime">0.0</div><div class="stat-sub">Hours logged</div></div>
+      <div class="stat-label" id="dash-stat-time-label">Time on Feet</div><div class="stat-val" id="s-wtime">0.0</div><div class="stat-sub">Hours logged</div></div>
     <div class="stat-card bl">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
-      <div class="stat-label">Longest Run</div><div class="stat-val" id="s-long">0.0</div><div class="stat-sub">Max km in one go</div></div>
+      <div class="stat-label" id="dash-stat-longest-label">Longest Run</div><div class="stat-val" id="s-long">0.0</div><div class="stat-sub">Max km in one go</div></div>
   </div>
   <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Cross Training Totals</div>
   <div class="stat-grid">
@@ -584,7 +587,8 @@ function load(){
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
     applyLogName();
-    if(!DB.logName) openNameModal();
+    if(!DB.primarySport) openSportSelectModal();
+    else if(!DB.logName) openNameModal();
     navigateToHash();
   }).catch(function(err){
     console.error('Load error:',err);
@@ -620,7 +624,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark'};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:''};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -628,7 +632,7 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark'};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:''};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
@@ -654,9 +658,67 @@ function importData(e){
   e.target.value='';
 }
 
-function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();}
+function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();}
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+function isCycling(){return DB.primarySport==='cycling';}
+function rideTypeLbl(t){return t==='easy'?'Easy Ride':t==='long'?'Long Ride':t||'Ride';}
+
+function openSportSelectModal(){
+  var hasSport=!!DB.primarySport;
+  var html=`<div class="modal" style="max-width:460px">
+  <div class="modal-title" style="display:block;text-align:center;padding-bottom:4px">
+    ${hasSport?'<button class="modal-close" style="float:right" onclick="document.getElementById(\'sport-select-overlay\').remove()">×</button>':''}
+    <span style="font-size:16px">Choose Your Primary Sport</span>
+  </div>
+  <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px">${hasSport?'Cross-training activities adapt to your choice.':'Welcome! This sets your main training interface.'}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px">
+    <button onclick="setPrimarySport('running')" style="background:var(--surface2);border:2px solid ${DB.primarySport==='running'?'var(--pink)':'var(--border2)'};border-radius:12px;padding:22px 12px;cursor:pointer;color:var(--text);font-family:inherit;transition:.15s;text-align:center" onmouseover="this.style.borderColor='var(--pink)'" onmouseout="this.style.borderColor='${DB.primarySport==='running'?'var(--pink)':'var(--border2)'}'">
+      <div style="font-size:30px;margin-bottom:8px">🏃</div>
+      <div style="font-size:14px;font-weight:700;color:var(--pink);margin-bottom:6px">Running</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Trail, road & ultra running<br>Cycling listed as cross-training</div>
+    </button>
+    <button onclick="setPrimarySport('cycling')" style="background:var(--surface2);border:2px solid ${DB.primarySport==='cycling'?'var(--blue)':'var(--border2)'};border-radius:12px;padding:22px 12px;cursor:pointer;color:var(--text);font-family:inherit;transition:.15s;text-align:center" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='${DB.primarySport==='cycling'?'var(--blue)':'var(--border2)'}'">
+      <div style="font-size:30px;margin-bottom:8px">🚴</div>
+      <div style="font-size:14px;font-weight:700;color:var(--blue);margin-bottom:6px">Cycling</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Gravel, road, mountain & fat bike<br>Running listed as cross-training</div>
+    </button>
+  </div>
+</div>`;
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.id='sport-select-overlay';
+  wrap.innerHTML=html;
+  if(hasSport) wrap.addEventListener('click',function(e){if(e.target===wrap)wrap.remove();});
+  document.getElementById('modal-container').appendChild(wrap);
+}
+
+function setPrimarySport(sport){
+  DB.primarySport=sport;
+  save();
+  var overlay=document.getElementById('sport-select-overlay');
+  if(overlay)overlay.remove();
+  updateSportUI();
+  renderAll();
+  if(!DB.logName)openNameModal();
+}
+
+function updateSportUI(){
+  var cycling=isCycling();
+  setText('btn-log-primary-text',cycling?'+ Log Ride':'+ Log Run');
+  setText('dash-primary-sport-title',cycling?'Ride Stats':'Running Stats');
+  var tl=document.getElementById('dash-stat-time-label');
+  if(tl)tl.textContent=cycling?'Saddle Time':'Time on Feet';
+  var ll=document.getElementById('dash-stat-longest-label');
+  if(ll)ll.textContent=cycling?'Longest Ride':'Longest Run';
+}
+
+function onRaceTypeChange(){
+  var type=document.getElementById('f-race-type')?.value;
+  var bg=document.getElementById('race-bike-type-group');
+  if(bg)bg.style.display=type==='bike'?'block':'none';
+}
 
 function parseLocalDate(ds){
   if(!ds)return new Date('');
@@ -1053,7 +1115,10 @@ function renderRecentActs(){
     var lbl=days===0?'Today':days===1?'Yesterday':days+' days ago';
     var distVal=pf(r.dist);
     var terrain=r.terrain||'';
-    var title=r._type==='run'?(distVal>0?distVal.toFixed(1)+' km ':'')+(terrain?terrain+' ':'')+'Run'
+    var title=r._type==='run'
+      ?(r.bikeType
+        ?(distVal>0?distVal.toFixed(1)+' km ':'')+r.bikeType+' Ride'
+        :(distVal>0?distVal.toFixed(1)+' km ':'')+(terrain?terrain+' ':'')+'Run')
       :r._type==='cross'?(distVal>0?distVal.toFixed(1)+' km ':'')+' '+(r.subtype||'Cross Train')
       :r._type==='strength'?(r.subtype||'Strength')
       :(r.subtype||'Recovery');
@@ -1083,7 +1148,9 @@ function renderLog(filter){
     var distVal=pf(r.dist);
     var distStr=distVal>0?distVal.toFixed(1):'—';
     var pace=isRun&&distVal>0&&pi(r.dur)>0?formatPace(pi(r.dur)/distVal):'';
-    var typeBadge=isRun?`<span class="badge badge-${r.runType||'easy'}">${r.runType||'easy'}</span><span class="badge badge-${r.terrain||'road'}">${r.terrain||'road'}</span>`
+    var typeBadge=isRun?(r.bikeType
+      ?`<span class="badge badge-${r.runType||'easy'}">${rideTypeLbl(r.runType)}</span><span class="badge badge-cross">${r.bikeType}</span>`
+      :`<span class="badge badge-${r.runType||'easy'}">${r.runType||'easy'}</span><span class="badge badge-${r.terrain||'road'}">${r.terrain||'road'}</span>`)
       :r._type==='cross'?`<span class="badge badge-cross">${r.subtype||'cross train'}</span>`
       :r._type==='strength'?`<span class="badge badge-strength">${r.subtype||'strength'}</span>`
       :`<span class="badge badge-rec">${r.subtype||'recovery'}</span>`;
@@ -1145,7 +1212,7 @@ function renderCalendar(){
     var hasPlan=dayPlans.length>0&&dayRuns.length===0&&dayCross.length===0;
     var cl='cal-cell'+(isToday?' today':hasPlan?' planned':'');
     var pips='';
-    dayRuns.forEach(r=>{var km=pf(r.dist);pips+=`<div class="cal-pip" style="color:var(--pink);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','run')">${km.toFixed(1)}km ${r.runType||''}</div>`;});
+    dayRuns.forEach(r=>{var km=pf(r.dist);pips+=`<div class="cal-pip" style="color:var(--pink);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','run')">${km.toFixed(1)}km ${r.bikeType?r.bikeType+' ride':(r.runType||'')}</div>`;});
     dayCross.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--blue);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','cross')">${r.subtype||'CT'}${pf(r.dist)>0?' '+pf(r.dist).toFixed(1)+'km':''}</div>`;});
     daySt.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','strength')">${r.subtype||'Strength'}</div>`;});
     dayRec.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--green);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','recovery')">${r.subtype||'Recovery'}</div>`;});
@@ -1290,7 +1357,7 @@ function renderRaces(){
     return`<div class="log-entry">
       <div style="display:flex;align-items:flex-start;justify-content:space-between">
         <div>
-          <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">${r.name}</div>
+          <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">${r.name}${r.raceType==='bike'?` <span class="badge badge-cross">${r.bikeType||'Bike'}</span>`:''}</div>
           <div style="font-size:11px;color:var(--muted)">${r.loc||''}${r.dist?' · '+r.dist+'km':''}${pi(r.vert)>0?' · '+pi(r.vert)+'m':''}</div>
           ${r.goal?`<div style="font-size:11px;color:var(--blue);margin-top:3px">Goal: ${r.goal}</div>`:''}
           ${r.result?`<div style="font-size:12px;color:var(--green);margin-top:4px;font-weight:600">Result: ${r.result}</div>`:''}
@@ -1452,16 +1519,28 @@ function onRunTypeChange(){
   if(wd)wd.style.display=v==='workout'?'block':'none';
 }
 
-function buildRunModal(){return`<div class="modal">
-  <div class="modal-title">Log Run <button class="modal-close" onclick="closeAllModals()">×</button></div>
+function buildRunModal(){
+  var cycling=isCycling();
+  var titleRow=cycling
+    ?`<div class="form-row">
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="form-group"><label class="form-label">Ride Type</label><select class="form-input" id="f-runtype"><option value="easy">Easy Ride</option><option value="workout">Workout</option><option value="long">Long Ride</option></select></div>
+  </div>
   <div class="form-row">
+    <div class="form-group"><label class="form-label">Bike Type</label><select class="form-input" id="f-biketype"><option value="Gravel">Gravel</option><option value="Road">Road</option><option value="Mountain">Mountain</option><option value="Fat Bike">Fat Bike</option></select></div>
+    <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="f-dist" oninput="updatePacePreview()"></div>
+  </div>`
+    :`<div class="form-row">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
     <div class="form-group"><label class="form-label">Run Type</label><select class="form-input" id="f-runtype"><option value="easy">Easy</option><option value="recovery">Recovery</option><option value="long">Long Run</option><option value="workout">Workout</option><option value="hike">Hike</option></select></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Terrain</label><select class="form-input" id="f-terrain"><option value="trail">Trail</option><option value="road">Road</option><option value="treadmill">Treadmill</option></select></div>
     <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="f-dist" oninput="updatePacePreview()"></div>
-  </div>
+  </div>`;
+  return`<div class="modal">
+  <div class="modal-title">${cycling?'Log Ride':'Log Run'} <button class="modal-close" onclick="closeAllModals()">×</button></div>
+  ${titleRow}
   <div class="form-row">
     <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="f-dur" oninput="updatePacePreview();updateNutritionCalc()"></div>
     <div class="form-group"><label class="form-label">Elev Gain (m)</label><input class="form-input" type="number" id="f-vert"></div>
@@ -1469,7 +1548,7 @@ function buildRunModal(){return`<div class="modal">
   <div class="form-group"><label class="form-label">Avg HR (bpm)</label><input class="form-input" type="number" id="f-hr"></div>
   <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="2" placeholder="How did it feel?"></textarea></div>
   <div id="workout-details-section" style="display:none">
-    <div class="form-group"><label class="form-label">Workout Details</label><textarea class="form-input" id="f-workout-details" rows="3" placeholder="e.g. 4×1km @ 4:30/km w/ 90s recovery, 3×10 min tempo..."></textarea></div>
+    <div class="form-group"><label class="form-label">Workout Details</label><textarea class="form-input" id="f-workout-details" rows="3" placeholder="${cycling?'e.g. 5×5 min @ threshold w/ 3 min recovery...':'e.g. 4×1km @ 4:30/km w/ 90s recovery, 3×10 min tempo...'}"></textarea></div>
   </div>
   <div class="pace-prev" id="pace-prev"></div>
   <div class="form-group" style="margin-top:8px">
@@ -1489,15 +1568,20 @@ function buildRunModal(){return`<div class="modal">
   </div>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
-    <button class="btn btn-pink" onclick="saveRun()">Save Run</button>
+    <button class="btn btn-pink" onclick="saveRun()">${cycling?'Save Ride':'Save Run'}</button>
   </div>
 </div>`;}
 
-function buildCrossModal(){return`<div class="modal">
+function buildCrossModal(){
+  var cycling=isCycling();
+  var ctOpts=cycling
+    ?'<option>Run</option><option>Hike</option><option>Skate Ski</option><option>Classic Ski</option><option>Backcountry Ski</option><option>Alpine Ski</option><option>Outdoor Climb</option><option>Alpine Climb</option>'
+    :'<option>Skate Ski</option><option>Classic Ski</option><option>Backcountry Ski</option><option>Alpine Ski</option><option>Outdoor Climb</option><option>Alpine Climb</option><option>Gravel Bike</option><option>Road Bike</option><option>Mountain Bike</option><option>Fat Bike</option>';
+  return`<div class="modal">
   <div class="modal-title">Log Cross Training <button class="modal-close" onclick="closeAllModals()">×</button></div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
-    <div class="form-group"><label class="form-label">Activity</label><select class="form-input" id="f-subtype"><option>Skate Ski</option><option>Classic Ski</option><option>Backcountry Ski</option><option>Alpine Ski</option><option>Outdoor Climb</option><option>Alpine Climb</option><option>Gravel Bike</option><option>Road Bike</option></select></div>
+    <div class="form-group"><label class="form-label">Activity</label><select class="form-input" id="f-subtype">${ctOpts}</select></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="f-dist"></div>
@@ -1529,9 +1613,17 @@ function buildOtherModal(){return`<div class="modal">
   </div>
 </div>`;}
 
-function buildRaceModal(){return`<div class="modal">
+function buildRaceModal(){
+  var cycling=isCycling();
+  var bikeDefault=cycling?'bike':'run';
+  var bikeDisplay=cycling?'block':'none';
+  return`<div class="modal">
   <div class="modal-title">Add Race <button class="modal-close" onclick="closeAllModals()">×</button></div>
-  <div class="form-group"><label class="form-label">Race Name</label><input class="form-input" id="f-race-name" placeholder="e.g. UTMB, Around the Bay"></div>
+  <div class="form-group"><label class="form-label">Race Name</label><input class="form-input" id="f-race-name" placeholder="e.g. UTMB, Gravel Worlds"></div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Race Type</label><select class="form-input" id="f-race-type" onchange="onRaceTypeChange()"><option value="run" ${!cycling?'selected':''}>Running</option><option value="bike" ${cycling?'selected':''}>Cycling</option></select></div>
+    <div class="form-group" id="race-bike-type-group" style="display:${bikeDisplay}"><label class="form-label">Bike Type</label><select class="form-input" id="f-race-bike-type"><option>Gravel</option><option>Road</option><option>Mountain</option><option>Fat Bike</option></select></div>
+  </div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date"></div>
     <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" id="f-dist"></div>
@@ -1556,12 +1648,17 @@ function buildPlanModal(prefill){prefill=prefill||{};return`<div class="modal">
   <div class="form-row">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${prefill.date||new Date().toISOString().slice(0,10)}"></div>
     <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-plantype">
-      <option ${prefill.type==='Run'?'selected':''}>Run</option>
+      ${isCycling()?`<option ${prefill.type==='Ride'?'selected':''}>Ride</option>
+      <option ${prefill.type==='Long Ride'?'selected':''}>Long Ride</option>
+      <option ${prefill.type==='Workout'?'selected':''}>Workout</option>
+      <option ${prefill.type==='Cross Train'?'selected':''}>Cross Train</option>
+      <option ${prefill.type==='Strength'?'selected':''}>Strength</option>
+      <option ${prefill.type==='Rest'?'selected':''}>Rest</option>`:`<option ${prefill.type==='Run'?'selected':''}>Run</option>
       <option ${prefill.type==='Long Run'?'selected':''}>Long Run</option>
       <option ${prefill.type==='Workout'?'selected':''}>Workout</option>
       <option ${prefill.type==='Cross Train'?'selected':''}>Cross Train</option>
       <option ${prefill.type==='Strength'?'selected':''}>Strength</option>
-      <option ${prefill.type==='Rest'?'selected':''}>Rest</option>
+      <option ${prefill.type==='Rest'?'selected':''}>Rest</option>`}
     </select></div>
   </div>
   <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="f-plandesc" placeholder="e.g. 12km easy + strides, 10×400m @ 5k pace" value="${prefill.desc||''}"></div>
@@ -1593,6 +1690,7 @@ function fillForm(data,type){
   if(type==='run'){
     var rt=document.getElementById('f-runtype');if(rt&&data.runType)rt.value=data.runType;
     var tr=document.getElementById('f-terrain');if(tr&&data.terrain)tr.value=data.terrain;
+    var bt=document.getElementById('f-biketype');if(bt&&data.bikeType)bt.value=data.bikeType;
     // Show workout details if applicable
     if(data.runType==='workout'){
       var wd=document.getElementById('workout-details-section');
@@ -1624,6 +1722,10 @@ function fillForm(data,type){
       if(el&&data[key])el.value=data[key];
     });
     if(data.name){var rn=document.getElementById('f-race-name');if(rn)rn.value=data.name;}
+    var raceTypeEl=document.getElementById('f-race-type');
+    if(raceTypeEl&&data.raceType){raceTypeEl.value=data.raceType;onRaceTypeChange();}
+    var raceBikeEl=document.getElementById('f-race-bike-type');
+    if(raceBikeEl&&data.bikeType)raceBikeEl.value=data.bikeType;
   }
 }
 
@@ -1646,9 +1748,11 @@ function saveRun(){
       nutritionEntries.push({nutritionId:sel.value,qty:parseFloat(inp.value)||0});
     }
   });
+  var cycling=isCycling();
   var obj={id:editingId||uid(),date,actType:'run',
     runType:document.getElementById('f-runtype')?.value||'easy',
-    terrain:document.getElementById('f-terrain')?.value||'trail',
+    terrain:cycling?'':(document.getElementById('f-terrain')?.value||'trail'),
+    bikeType:cycling?(document.getElementById('f-biketype')?.value||'Gravel'):'',
     dist:document.getElementById('f-dist')?.value||0,
     dur:document.getElementById('f-dur')?.value||0,
     vert:document.getElementById('f-vert')?.value||0,
@@ -1709,6 +1813,8 @@ function saveRace(){
   var date=document.getElementById('f-date')?.value;
   if(!name||!date){alert('Please enter name and date.');return;}
   var obj={id:editingId||uid(),name,date,
+    raceType:document.getElementById('f-race-type')?.value||'run',
+    bikeType:document.getElementById('f-race-bike-type')?.value||'',
     dist:document.getElementById('f-dist')?.value||0,
     loc:document.getElementById('f-loc')?.value||'',
     goal:document.getElementById('f-goal')?.value||'',
@@ -1781,7 +1887,9 @@ function viewAct(id,type){
   var isRun=type==='run';
   var distVal=pf(r.dist);
   var pace=isRun&&distVal>0&&pi(r.dur)>0?formatPace(pi(r.dur)/distVal):'';
-  var typeBadges=isRun?`<span class="badge badge-${r.runType||'easy'}">${r.runType||'easy'}</span> <span class="badge badge-${r.terrain||'road'}">${r.terrain||'road'}</span>`
+  var typeBadges=isRun?(r.bikeType
+    ?`<span class="badge badge-${r.runType||'easy'}">${rideTypeLbl(r.runType)}</span> <span class="badge badge-cross">${r.bikeType}</span>`
+    :`<span class="badge badge-${r.runType||'easy'}">${r.runType||'easy'}</span> <span class="badge badge-${r.terrain||'road'}">${r.terrain||'road'}</span>`)
     :`<span class="badge badge-${type==='cross'?'cross':type==='strength'?'strength':'rec'}">${r.subtype||type}</span>`;
   // Build nutrition summary
   var nutriHtml='';
