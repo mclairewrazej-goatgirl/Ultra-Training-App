@@ -1340,13 +1340,22 @@ function resetGoalsWeekToCurrent(){goalsWeekOffset=0;renderGoals();}
 function renderDashWeekSelector(){
   var sel=document.getElementById('dash-week-select');if(!sel)return;
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now=new Date(),curYear=now.getFullYear();
+  var yearStart=new Date(curYear,0,1,0,0,0,0);
+  var actDates=(DB.runs||[]).concat(DB.crosses||[]).map(function(r){return r.date;});
+  function weekHasData(mon,sun){
+    return actDates.some(function(d){var dt=parseLocalDate(d);return dt>=mon&&dt<=sun;});
+  }
+  var now2=new Date(),day=now2.getDay()||7;
+  var curMon=new Date(now2);curMon.setDate(now2.getDate()-day+1);curMon.setHours(0,0,0,0);
+  var msPerWeek=7*24*3600*1000;
+  var weeksBack=Math.ceil((curMon-yearStart)/msPerWeek)+1;
   var opts='';
-  for(var i=0;i>=-51;i--){
-    var now=new Date(),day=now.getDay()||7;
-    var mon=new Date(now);
-    mon.setDate(now.getDate()-day+1+(i*7));
-    mon.setHours(0,0,0,0);
-    var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  for(var i=0;i>=-weeksBack;i--){
+    var mon=new Date(curMon);mon.setDate(curMon.getDate()+(i*7));mon.setHours(0,0,0,0);
+    if(mon<yearStart)break;
+    var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+    if(i!==0&&!weekHasData(mon,sun))continue;
     var lbl=i===0?'Current Week':months[mon.getMonth()]+' '+mon.getDate()+' – '+months[sun.getMonth()]+' '+sun.getDate();
     opts+=`<option value="${i}"${i===dashWeekOffset?' selected':''}>${lbl}</option>`;
   }
