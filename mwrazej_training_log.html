@@ -309,6 +309,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <div class="page active" id="page-dashboard">
   <div class="page-header">
     <div><div class="page-title" id="dash-title">Training Log</div><div class="page-sub">A complete training log for the endurance athlete.</div></div>
+    <div><select id="dash-week-select" class="form-input" onchange="changeDashWeek(parseInt(this.value))" style="font-size:12px;padding:6px 10px;min-width:170px"></select></div>
   </div>
   <div class="section-title" id="dash-primary-sport-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Running Stats</div>
   <div class="stat-grid">
@@ -344,7 +345,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div>
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
-          <div class="card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>This Week</div>
+          <div class="card-title" id="week-card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>This Week</div>
           <span class="card-link" onclick="showPage('calendar',document.getElementById('nav-calendar'))">View Calendar ›</span>
         </div>
         <div class="week-row" id="week-row"></div>
@@ -636,6 +637,7 @@ var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutritio
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
+var dashWeekOffset=0;
 var volumeMode='weekly';
 var volumeMetric='dist';
 
@@ -734,6 +736,15 @@ function getWeekBounds(){
   return{mon,sun};
 }
 function inThisWeek(ds){var d=parseLocalDate(ds),b=getWeekBounds();return d>=b.mon&&d<=b.sun;}
+function getDashWeekBounds(){
+  var now=new Date(),day=now.getDay()||7;
+  var mon=new Date(now);
+  mon.setDate(now.getDate()-day+1+(dashWeekOffset*7));
+  mon.setHours(0,0,0,0);
+  var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+  return{mon,sun};
+}
+function inDashWeek(ds){var d=parseLocalDate(ds),b=getDashWeekBounds();return d>=b.mon&&d<=b.sun;}
 
 function getWeekKeyFromDate(ds){
   var d=ds?parseLocalDate(ds):new Date();
@@ -833,16 +844,17 @@ function getGoalsWeekBounds(){
 }
 
 function renderDash(){
-  var wr=DB.runs.filter(r=>inThisWeek(r.date));
+  renderDashWeekSelector();
+  var wr=DB.runs.filter(r=>inDashWeek(r.date));
   var wkm=wr.reduce((s,r)=>s+pf(r.dist),0);
   var wvert=wr.reduce((s,r)=>s+pi(r.vert),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
   var longest=DB.runs.length?Math.max(...DB.runs.map(r=>pf(r.dist))):0;
-  var wc=DB.crosses.filter(r=>inThisWeek(r.date));
+  var wc=DB.crosses.filter(r=>inDashWeek(r.date));
   var ckm=wc.reduce((s,r)=>s+pf(r.dist),0);
   var cvert=wc.reduce((s,r)=>s+pi(r.vert),0);
   var cmin=wc.reduce((s,r)=>s+pi(r.dur),0);
-  var wstr=DB.strengths.filter(r=>inThisWeek(r.date)).length;
+  var wstr=DB.strengths.filter(r=>inDashWeek(r.date)).length;
   setText('s-wkm',wkm.toFixed(1));
   setText('s-wvert',wvert+' m');
   setText('s-wtime',(wmin/60).toFixed(1));
@@ -860,14 +872,21 @@ function minsToHM(m){var h=Math.floor(m/60),mm=Math.round(m%60);return h+'h '+mm
 function minsToHHMM(m){var h=Math.floor(m/60),mm=Math.round(m%60);return h+':'+(mm<10?'0':'')+mm;}
 
 function renderWeekRow(){
-  var d=new Date(),day=d.getDay()||7;
-  var mon=new Date(d);mon.setDate(d.getDate()-day+1);
+  var b=getDashWeekBounds(),mon=b.mon;
   var days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var el=document.getElementById('week-row');el.innerHTML='';
+  var todayStr=new Date().toISOString().slice(0,10);
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var titleEl=document.getElementById('week-card-title');
+  if(titleEl){
+    var svg='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+    if(dashWeekOffset===0){titleEl.innerHTML=svg+'This Week';}
+    else{var sun=b.sun;titleEl.innerHTML=svg+months[mon.getMonth()]+' '+mon.getDate()+' – '+months[sun.getMonth()]+' '+sun.getDate();}
+  }
   for(var i=0;i<7;i++){
     var dd=new Date(mon);dd.setDate(mon.getDate()+i);
     var ds=dd.toISOString().slice(0,10);
-    var isToday=ds===new Date().toISOString().slice(0,10);
+    var isToday=ds===todayStr;
     var hasRun=DB.runs.some(r=>r.date===ds);
     var hasCross=DB.crosses.some(r=>r.date===ds)||DB.strengths.some(r=>r.date===ds)||DB.recoveries.some(r=>r.date===ds);
     var cl='day-cell'+(isToday?' today':'')+(hasRun?' has-act':hasCross?' has-act-blue':'');
@@ -1310,6 +1329,33 @@ function setGoalInputEnabled(){
 
 function changeGoalsWeek(dir){goalsWeekOffset+=dir;renderGoals();}
 function resetGoalsWeekToCurrent(){goalsWeekOffset=0;renderGoals();}
+
+function renderDashWeekSelector(){
+  var sel=document.getElementById('dash-week-select');if(!sel)return;
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var opts='';
+  for(var i=0;i>=-51;i--){
+    var now=new Date(),day=now.getDay()||7;
+    var mon=new Date(now);
+    mon.setDate(now.getDate()-day+1+(i*7));
+    mon.setHours(0,0,0,0);
+    var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    var lbl=i===0?'Current Week':months[mon.getMonth()]+' '+mon.getDate()+' – '+months[sun.getMonth()]+' '+sun.getDate();
+    opts+=`<option value="${i}"${i===dashWeekOffset?' selected':''}>${lbl}</option>`;
+  }
+  sel.innerHTML=opts;
+}
+
+function changeDashWeek(offset){
+  dashWeekOffset=offset;
+  renderDash();
+  renderWeekRow();
+}
+
+function toggleCompletionTerrainSelector(actType){
+  var grp=document.getElementById('cp-terrain-group');
+  if(grp)grp.style.display=actType==='Cross Train'?'none':'';
+}
 
 function saveGoals(){
   var b=getGoalsWeekBounds();
@@ -1958,10 +2004,13 @@ function viewPlan(id){
   var completionSection='';
   if(!p.completed){
     var showTypeSelector=(p.type==='Run'||p.type==='Long Run'||p.type==='Workout'||p.type==='Cross Train');
-    var typeSelectorHtml=showTypeSelector?`<div class="form-group" style="margin-bottom:10px"><label class="form-label">Activity Type</label><select class="form-input" id="cp-actual-type"><option value="Run"${p.type!=='Cross Train'?' selected':''}>Run</option><option value="Cross Train"${p.type==='Cross Train'?' selected':''}>Cross Train</option></select></div>`:'';
+    var typeSelectorHtml=showTypeSelector?`<div class="form-group" style="margin-bottom:10px"><label class="form-label">Activity Type</label><select class="form-input" id="cp-actual-type" onchange="toggleCompletionTerrainSelector(this.value)"><option value="Run"${p.type!=='Cross Train'?' selected':''}>Run</option><option value="Cross Train"${p.type==='Cross Train'?' selected':''}>Cross Train</option></select></div>`:'';
+    var showTerrain=(p.type!=='Cross Train'&&p.type!=='Strength'&&p.type!=='Rest');
+    var terrainSelectorHtml=`<div class="form-group" id="cp-terrain-group" style="margin-bottom:10px${showTerrain?'':';display:none'}"><label class="form-label">Terrain</label><select class="form-input" id="cp-actual-terrain"><option value="trail">Trail</option><option value="road">Road</option><option value="treadmill">Treadmill</option></select></div>`;
     completionSection=`<div class="completion-section" id="completion-section" style="display:none">
       <div style="font-size:10px;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Log Actual Stats</div>
       ${typeSelectorHtml}
+      ${terrainSelectorHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="cp-actual-dist" value="${pf(p.dist)||''}"></div>
         <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="cp-actual-dur" value="${pi(p.dur)||''}" oninput="updateCompletionNutritionCalc()"></div>
@@ -2161,7 +2210,7 @@ function upsertActivityFromPlan(p){
       ...baseObj,
       actType:'run',
       runType:(p.type==='Long Run'?'long':p.type==='Workout'?'workout':'easy'),
-      terrain:'trail',
+      terrain:p.actualTerrain||'trail',
       workoutDetails:p.desc||'',
       nutritionEntries:Array.isArray(p.completionNutritionEntries)?p.completionNutritionEntries:[]
     });
@@ -2199,6 +2248,7 @@ function saveCompletion(planId){
   p.actualDur=document.getElementById('cp-actual-dur')?.value||0;
   p.actualVert=document.getElementById('cp-actual-vert')?.value||0;
   p.actualHr=document.getElementById('cp-actual-hr')?.value||0;
+  p.actualTerrain=document.getElementById('cp-actual-terrain')?.value||'trail';
   p.completionNotes=document.getElementById('cp-completion-notes')?.value||'';
   var completionNutritionEntries=[];
   document.querySelectorAll('.cp-nutri-entry-row').forEach(function(row){
