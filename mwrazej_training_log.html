@@ -361,6 +361,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <button class="btn btn-outline btn-sm" id="vol-monthly-btn" onclick="setVolumeMode('monthly')">Monthly</button>
           </div>
         </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;margin-bottom:4px">
+          <button class="btn btn-outline btn-sm" onclick="changeVolChart(-1)">&#8249;</button>
+          <span id="vol-period-label" style="font-size:11px;color:var(--text);font-weight:600;text-align:center;flex:1;padding:0 8px"></span>
+          <button class="btn btn-outline btn-sm" id="vol-next-btn" onclick="changeVolChart(1)">&#8250;</button>
+        </div>
         <div class="bar-chart" id="vol-chart"><div class="tooltip" id="vol-tooltip"></div></div>
         <div style="display:flex;gap:4px;margin-top:6px" id="vol-labels"></div>
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
@@ -638,6 +643,7 @@ var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
 var dashWeekOffset=0;
+var volChartOffset=0;
 var volumeMode='weekly';
 var volumeMetric='dist';
 
@@ -849,7 +855,7 @@ function renderDash(){
   var wkm=wr.reduce((s,r)=>s+pf(r.dist),0);
   var wvert=wr.reduce((s,r)=>s+pi(r.vert),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
-  var longest=DB.runs.length?Math.max(...DB.runs.map(r=>pf(r.dist))):0;
+  var longest=wr.length?Math.max(...wr.map(r=>pf(r.dist))):0;
   var wc=DB.crosses.filter(r=>inDashWeek(r.date));
   var ckm=wc.reduce((s,r)=>s+pf(r.dist),0);
   var cvert=wc.reduce((s,r)=>s+pi(r.vert),0);
@@ -995,6 +1001,7 @@ function getMonthlyTotals(){
 
 function setVolumeMode(mode){
   volumeMode=mode==='monthly'?'monthly':'weekly';
+  volChartOffset=0;
   updateVolumeModeButtons();
   renderVolChart();
 }
@@ -1031,7 +1038,9 @@ function getCurrentVolumeKey(){
 }
 
 function renderVolChart(){
-  var wks=volumeMode==='monthly'?getMonthlyTotals():getWeeklyTotals();
+  var wks=getVolChartSinglePeriod();
+  var lbl=document.getElementById('vol-period-label');if(lbl)lbl.textContent=wks.length?wks[0].lbl:'';
+  var nextBtn=document.getElementById('vol-next-btn');if(nextBtn)nextBtn.disabled=volChartOffset>=0;
   var chart=document.getElementById('vol-chart');
   var labels=document.getElementById('vol-labels');
   chart.innerHTML='<div class="tooltip" id="vol-tooltip"></div>';
@@ -1089,13 +1098,11 @@ function renderVolChart(){
     gridDiv.appendChild(line);
   });
   chart.appendChild(gridDiv);
-  var curKey=getCurrentVolumeKey();
-  var currentMonthName=new Date().toLocaleDateString('en-US',{month:'long'});
   wks.forEach(w=>{
     var runVal=metricValue(w,metricCfg.run),crossVal=metricValue(w,metricCfg.cross),totalVal=metricValue(w,metricCfg.total);
     var rh=Math.max((runVal/axisMax)*chartH,runVal>0?2:0);
     var ch=Math.max((crossVal/axisMax)*chartH,crossVal>0?2:0);
-    var isCur=w.key===curKey;
+    var isCur=true;
     var bw=document.createElement('div');
     bw.className='bar-wrap';
     bw.innerHTML=`<div class=\"bar-group\">
@@ -1115,7 +1122,7 @@ function renderVolChart(){
     chart.appendChild(bw);
     var lw=document.createElement('div');
     lw.style.cssText='flex:1;text-align:center;font-size:9px;color:var(--muted)';
-    lw.textContent=isCur?(volumeMode==='monthly'?currentMonthName:'Current Week'):w.lbl;
+    lw.textContent=w.lbl;
     labels.appendChild(lw);
   });
 }
@@ -1333,13 +1340,22 @@ function resetGoalsWeekToCurrent(){goalsWeekOffset=0;renderGoals();}
 function renderDashWeekSelector(){
   var sel=document.getElementById('dash-week-select');if(!sel)return;
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now=new Date(),curYear=now.getFullYear();
+  var yearStart=new Date(curYear,0,1,0,0,0,0);
+  var actDates=(DB.runs||[]).concat(DB.crosses||[]).map(function(r){return r.date;});
+  function weekHasData(mon,sun){
+    return actDates.some(function(d){var dt=parseLocalDate(d);return dt>=mon&&dt<=sun;});
+  }
+  var now2=new Date(),day=now2.getDay()||7;
+  var curMon=new Date(now2);curMon.setDate(now2.getDate()-day+1);curMon.setHours(0,0,0,0);
+  var msPerWeek=7*24*3600*1000;
+  var weeksBack=Math.ceil((curMon-yearStart)/msPerWeek)+1;
   var opts='';
-  for(var i=0;i>=-51;i--){
-    var now=new Date(),day=now.getDay()||7;
-    var mon=new Date(now);
-    mon.setDate(now.getDate()-day+1+(i*7));
-    mon.setHours(0,0,0,0);
-    var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  for(var i=0;i>=-weeksBack;i--){
+    var mon=new Date(curMon);mon.setDate(curMon.getDate()+(i*7));mon.setHours(0,0,0,0);
+    if(mon<yearStart)break;
+    var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+    if(i!==0&&!weekHasData(mon,sun))continue;
     var lbl=i===0?'Current Week':months[mon.getMonth()]+' '+mon.getDate()+' – '+months[sun.getMonth()]+' '+sun.getDate();
     opts+=`<option value="${i}"${i===dashWeekOffset?' selected':''}>${lbl}</option>`;
   }
@@ -1355,6 +1371,58 @@ function changeDashWeek(offset){
 function toggleCompletionTerrainSelector(actType){
   var grp=document.getElementById('cp-terrain-group');
   if(grp)grp.style.display=actType==='Cross Train'?'none':'';
+}
+
+function getVolChartSinglePeriod(){
+  var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var empty={grDistMin:0,grDistMax:0,grTimeMin:0,grTimeMax:0,grVertMin:0,grVertMax:0,
+    gcDistMin:0,gcDistMax:0,gcTimeMin:0,gcTimeMax:0,gcVertMin:0,gcVertMax:0};
+  function applyGoals(obj,wg){
+    if(wg.run.enabled){
+      if(wg.run.metrics.dist){obj.grDistMin+=pf(wg.run.dist.min);obj.grDistMax+=pf(wg.run.dist.max);}
+      if(wg.run.metrics.time){obj.grTimeMin+=pf(wg.run.time.min);obj.grTimeMax+=pf(wg.run.time.max);}
+      if(wg.run.metrics.vert){obj.grVertMin+=pf(wg.run.vert.min);obj.grVertMax+=pf(wg.run.vert.max);}
+    }
+    if(wg.cross.enabled){
+      if(wg.cross.metrics.dist){obj.gcDistMin+=pf(wg.cross.dist.min);obj.gcDistMax+=pf(wg.cross.dist.max);}
+      if(wg.cross.metrics.time){obj.gcTimeMin+=pf(wg.cross.time.min);obj.gcTimeMax+=pf(wg.cross.time.max);}
+      if(wg.cross.metrics.vert){obj.gcVertMin+=pf(wg.cross.vert.min);obj.gcVertMax+=pf(wg.cross.vert.max);}
+    }
+  }
+  if(volumeMode==='weekly'){
+    var now=new Date(),day=now.getDay()||7;
+    var mon=new Date(now);
+    mon.setDate(now.getDate()-day+1+(volChartOffset*7));
+    mon.setHours(0,0,0,0);
+    var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+    var key=mon.toISOString().slice(0,10);
+    var lbl=volChartOffset===0?'Current Week':MN[mon.getMonth()]+' '+mon.getDate()+' – '+MN[sun.getMonth()]+' '+sun.getDate();
+    var w=Object.assign({key,lbl,rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0},empty);
+    DB.runs.forEach(function(r){var d=parseLocalDate(r.date);if(d>=mon&&d<=sun){w.rdist+=pf(r.dist);w.rtime+=pi(r.dur);w.rvert+=pi(r.vert);}});
+    DB.crosses.forEach(function(r){var d=parseLocalDate(r.date);if(d>=mon&&d<=sun){w.cdist+=pf(r.dist);w.ctime+=pi(r.dur);w.cvert+=pi(r.vert);}});
+    w.tdist=w.rdist+w.cdist;w.ttime=w.rtime+w.ctime;w.tvert=w.rvert+w.cvert;
+    applyGoals(w,getGoalsForWeek(key));
+    return[w];
+  }
+  var now=new Date(),yr=now.getFullYear(),mo=now.getMonth()+volChartOffset;
+  while(mo<0){mo+=12;yr--;}while(mo>11){mo-=12;yr++;}
+  var monthStart=new Date(yr,mo,1,0,0,0,0),monthEnd=new Date(yr,mo+1,0,23,59,59,999);
+  var key=new Date(yr,mo,1,12).toISOString().slice(0,10);
+  var lbl=volChartOffset===0?MN[mo]+' (Current)':MN[mo]+' '+yr;
+  var m=Object.assign({key,lbl,rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0},empty);
+  DB.runs.forEach(function(r){var d=parseLocalDate(r.date);if(d>=monthStart&&d<=monthEnd){m.rdist+=pf(r.dist);m.rtime+=pi(r.dur);m.rvert+=pi(r.vert);}});
+  DB.crosses.forEach(function(r){var d=parseLocalDate(r.date);if(d>=monthStart&&d<=monthEnd){m.cdist+=pf(r.dist);m.ctime+=pi(r.dur);m.cvert+=pi(r.vert);}});
+  m.tdist=m.rdist+m.cdist;m.ttime=m.rtime+m.ctime;m.tvert=m.rvert+m.cvert;
+  var wday=monthStart.getDay()||7,wmon=new Date(monthStart);
+  wmon.setDate(monthStart.getDate()-wday+1);wmon.setHours(0,0,0,0);
+  while(wmon<=monthEnd){applyGoals(m,getGoalsForWeek(wmon.toISOString().slice(0,10)));wmon.setDate(wmon.getDate()+7);}
+  return[m];
+}
+
+function changeVolChart(dir){
+  volChartOffset+=dir;
+  if(volChartOffset>0)volChartOffset=0;
+  renderVolChart();
 }
 
 function saveGoals(){
