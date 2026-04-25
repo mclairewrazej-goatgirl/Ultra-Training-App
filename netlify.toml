@@ -2,3 +2,6 @@
   from = "/"
   to = "/mwrazej_training_log.html"
   status = 200
+
+[functions]
+  directory = "netlify/functions"
