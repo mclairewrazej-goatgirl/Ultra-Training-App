@@ -284,8 +284,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="btn btn-outline btn-sm theme-btn" id="theme-light-btn" onclick="setTheme('light')">Light</button>
       </div>
     </div>
-    <div style="margin-top:8px;text-align:center">
-      <button onclick="openSportSelectModal()" style="background:none;border:none;font-size:10px;color:var(--muted2);cursor:pointer;font-family:inherit;letter-spacing:.3px" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">Change Primary Sport</button>
+    <div style="margin-top:8px;text-align:center;display:flex;justify-content:center;gap:12px">
+      <button onclick="openSportSelectModal()" style="background:none;border:none;font-size:10px;color:var(--muted2);cursor:pointer;font-family:inherit;letter-spacing:.3px" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">Change Sport</button>
+      <button onclick="openSkiSeasonModal()" style="background:none;border:none;font-size:10px;color:var(--muted2);cursor:pointer;font-family:inherit;letter-spacing:.3px" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">Ski Season</button>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
       <img id="user-avatar" style="display:none;width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
@@ -341,6 +342,26 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M18 4v16M6 12h12"/></svg></div>
       <div class="stat-label">Strength Sessions</div><div class="stat-val" id="s-str">0</div></div>
   </div>
+  <div id="ski-season-section" style="display:none">
+    <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between">
+      <span>Ski Season Stats</span>
+      <button onclick="openSkiSeasonModal()" title="Configure ski season" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:15px;padding:0;line-height:1;margin-left:6px" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">&#9881;</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card pk">
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M3 20l4-8 2 3 3-5 4 10"/><path d="M17 6l2 2-2 2"/></svg></div>
+        <div class="stat-label">Days on Snow</div><div class="stat-val" id="s-ski-days">0</div><div class="stat-sub">This week</div></div>
+      <div class="stat-card bl">
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 20 2 20"/></svg></div>
+        <div class="stat-label">Weekly Vert</div><div class="stat-val" id="s-ski-vert">0 m</div><div class="stat-sub">Meters skied</div></div>
+      <div class="stat-card pu">
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div class="stat-label">Hours on Snow</div><div class="stat-val" id="s-ski-hrs">0.0</div><div class="stat-sub">This week</div></div>
+      <div class="stat-card bl">
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div>
+        <div class="stat-label">Season Vert</div><div class="stat-val" id="s-ski-season-vert">0 m</div><div class="stat-sub">Total this season</div></div>
+    </div>
+  </div>
   <div class="two-col">
     <div>
       <div class="card" style="margin-bottom:14px">
@@ -369,7 +390,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="bar-chart" id="vol-chart"><div class="tooltip" id="vol-tooltip"></div></div>
         <div style="display:flex;gap:4px;margin-top:6px" id="vol-labels"></div>
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
-          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--pink);border-radius:2px"></div><span style="color:var(--muted)">Run</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--pink);border-radius:2px"></div><span style="color:var(--muted)" id="vol-legend-primary">Run</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:var(--blue);border-radius:2px"></div><span style="color:var(--muted)">Cross Train</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(0,180,216,.22);border:1px solid #00b4d8;border-radius:2px"></div><span style="color:var(--muted)">Cross Goal Range</span></div>
           <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(124,77,255,.35);border:1px solid #7c4dff;border-radius:2px"></div><span style="color:var(--muted)">Running Goal Range</span></div>
@@ -630,7 +651,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:''};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',seasonalSport:{enabled:false,startMD:'11-01',endMD:'04-30'}};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -638,7 +659,7 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:''};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',seasonalSport:{enabled:false,startMD:'11-01',endMD:'04-30'}};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
@@ -672,6 +693,18 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 
 function isCycling(){return DB.primarySport==='cycling';}
 function rideTypeLbl(t){return t==='easy'?'Easy Ride':t==='long'?'Long Ride':t||'Ride';}
+
+var SKI_SUBTYPES=['Skate Ski','Classic Ski','Backcountry Ski','Alpine Ski'];
+function isSkiSubtype(s){return SKI_SUBTYPES.some(function(k){return k.toLowerCase()===(s||'').toLowerCase();});}
+function isInSkiSeason(){
+  var ss=DB.seasonalSport;
+  if(!ss||!ss.enabled)return false;
+  var now=new Date(),m=now.getMonth()+1,d=now.getDate();
+  var cur=m*100+d;
+  var sp=ss.startMD.split('-').map(Number),ep=ss.endMD.split('-').map(Number);
+  var start=sp[0]*100+sp[1],end=ep[0]*100+ep[1];
+  return start<=end?cur>=start&&cur<=end:cur>=start||cur<=end;
+}
 
 function openSportSelectModal(){
   var hasSport=!!DB.primarySport;
@@ -720,6 +753,77 @@ function updateSportUI(){
   if(tl)tl.textContent=cycling?'Saddle Time':'Time on Feet';
   var ll=document.getElementById('dash-stat-longest-label');
   if(ll)ll.textContent=cycling?'Longest Ride':'Longest Run';
+  var volLbl=document.getElementById('vol-legend-primary');
+  if(volLbl)volLbl.textContent=cycling?'Ride':'Run';
+}
+
+function renderSkiStats(){
+  var skiSection=document.getElementById('ski-season-section');
+  if(!skiSection)return;
+  var inSeason=isInSkiSeason();
+  skiSection.style.display=inSeason?'':'none';
+  if(!inSeason)return;
+  var skiWeek=DB.crosses.filter(function(r){return inDashWeek(r.date)&&isSkiSubtype(r.subtype);});
+  setText('s-ski-days',skiWeek.length+'');
+  setText('s-ski-vert',skiWeek.reduce(function(s,r){return s+pi(r.vert);},0)+' m');
+  setText('s-ski-hrs',(skiWeek.reduce(function(s,r){return s+pi(r.dur);},0)/60).toFixed(1));
+  var ss=DB.seasonalSport;
+  var sp=ss.startMD.split('-').map(Number),ep=ss.endMD.split('-').map(Number);
+  var now=new Date(),curM=now.getMonth()+1;
+  var startY=now.getFullYear();
+  if(sp[0]>6&&curM<=6)startY--;
+  var endY=sp[0]>ep[0]?startY+1:startY;
+  var seasonStart=new Date(startY,sp[0]-1,sp[1],0,0,0,0);
+  var seasonEnd=new Date(endY,ep[0]-1,ep[1],23,59,59,999);
+  var seasonVert=DB.crosses.filter(function(r){
+    if(!isSkiSubtype(r.subtype))return false;
+    var d=parseLocalDate(r.date);return d>=seasonStart&&d<=seasonEnd;
+  }).reduce(function(s,r){return s+pi(r.vert);},0);
+  setText('s-ski-season-vert',seasonVert.toLocaleString()+' m');
+}
+
+function openSkiSeasonModal(){
+  var ss=DB.seasonalSport||{enabled:false,startMD:'11-01',endMD:'04-30'};
+  var html=`<div class="modal" style="max-width:420px">
+  <div class="modal-title">Ski Season Settings<button class="modal-close" onclick="closeAllModals()">×</button></div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:16px">When ski season is active, your dashboard shows a dedicated ski stats section. Skiing activities are pulled from Cross Training entries logged as Skate Ski, Classic Ski, Backcountry Ski, or Alpine Ski.</div>
+  <div class="form-group" style="margin-bottom:14px">
+    <label class="form-label">Ski Season Tracking</label>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button id="ski-en-yes" class="btn btn-sm ${ss.enabled?'btn-pink':'btn-outline'}" onclick="document.getElementById('ski-en-yes').className='btn btn-sm btn-pink';document.getElementById('ski-en-no').className='btn btn-sm btn-outline'">Enabled</button>
+      <button id="ski-en-no" class="btn btn-sm ${!ss.enabled?'btn-pink':'btn-outline'}" onclick="document.getElementById('ski-en-no').className='btn btn-sm btn-pink';document.getElementById('ski-en-yes').className='btn btn-sm btn-outline'">Disabled</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="form-group">
+      <label class="form-label">Season Start (MM-DD)</label>
+      <input id="ski-start" class="form-input" type="text" placeholder="11-01" value="${ss.startMD||'11-01'}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Season End (MM-DD)</label>
+      <input id="ski-end" class="form-input" type="text" placeholder="04-30" value="${ss.endMD||'04-30'}">
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:6px">Default Nov 1 – Apr 30 covers a typical ski season. Use MM-DD format.</div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
+    <button class="btn btn-pink" onclick="saveSkiSeasonConfig()">Save</button>
+  </div>
+</div>`;
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML=html;
+  wrap.addEventListener('click',function(e){if(e.target===wrap)wrap.remove();});
+  document.getElementById('modal-container').appendChild(wrap);
+}
+
+function saveSkiSeasonConfig(){
+  var enabled=document.getElementById('ski-en-yes')?.classList.contains('btn-pink');
+  var startMD=(document.getElementById('ski-start')?.value||'').trim()||'11-01';
+  var endMD=(document.getElementById('ski-end')?.value||'').trim()||'04-30';
+  if(!/^\d{2}-\d{2}$/.test(startMD)||!/^\d{2}-\d{2}$/.test(endMD)){alert('Please use MM-DD format (e.g. 11-01).');return;}
+  DB.seasonalSport={enabled,startMD,endMD};
+  save();closeAllModals();renderDash();
 }
 
 function onRaceTypeChange(){
@@ -851,12 +955,15 @@ function getGoalsWeekBounds(){
 
 function renderDash(){
   renderDashWeekSelector();
-  var wr=DB.runs.filter(r=>inDashWeek(r.date));
+  var cycling=isCycling();
+  var skiActive=isInSkiSeason();
+  var allWeekRuns=DB.runs.filter(r=>inDashWeek(r.date));
+  var wr=cycling?allWeekRuns.filter(r=>r.bikeType):allWeekRuns.filter(r=>!r.bikeType);
   var wkm=wr.reduce((s,r)=>s+pf(r.dist),0);
   var wvert=wr.reduce((s,r)=>s+pi(r.vert),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
   var longest=wr.length?Math.max(...wr.map(r=>pf(r.dist))):0;
-  var wc=DB.crosses.filter(r=>inDashWeek(r.date));
+  var wc=DB.crosses.filter(r=>inDashWeek(r.date)&&(!r.sport||r.sport===DB.primarySport)&&(!skiActive||!isSkiSubtype(r.subtype)));
   var ckm=wc.reduce((s,r)=>s+pf(r.dist),0);
   var cvert=wc.reduce((s,r)=>s+pi(r.vert),0);
   var cmin=wc.reduce((s,r)=>s+pi(r.dur),0);
@@ -872,6 +979,7 @@ function renderDash(){
   var weeks=getWeeklyTotals();
   var avg=weeks.length?weeks.reduce((s,w)=>s+w.rkm,0)/weeks.length:0;
   setText('s-wavg','Avg '+avg.toFixed(1)+' km/wk');
+  renderSkiStats();
 }
 
 function minsToHM(m){var h=Math.floor(m/60),mm=Math.round(m%60);return h+'h '+mm+'m';}
@@ -902,6 +1010,7 @@ function renderWeekRow(){
 
 function getWeeklyTotals(){
   var byWeek={};
+  var cycling=isCycling();
   [...DB.runs,...DB.crosses].forEach(r=>{
     var d=parseLocalDate(r.date),day=d.getDay()||7;
     var mon=new Date(d);mon.setDate(d.getDate()-day+1);
@@ -913,8 +1022,10 @@ function getWeeklyTotals(){
       gcDistMin:0,gcDistMax:0,gcTimeMin:0,gcTimeMax:0,gcVertMin:0,gcVertMax:0
     };
     if(r.actType==='run'){
-      byWeek[key].rdist+=pf(r.dist);byWeek[key].rtime+=pi(r.dur);byWeek[key].rvert+=pi(r.vert);
-    }else{
+      var isPrimary=cycling?!!r.bikeType:!r.bikeType;
+      if(isPrimary){byWeek[key].rdist+=pf(r.dist);byWeek[key].rtime+=pi(r.dur);byWeek[key].rvert+=pi(r.vert);}
+      else{byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);}
+    }else if(!r.sport||r.sport===DB.primarySport){
       byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);
     }
   });
@@ -949,6 +1060,7 @@ function getWeeklyTotals(){
 
 function getMonthlyTotals(){
   var byMonth={};
+  var cycling=isCycling();
   [...DB.runs,...DB.crosses].forEach(r=>{
     var d=parseLocalDate(r.date);
     var monthStart=new Date(d.getFullYear(),d.getMonth(),1,12,0,0,0);
@@ -959,8 +1071,13 @@ function getMonthlyTotals(){
       grDistMin:0,grDistMax:0,grTimeMin:0,grTimeMax:0,grVertMin:0,grVertMax:0,
       gcDistMin:0,gcDistMax:0,gcTimeMin:0,gcTimeMax:0,gcVertMin:0,gcVertMax:0
     };
-    if(r.actType==='run'){byMonth[key].rdist+=pf(r.dist);byMonth[key].rtime+=pi(r.dur);byMonth[key].rvert+=pi(r.vert);}
-    else{byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);}
+    if(r.actType==='run'){
+      var isPrimary=cycling?!!r.bikeType:!r.bikeType;
+      if(isPrimary){byMonth[key].rdist+=pf(r.dist);byMonth[key].rtime+=pi(r.dur);byMonth[key].rvert+=pi(r.vert);}
+      else{byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);}
+    }else if(!r.sport||r.sport===DB.primarySport){
+      byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);
+    }
   });
   var months=Object.values(byMonth).sort((a,b)=>a.key.localeCompare(b.key));
   var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1887,6 +2004,7 @@ function saveCross(){
   var date=document.getElementById('f-date')?.value;
   if(!date){alert('Please enter a date.');return;}
   var obj={id:editingId||uid(),date,actType:'cross',
+    sport:DB.primarySport,
     subtype:document.getElementById('f-subtype')?.value||'Cross Train',
     dist:document.getElementById('f-dist')?.value||0,
     dur:document.getElementById('f-dur')?.value||0,
