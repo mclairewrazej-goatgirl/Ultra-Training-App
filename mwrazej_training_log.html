@@ -362,9 +362,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="stat-card pk">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17L9 4"/><path d="M9 4h6l2 5"/><path d="M11 9l-2 8"/><line x1="9" y1="4" x2="15" y2="4"/></svg></div>
       <div class="stat-label">Total Hours</div><div class="stat-val" id="s-ctime">0.0</div></div>
-    <div class="stat-card bl">
+    <div class="stat-card bl" id="s-ckm-card">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-      <div class="stat-label">Total Distance</div><div class="stat-val" id="s-ckm">0.0</div></div>
+      <div class="stat-label">Total Distance</div><div class="stat-val" id="s-ckm">0.0</div><div class="stat-sub">km</div></div>
     <div class="stat-card pu">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 20 2 20"/></svg></div>
       <div class="stat-label">Total Vert</div><div class="stat-val" id="s-cvert">0 m</div></div>
@@ -440,7 +440,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="page-header">
     <div><div class="page-title">Training Log</div><div class="page-sub">Every effort counts.</div></div>
     <div class="header-btns">
-      <button class="btn btn-pink" onclick="openModal('run')">+ Log Run</button>
+      <button class="btn btn-pink" id="btn-log-page-run" onclick="openModal('run')">+ Log Run</button>
       <button class="btn btn-blue" onclick="openModal('cross')">Cross Train</button>
       <button class="btn btn-outline" onclick="openModal('other')">Strength / Recovery</button>
       <button class="btn btn-outline" onclick="openModal('plan')">Plan Workout</button>
@@ -448,7 +448,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
   <div class="filter-tabs" id="log-filters">
     <div class="ftab active" onclick="filterLog('all',this)">All</div>
-    <div class="ftab" onclick="filterLog('run',this)">Runs</div>
+    <div class="ftab" id="log-filter-run-tab" onclick="filterLog('run',this)">Runs</div>
     <div class="ftab" onclick="filterLog('cross',this)">Cross Train</div>
     <div class="ftab" onclick="filterLog('strength',this)">Strength</div>
     <div class="ftab" onclick="filterLog('recovery',this)">Recovery</div>
@@ -803,6 +803,10 @@ function updateSportUI(){
   if(volLbl)volLbl.textContent=cycling?'Ride':'Run';
   var skiRes=document.getElementById('ski-resources-section');
   if(skiRes)skiRes.style.display=(DB.seasonalSport&&DB.seasonalSport.enabled)?'block':'none';
+  var runTab=document.getElementById('log-filter-run-tab');
+  if(runTab)runTab.textContent=cycling?'Rides':'Runs';
+  var logPageBtn=document.getElementById('btn-log-page-run');
+  if(logPageBtn)logPageBtn.textContent=cycling?'+ Log Ride':'+ Log Run';
 }
 
 function renderSkiStats(){
@@ -1331,10 +1335,23 @@ function renderRecentActs(){
 function renderLog(filter){
   logFilter=filter;
   var all=[];
-  if(filter==='all'||filter==='run') all.push(...DB.runs.map(r=>({...r,_type:'run'})));
-  if(filter==='all'||filter==='cross') all.push(...DB.crosses.map(r=>({...r,_type:'cross'})));
-  if(filter==='all'||filter==='strength') all.push(...DB.strengths.map(r=>({...r,_type:'strength'})));
-  if(filter==='all'||filter==='recovery') all.push(...DB.recoveries.map(r=>({...r,_type:'recovery'})));
+  var cycling=isCycling();
+  if(filter==='all'){
+    all.push(...DB.runs.map(r=>({...r,_type:'run'})));
+    all.push(...DB.crosses.map(r=>({...r,_type:'cross'})));
+    all.push(...DB.strengths.map(r=>({...r,_type:'strength'})));
+    all.push(...DB.recoveries.map(r=>({...r,_type:'recovery'})));
+  }else if(filter==='run'){
+    if(cycling){all.push(...DB.runs.filter(r=>!!r.bikeType).map(r=>({...r,_type:'run'})));}
+    else{all.push(...DB.runs.map(r=>({...r,_type:'run'})));}
+  }else if(filter==='cross'){
+    if(cycling)all.push(...DB.runs.filter(r=>!r.bikeType).map(r=>({...r,_type:'run'})));
+    all.push(...DB.crosses.map(r=>({...r,_type:'cross'})));
+  }else if(filter==='strength'){
+    all.push(...DB.strengths.map(r=>({...r,_type:'strength'})));
+  }else if(filter==='recovery'){
+    all.push(...DB.recoveries.map(r=>({...r,_type:'recovery'})));
+  }
   all.sort((a,b)=>b.date.localeCompare(a.date));
   var el=document.getElementById('log-list');
   if(!all.length){el.innerHTML='<div class="empty-state">No activities. Log one with the buttons above!</div>';return;}
@@ -2800,7 +2817,7 @@ async function stravaSync(){
     if(!token)return;
     var afterTs=Math.floor(Date.now()/1000)-60*24*3600;
     var resp=await fetch(
-      'https://www.strava.com/api/v3/athlete/activities?after='+afterTs+'&per_page=50',
+      'https://www.strava.com/api/v3/athlete/activities?after='+afterTs+'&per_page=100',
       {headers:{'Authorization':'Bearer '+token}}
     );
     if(!resp.ok){
@@ -2810,7 +2827,14 @@ async function stravaSync(){
     var activities=await resp.json();
     if(!Array.isArray(DB.stravaProcessedIds))DB.stravaProcessedIds=[];
     var processed=DB.stravaProcessedIds;
-    var newActs=activities.filter(function(a){return!processed.includes(String(a.id));});
+    var newActs=activities.filter(function(a){
+      var strId=String(a.id);
+      if(!processed.includes(strId))return true;
+      // Re-process if it was marked processed but never actually saved to DB
+      return !DB.runs.some(function(r){return r.stravaId===strId;})&&
+             !DB.crosses.some(function(r){return r.stravaId===strId;})&&
+             !DB.strengths.some(function(r){return r.stravaId===strId;});
+    });
     if(newActs.length===0){showStravaToast('No new Strava activities to sync.');return;}
     stravaMatchQueue=[];
     stravaNomatchQueue=[];
@@ -2928,6 +2952,10 @@ function stravaAddAndSkip(stravaActId){
 }
 
 function stravaAddAsActivity(act){
+  var existingStrId=String(act.id);
+  if(DB.runs.some(function(r){return r.stravaId===existingStrId;})||
+     DB.crosses.some(function(r){return r.stravaId===existingStrId;})||
+     DB.strengths.some(function(r){return r.stravaId===existingStrId;}))return;
   var date=(act.start_date_local||'').slice(0,10);
   var sType=act.type||act.sport_type||'Run';
   var distKm=parseFloat(((act.distance||0)/1000).toFixed(2));
