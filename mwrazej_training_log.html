@@ -274,6 +274,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="nav-item" id="nav-nutrition" onclick="showPage('nutrition',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>Nutrition
   </div>
+  <div id="ski-resources-section" style="display:none">
+    <div class="nav-section">Ski Resources</div>
+    <a href="https://avalanche.ca" target="_blank" rel="noopener" class="nav-item" style="text-decoration:none;display:flex;align-items:center;gap:10px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Avalanche Canada
+    </a>
+    <a href="https://www.spotwx.com" target="_blank" rel="noopener" class="nav-item" style="text-decoration:none;display:flex;align-items:center;gap:10px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>SpotWx Weather
+    </a>
+  </div>
   <div class="sidebar-footer">
     <button class="btn btn-pink" id="btn-log-primary" style="width:100%;justify-content:center;margin-bottom:6px" onclick="openModal('run')"><span id="btn-log-primary-text">+ Log Run</span></button>
     <div style="display:flex;gap:6px">
@@ -792,6 +801,8 @@ function updateSportUI(){
   if(ll)ll.textContent=cycling?'Longest Ride':'Longest Run';
   var volLbl=document.getElementById('vol-legend-primary');
   if(volLbl)volLbl.textContent=cycling?'Ride':'Run';
+  var skiRes=document.getElementById('ski-resources-section');
+  if(skiRes)skiRes.style.display=(DB.seasonalSport&&DB.seasonalSport.enabled)?'block':'none';
 }
 
 function renderSkiStats(){
@@ -860,13 +871,15 @@ function saveSkiSeasonConfig(){
   var endMD=(document.getElementById('ski-end')?.value||'').trim()||'04-30';
   if(!/^\d{2}-\d{2}$/.test(startMD)||!/^\d{2}-\d{2}$/.test(endMD)){alert('Please use MM-DD format (e.g. 11-01).');return;}
   DB.seasonalSport={enabled,startMD,endMD};
-  save();closeAllModals();renderDash();
+  save();closeAllModals();renderDash();updateSportUI();
 }
 
 function onRaceTypeChange(){
   var type=document.getElementById('f-race-type')?.value;
   var bg=document.getElementById('race-bike-type-group');
+  var sg=document.getElementById('race-skimo-category-group');
   if(bg)bg.style.display=type==='bike'?'block':'none';
+  if(sg)sg.style.display=type==='skimo'?'block':'none';
 }
 
 function parseLocalDate(ds){
@@ -1000,7 +1013,9 @@ function renderDash(){
   var wvert=wr.reduce((s,r)=>s+pi(r.vert),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
   var longest=wr.length?Math.max(...wr.map(r=>pf(r.dist))):0;
-  var wc=DB.crosses.filter(r=>inDashWeek(r.date)&&(!r.sport||r.sport===DB.primarySport)&&(!skiActive||!isSkiSubtype(r.subtype)));
+  var wcRuns=cycling?allWeekRuns.filter(r=>!r.bikeType):[];
+  var wcCrosses=DB.crosses.filter(r=>inDashWeek(r.date)&&(cycling||(!r.sport||r.sport===DB.primarySport))&&(!skiActive||!isSkiSubtype(r.subtype)));
+  var wc=[...wcRuns,...wcCrosses];
   var ckm=wc.reduce((s,r)=>s+pf(r.dist),0);
   var cvert=wc.reduce((s,r)=>s+pi(r.vert),0);
   var cmin=wc.reduce((s,r)=>s+pi(r.dur),0);
@@ -1062,7 +1077,7 @@ function getWeeklyTotals(){
       var isPrimary=cycling?!!r.bikeType:!r.bikeType;
       if(isPrimary){byWeek[key].rdist+=pf(r.dist);byWeek[key].rtime+=pi(r.dur);byWeek[key].rvert+=pi(r.vert);}
       else{byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);}
-    }else if(!r.sport||r.sport===DB.primarySport){
+    }else if(cycling||!r.sport||r.sport===DB.primarySport){
       byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);
     }
   });
@@ -1112,7 +1127,7 @@ function getMonthlyTotals(){
       var isPrimary=cycling?!!r.bikeType:!r.bikeType;
       if(isPrimary){byMonth[key].rdist+=pf(r.dist);byMonth[key].rtime+=pi(r.dur);byMonth[key].rvert+=pi(r.vert);}
       else{byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);}
-    }else if(!r.sport||r.sport===DB.primarySport){
+    }else if(cycling||!r.sport||r.sport===DB.primarySport){
       byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);
     }
   });
@@ -1625,7 +1640,7 @@ function renderRaces(){
     return`<div class="log-entry">
       <div style="display:flex;align-items:flex-start;justify-content:space-between">
         <div>
-          <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">${r.name}${r.raceType==='bike'?` <span class="badge badge-cross">${r.bikeType||'Bike'}</span>`:''}</div>
+          <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">${r.name}${r.raceType==='bike'?` <span class="badge badge-cross">${r.bikeType||'Bike'}</span>`:''}${r.raceType==='skimo'?` <span class="badge badge-cross" style="background:rgba(100,180,255,.15);color:#64b4ff">Skimo${r.skimoCategory?' · '+r.skimoCategory.charAt(0).toUpperCase()+r.skimoCategory.slice(1):''}</span>`:''}</div>
           <div style="font-size:11px;color:var(--muted)">${r.loc||''}${r.dist?' · '+r.dist+'km':''}${pi(r.vert)>0?' · '+pi(r.vert)+'m':''}</div>
           ${r.goal?`<div style="font-size:11px;color:var(--blue);margin-top:3px">Goal: ${r.goal}</div>`:''}
           ${r.result?`<div style="font-size:12px;color:var(--green);margin-top:4px;font-weight:600">Result: ${r.result}</div>`:''}
@@ -1889,8 +1904,9 @@ function buildRaceModal(){
   <div class="modal-title">Add Race <button class="modal-close" onclick="closeAllModals()">×</button></div>
   <div class="form-group"><label class="form-label">Race Name</label><input class="form-input" id="f-race-name" placeholder="e.g. UTMB, Gravel Worlds"></div>
   <div class="form-row">
-    <div class="form-group"><label class="form-label">Race Type</label><select class="form-input" id="f-race-type" onchange="onRaceTypeChange()"><option value="run" ${!cycling?'selected':''}>Running</option><option value="bike" ${cycling?'selected':''}>Cycling</option></select></div>
+    <div class="form-group"><label class="form-label">Race Type</label><select class="form-input" id="f-race-type" onchange="onRaceTypeChange()"><option value="run" ${!cycling?'selected':''}>Running</option><option value="bike" ${cycling?'selected':''}>Cycling</option><option value="skimo">Skimo</option></select></div>
     <div class="form-group" id="race-bike-type-group" style="display:${bikeDisplay}"><label class="form-label">Bike Type</label><select class="form-input" id="f-race-bike-type"><option>Gravel</option><option>Road</option><option>Mountain</option><option>Fat Bike</option></select></div>
+    <div class="form-group" id="race-skimo-category-group" style="display:none"><label class="form-label">Skimo Category</label><select class="form-input" id="f-skimo-category"><option value="individual">Individual</option><option value="vertical">Vertical</option><option value="team">Team</option></select></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date"></div>
@@ -1994,6 +2010,8 @@ function fillForm(data,type){
     if(raceTypeEl&&data.raceType){raceTypeEl.value=data.raceType;onRaceTypeChange();}
     var raceBikeEl=document.getElementById('f-race-bike-type');
     if(raceBikeEl&&data.bikeType)raceBikeEl.value=data.bikeType;
+    var skimoCatEl=document.getElementById('f-skimo-category');
+    if(skimoCatEl&&data.skimoCategory)skimoCatEl.value=data.skimoCategory;
   }
 }
 
@@ -2084,6 +2102,7 @@ function saveRace(){
   var obj={id:editingId||uid(),name,date,
     raceType:document.getElementById('f-race-type')?.value||'run',
     bikeType:document.getElementById('f-race-bike-type')?.value||'',
+    skimoCategory:document.getElementById('f-skimo-category')?.value||'',
     dist:document.getElementById('f-dist')?.value||0,
     loc:document.getElementById('f-loc')?.value||'',
     goal:document.getElementById('f-goal')?.value||'',
