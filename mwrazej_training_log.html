@@ -222,6 +222,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .celebrate-piece{position:absolute;top:-24px;font-size:18px;animation:fall 1.2s ease-in forwards}
 @keyframes fall{to{transform:translateY(110vh) rotate(360deg);opacity:0}}
 @keyframes toastIn{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+.strava-btn{background:#FC4C02;color:#fff}
+.strava-btn:hover{background:#d94102}
+.strava-toast{border-left:3px solid #FC4C02}
 </style>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -286,6 +289,24 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
     <div style="margin-top:8px;text-align:center">
       <button onclick="openSportSelectModal()" style="background:none;border:none;font-size:10px;color:var(--muted2);cursor:pointer;font-family:inherit;letter-spacing:.3px" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--muted2)'">Change Primary Sport</button>
+    </div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)" id="strava-sidebar">
+      <div id="strava-connect-area">
+        <button class="btn btn-sm strava-btn" style="width:100%;justify-content:center" onclick="stravaConnect()">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+          Connect Strava
+        </button>
+      </div>
+      <div id="strava-connected-area" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:10px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:5px">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+            Strava Connected
+          </div>
+          <button onclick="stravaDisconnect()" style="background:transparent;border:none;font-size:10px;color:var(--muted2);cursor:pointer;font-family:inherit" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted2)'">Disconnect</button>
+        </div>
+        <button class="btn btn-outline btn-sm" style="width:100%;justify-content:center" onclick="stravaSync()" id="strava-sync-btn">&#8635; Sync Activities</button>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
       <img id="user-avatar" style="display:none;width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
@@ -563,6 +584,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <div id="modal-container"></div>
 
 <script>
+// ─── STRAVA CONFIG ──────────────────────────────────────────────────────────
+// To enable Strava sync:
+// 1. Go to https://www.strava.com/settings/api and create an API application
+// 2. Set "Authorization Callback Domain" to your Netlify domain (e.g. mwrazej-training.netlify.app)
+// 3. Replace 'YOUR_STRAVA_CLIENT_ID' below with your numeric Client ID
+// 4. In Netlify → Site settings → Environment variables, add:
+//      STRAVA_CLIENT_ID     = your Client ID
+//      STRAVA_CLIENT_SECRET = your Client Secret
+var STRAVA_CLIENT_ID = 'YOUR_STRAVA_CLIENT_ID';
+// ────────────────────────────────────────────────────────────────────────────
+
 // ─── FIREBASE CONFIG ────────────────────────────────────────────────────────
 // Paste your Firebase project config here (from Firebase Console → Project settings)
 var FIREBASE_CONFIG = {
@@ -596,6 +628,7 @@ function load(){
     if(!DB.primarySport) openSportSelectModal();
     else if(!DB.logName) openNameModal();
     navigateToHash();
+    handleStravaCallback();
   }).catch(function(err){
     console.error('Load error:',err);
     document.getElementById('loading-overlay').style.display='none';
@@ -630,7 +663,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:''};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',stravaTokens:null,stravaProcessedIds:[]};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -638,7 +671,7 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:''};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',stravaTokens:null,stravaProcessedIds:[]};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
@@ -666,7 +699,7 @@ function importData(e){
   e.target.value='';
 }
 
-function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();}
+function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();renderStravaStatus();}
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -2520,6 +2553,290 @@ function updateCompletionNutritionCalc(){
   var el=document.getElementById(id);
   if(el)el.addEventListener('change',setGoalInputEnabled);
 });
+
+// ─── STRAVA INTEGRATION ─────────────────────────────────────────────────────
+
+var stravaMatchQueue=[];
+var stravaNomatchQueue=[];
+
+function renderStravaStatus(){
+  var connected=DB.stravaTokens&&DB.stravaTokens.accessToken;
+  var ca=document.getElementById('strava-connect-area');
+  var da=document.getElementById('strava-connected-area');
+  if(!ca||!da)return;
+  if(connected){ca.style.display='none';da.style.display='block';}
+  else{ca.style.display='block';da.style.display='none';}
+}
+
+function stravaConnect(){
+  if(!STRAVA_CLIENT_ID||STRAVA_CLIENT_ID==='YOUR_STRAVA_CLIENT_ID'){
+    alert('Strava is not yet configured. Please follow the setup instructions in the source code (search for STRAVA_CLIENT_ID).');
+    return;
+  }
+  var redirectUri=encodeURIComponent(window.location.href.split('?')[0].split('#')[0]);
+  window.location.href='https://www.strava.com/oauth/authorize'+
+    '?client_id='+encodeURIComponent(STRAVA_CLIENT_ID)+
+    '&response_type=code'+
+    '&redirect_uri='+redirectUri+
+    '&approval_prompt=force'+
+    '&scope=activity:read_all';
+}
+
+function stravaDisconnect(){
+  if(!confirm('Disconnect Strava? Your already-synced activities will stay in your log.'))return;
+  DB.stravaTokens=null;
+  save();
+  renderStravaStatus();
+}
+
+async function handleStravaCallback(){
+  var params=new URLSearchParams(window.location.search);
+  var code=params.get('code');
+  var scope=params.get('scope');
+  var error=params.get('error');
+  if(!code)return;
+  window.history.replaceState({},'',window.location.pathname+window.location.hash);
+  if(error||!scope||!scope.includes('activity:read')){
+    alert('Strava authorization was denied or missing activity permissions. Please try again.');
+    return;
+  }
+  try{
+    var resp=await fetch('/.netlify/functions/strava-exchange-token',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:code})
+    });
+    var data=await resp.json();
+    if(!resp.ok||data.error)throw new Error(data.error||'Token exchange failed (status '+resp.status+')');
+    DB.stravaTokens={
+      accessToken:data.access_token,
+      refreshToken:data.refresh_token,
+      expiresAt:data.expires_at,
+      athleteId:data.athlete_id,
+      athleteName:data.athlete_name||''
+    };
+    if(!Array.isArray(DB.stravaProcessedIds))DB.stravaProcessedIds=[];
+    save();
+    renderStravaStatus();
+    showStravaToast('Strava connected! Hit "Sync Activities" to import your workouts.');
+  }catch(e){
+    alert('Strava connection failed: '+e.message+'\n\nMake sure STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are set in Netlify environment variables.');
+  }
+}
+
+async function stravaGetValidToken(){
+  if(!DB.stravaTokens||!DB.stravaTokens.accessToken)return null;
+  var now=Math.floor(Date.now()/1000);
+  if(DB.stravaTokens.expiresAt-now<300){
+    try{
+      var resp=await fetch('/.netlify/functions/strava-refresh-token',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({refresh_token:DB.stravaTokens.refreshToken})
+      });
+      var data=await resp.json();
+      if(!resp.ok||data.error)throw new Error(data.error||'Refresh failed');
+      DB.stravaTokens.accessToken=data.access_token;
+      DB.stravaTokens.refreshToken=data.refresh_token;
+      DB.stravaTokens.expiresAt=data.expires_at;
+      save();
+    }catch(e){
+      DB.stravaTokens=null;
+      save();
+      renderStravaStatus();
+      alert('Strava session expired — please reconnect.');
+      return null;
+    }
+  }
+  return DB.stravaTokens.accessToken;
+}
+
+async function stravaSync(){
+  var btn=document.getElementById('strava-sync-btn');
+  if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+  try{
+    var token=await stravaGetValidToken();
+    if(!token)return;
+    var afterTs=Math.floor(Date.now()/1000)-60*24*3600;
+    var resp=await fetch(
+      'https://www.strava.com/api/v3/athlete/activities?after='+afterTs+'&per_page=50',
+      {headers:{'Authorization':'Bearer '+token}}
+    );
+    if(!resp.ok){
+      if(resp.status===401){DB.stravaTokens=null;save();renderStravaStatus();alert('Strava token invalid — please reconnect.');return;}
+      throw new Error('Strava API error '+resp.status);
+    }
+    var activities=await resp.json();
+    if(!Array.isArray(DB.stravaProcessedIds))DB.stravaProcessedIds=[];
+    var processed=DB.stravaProcessedIds;
+    var newActs=activities.filter(function(a){return!processed.includes(String(a.id));});
+    if(newActs.length===0){showStravaToast('No new Strava activities to sync.');return;}
+    stravaMatchQueue=[];
+    stravaNomatchQueue=[];
+    newActs.forEach(function(act){
+      var date=(act.start_date_local||'').slice(0,10);
+      var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed;});
+      if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
+      else stravaNomatchQueue.push(act);
+    });
+    processNextStravaItem();
+  }catch(e){
+    alert('Sync failed: '+e.message);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='&#8635; Sync Activities';}
+  }
+}
+
+function processNextStravaItem(){
+  if(stravaMatchQueue.length>0){
+    setTimeout(function(){showStravaMatchModal(stravaMatchQueue[0]);},150);
+    return;
+  }
+  if(stravaNomatchQueue.length>0){
+    var count=stravaNomatchQueue.length;
+    stravaNomatchQueue.forEach(function(act){
+      stravaAddAsActivity(act);
+      markStravaProcessed(String(act.id));
+    });
+    stravaNomatchQueue=[];
+    save();
+    renderAll();
+    showStravaToast(count+' Strava activit'+(count===1?'y':'ies')+' added to your training log.');
+  }
+}
+
+function showStravaMatchModal(item){
+  var act=item.stravaAct;
+  var plans=item.plans;
+  var date=(act.start_date_local||'').slice(0,10);
+  var distKm=parseFloat(((act.distance||0)/1000).toFixed(2));
+  var durMin=Math.round((act.moving_time||0)/60);
+  var vert=Math.round(act.total_elevation_gain||0);
+  var hr=act.average_heartrate?Math.round(act.average_heartrate):0;
+  var actId=String(act.id);
+  var statsHtml='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
+  if(distKm>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+distKm+' km</div><div class="detail-lbl">Distance</div></div>';
+  if(durMin>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+minsToHM(durMin)+'</div><div class="detail-lbl">Duration</div></div>';
+  if(vert>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+vert+' m</div><div class="detail-lbl">Elevation</div></div>';
+  if(hr>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+hr+' bpm</div><div class="detail-lbl">Avg HR</div></div>';
+  statsHtml+='</div>';
+  var planBtns=plans.map(function(p){
+    var label=p.type+(p.desc?' — '+p.desc.slice(0,30):'');
+    return '<button class="btn btn-pink btn-sm" style="width:100%;justify-content:center;margin-bottom:6px;text-align:left" onclick="stravaApplyToPlan(\''+p.id+'\',\''+actId+'\')">&#10003; Complete: '+escHtml(label)+'</button>';
+  }).join('');
+  var html='<div class="view-modal" style="max-width:480px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>'+
+        '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#FC4C02">Strava Activity Synced</span>'+
+      '</div>'+
+      '<button class="modal-close" onclick="stravaAddAndSkip(\''+actId+'\')" style="font-size:22px">&times;</button>'+
+    '</div>'+
+    '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">'+escHtml(act.name||'Activity')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+date+' &middot; '+escHtml(act.type||act.sport_type||'')+'</div>'+
+    statsHtml+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">You have '+(plans.length===1?'a planned workout':plans.length+' planned workouts')+' on this day. Does this activity complete one of them?</div>'+
+    planBtns+
+    '<button class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:4px" onclick="stravaAddAndSkip(\''+actId+'\')">+ Add to log only &mdash; don\'t mark any plan complete</button>'+
+  '</div>';
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML=html;
+  wrap.addEventListener('click',function(e){if(e.target===wrap)stravaAddAndSkip(actId);});
+  document.getElementById('modal-container').appendChild(wrap);
+}
+
+function stravaApplyToPlan(planId,stravaActId){
+  var qItem=stravaMatchQueue.find(function(i){return String(i.stravaAct.id)===stravaActId;});
+  var p=DB.plans.find(function(pl){return pl.id===planId;});
+  if(qItem&&p){
+    var act=qItem.stravaAct;
+    p.completed=true;
+    p.actualDist=parseFloat(((act.distance||0)/1000).toFixed(2));
+    p.actualDur=Math.round((act.moving_time||0)/60);
+    p.actualVert=Math.round(act.total_elevation_gain||0);
+    p.actualHr=act.average_heartrate?Math.round(act.average_heartrate):0;
+    p.completionNotes=act.name?'Strava: '+act.name:'';
+    p.actualActivityType=p.actualActivityType||p.type;
+    var sType=act.type||act.sport_type||'';
+    if(sType==='TrailRun')p.actualTerrain='trail';
+    else if(sType==='VirtualRun')p.actualTerrain='treadmill';
+    else if(!p.actualTerrain)p.actualTerrain='road';
+    p.stravaActivityId=stravaActId;
+    upsertActivityFromPlan(p);
+    celebrate('Strava workout logged! ⚡');
+    maybeCelebrateWeeklyGoal();
+  }
+  markStravaProcessed(stravaActId);
+  stravaMatchQueue=stravaMatchQueue.filter(function(i){return String(i.stravaAct.id)!==stravaActId;});
+  save();renderAll();closeAllModals();
+  processNextStravaItem();
+}
+
+function stravaAddAndSkip(stravaActId){
+  var qItem=stravaMatchQueue.find(function(i){return String(i.stravaAct.id)===stravaActId;});
+  if(qItem){
+    stravaAddAsActivity(qItem.stravaAct);
+    markStravaProcessed(stravaActId);
+    stravaMatchQueue=stravaMatchQueue.filter(function(i){return String(i.stravaAct.id)!==stravaActId;});
+    save();renderAll();
+    showStravaToast('Activity added to your training log.');
+  }
+  closeAllModals();
+  processNextStravaItem();
+}
+
+function stravaAddAsActivity(act){
+  var date=(act.start_date_local||'').slice(0,10);
+  var sType=act.type||act.sport_type||'Run';
+  var distKm=parseFloat(((act.distance||0)/1000).toFixed(2));
+  var durMin=Math.round((act.moving_time||0)/60);
+  var vert=Math.round(act.total_elevation_gain||0);
+  var hr=act.average_heartrate?Math.round(act.average_heartrate):0;
+  var base={id:uid(),date:date,dist:distKm,dur:durMin,vert:vert,hr:hr,notes:act.name||'',stravaId:String(act.id)};
+  var runTypes=['Run','TrailRun','VirtualRun'];
+  var rideTypes=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
+  var strengthTypes=['RockClimbing','WeightTraining','Crossfit','Yoga'];
+  var skiTypes=['NordicSki','BackcountrySki','AlpineSki'];
+  if(runTypes.includes(sType)||(!rideTypes.includes(sType)&&!strengthTypes.includes(sType)&&!skiTypes.includes(sType)&&!['Hike','Walk'].includes(sType)&&isCycling()===false&&sType!=='')){
+    var terrain='road';
+    if(sType==='TrailRun')terrain='trail';
+    else if(sType==='VirtualRun')terrain='treadmill';
+    DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',terrain:terrain,workoutDetails:'',nutritionEntries:[]}));
+  }else if(rideTypes.includes(sType)){
+    var bikeType='Road';
+    if(sType==='GravelRide')bikeType='Gravel';
+    if(sType==='MountainBikeRide')bikeType='Mountain';
+    DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',bikeType:bikeType,terrain:'road',workoutDetails:'',nutritionEntries:[]}));
+  }else if(strengthTypes.includes(sType)){
+    var sub=sType==='Yoga'?'Yoga':sType==='RockClimbing'?'Indoor Climbing':'Gym Strength';
+    DB.strengths.push(Object.assign({},base,{actType:'strength',subtype:sub}));
+  }else{
+    var crossSub='Cross Train';
+    if(['Hike','Walk'].includes(sType))crossSub='Hike';
+    else if(skiTypes.includes(sType))crossSub='Skate Ski';
+    DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossSub,rpe:0,nutritionEntries:[]}));
+  }
+}
+
+function markStravaProcessed(stravaActId){
+  if(!Array.isArray(DB.stravaProcessedIds))DB.stravaProcessedIds=[];
+  if(!DB.stravaProcessedIds.includes(stravaActId))DB.stravaProcessedIds.push(stravaActId);
+}
+
+function showStravaToast(msg){
+  var t=document.createElement('div');
+  t.className='celebrate-toast strava-toast';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){t.remove();},3500);
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 // Data loads via fbAuth.onAuthStateChanged above
 </script>
