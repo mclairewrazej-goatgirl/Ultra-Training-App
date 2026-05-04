@@ -610,10 +610,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 // 1. Go to https://www.strava.com/settings/api and create an API application
 // 2. Set "Authorization Callback Domain" to your Netlify domain (e.g. mwrazej-training.netlify.app)
 // 3. Replace 'YOUR_STRAVA_CLIENT_ID' below with your numeric Client ID
-// 4. In Netlify → Site settings → Environment variables, add:
+// 4. Set STRAVA_REDIRECT_URI below to the exact URL of this page on your deployment
+//    (must match a URI registered in your Strava app settings exactly)
+//    e.g. 'https://mwrazej-training.netlify.app/mwrazej_training_log.html'
+// 5. In Netlify → Site settings → Environment variables, add:
 //      STRAVA_CLIENT_ID     = your Client ID
 //      STRAVA_CLIENT_SECRET = your Client Secret
 var STRAVA_CLIENT_ID = '235428';
+var STRAVA_REDIRECT_URI = 'https://mwrazej-training.netlify.app/mwrazej_training_log.html';
 // ────────────────────────────────────────────────────────────────────────────
 
 // ─── FIREBASE CONFIG ────────────────────────────────────────────────────────
@@ -2691,7 +2695,7 @@ function stravaConnect(){
     alert('Strava is not yet configured. Please follow the setup instructions in the source code (search for STRAVA_CLIENT_ID).');
     return;
   }
-  var redirectUri=encodeURIComponent(window.location.href.split('?')[0].split('#')[0]);
+  var redirectUri=encodeURIComponent(STRAVA_REDIRECT_URI||window.location.href.split('?')[0].split('#')[0]);
   window.location.href='https://www.strava.com/oauth/authorize'+
     '?client_id='+encodeURIComponent(STRAVA_CLIENT_ID)+
     '&response_type=code'+
