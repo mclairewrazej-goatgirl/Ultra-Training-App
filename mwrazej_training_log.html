@@ -1013,7 +1013,9 @@ function renderDash(){
   var wvert=wr.reduce((s,r)=>s+pi(r.vert),0);
   var wmin=wr.reduce((s,r)=>s+pi(r.dur),0);
   var longest=wr.length?Math.max(...wr.map(r=>pf(r.dist))):0;
-  var wc=DB.crosses.filter(r=>inDashWeek(r.date)&&(!r.sport||r.sport===DB.primarySport)&&(!skiActive||!isSkiSubtype(r.subtype)));
+  var wcRuns=cycling?allWeekRuns.filter(r=>!r.bikeType):[];
+  var wcCrosses=DB.crosses.filter(r=>inDashWeek(r.date)&&(cycling||(!r.sport||r.sport===DB.primarySport))&&(!skiActive||!isSkiSubtype(r.subtype)));
+  var wc=[...wcRuns,...wcCrosses];
   var ckm=wc.reduce((s,r)=>s+pf(r.dist),0);
   var cvert=wc.reduce((s,r)=>s+pi(r.vert),0);
   var cmin=wc.reduce((s,r)=>s+pi(r.dur),0);
@@ -1075,7 +1077,7 @@ function getWeeklyTotals(){
       var isPrimary=cycling?!!r.bikeType:!r.bikeType;
       if(isPrimary){byWeek[key].rdist+=pf(r.dist);byWeek[key].rtime+=pi(r.dur);byWeek[key].rvert+=pi(r.vert);}
       else{byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);}
-    }else if(!r.sport||r.sport===DB.primarySport){
+    }else if(cycling||!r.sport||r.sport===DB.primarySport){
       byWeek[key].cdist+=pf(r.dist);byWeek[key].ctime+=pi(r.dur);byWeek[key].cvert+=pi(r.vert);
     }
   });
@@ -1125,7 +1127,7 @@ function getMonthlyTotals(){
       var isPrimary=cycling?!!r.bikeType:!r.bikeType;
       if(isPrimary){byMonth[key].rdist+=pf(r.dist);byMonth[key].rtime+=pi(r.dur);byMonth[key].rvert+=pi(r.vert);}
       else{byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);}
-    }else if(!r.sport||r.sport===DB.primarySport){
+    }else if(cycling||!r.sport||r.sport===DB.primarySport){
       byMonth[key].cdist+=pf(r.dist);byMonth[key].ctime+=pi(r.dur);byMonth[key].cvert+=pi(r.vert);
     }
   });
