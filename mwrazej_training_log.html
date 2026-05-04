@@ -2836,20 +2836,103 @@ async function stravaSync(){
              !DB.strengths.some(function(r){return r.stravaId===strId;});
     });
     if(newActs.length===0){showStravaToast('No new Strava activities to sync.');return;}
-    stravaMatchQueue=[];
-    stravaNomatchQueue=[];
-    newActs.forEach(function(act){
-      var date=(act.start_date_local||'').slice(0,10);
-      var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed;});
-      if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
-      else stravaNomatchQueue.push(act);
-    });
-    processNextStravaItem();
+    showStravaSelectModal(newActs);
   }catch(e){
     alert('Sync failed: '+e.message);
   }finally{
     if(btn){btn.disabled=false;btn.textContent='&#8635; Sync Activities';}
   }
+}
+
+var stravaSelectableActs=[];
+
+function showStravaSelectModal(acts){
+  stravaSelectableActs=acts;
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function typeColor(t){
+    var rides=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
+    var runs=['Run','TrailRun','VirtualRun'];
+    return rides.includes(t)?'var(--blue)':runs.includes(t)?'var(--pink)':'var(--green)';
+  }
+  var rowsHtml=acts.map(function(act,idx){
+    var date=(act.start_date_local||'').slice(0,10);
+    var distKm=parseFloat(((act.distance||0)/1000).toFixed(1));
+    var durMin=Math.round((act.moving_time||0)/60);
+    var sType=act.type||act.sport_type||'Activity';
+    var hasPlan=DB.plans.some(function(p){return p.date===date&&!p.completed;});
+    var d=date?new Date(date+'T12:00:00'):null;
+    var dateStr=d?(months[d.getMonth()]+' '+d.getDate()):date;
+    var stats=[distKm>0?distKm+' km':'',durMin>0?minsToHM(durMin):''].filter(Boolean).join(' · ');
+    return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+      '<input type="checkbox" class="strava-act-chk" data-idx="'+idx+'" checked onchange="updateStravaImportBtn()" style="width:15px;height:15px;accent-color:var(--pink);flex-shrink:0">'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(act.name||'Activity')+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+dateStr+
+          ' &middot; <span style="color:'+typeColor(sType)+'">'+escHtml(sType)+'</span>'+
+          (stats?' &middot; '+stats:'')+
+        '</div>'+
+      '</div>'+
+      (hasPlan?'<span style="font-size:9px;font-weight:700;color:var(--amber);background:rgba(255,171,64,.12);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">PLAN MATCH</span>':'')+
+    '</label>';
+  }).join('');
+  var plural=acts.length===1?'y':'ies';
+  var html='<div class="view-modal" style="max-width:520px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>'+
+        '<span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#FC4C02">Strava Sync</span>'+
+      '</div>'+
+      '<button class="modal-close" onclick="closeAllModals()" style="font-size:22px">&times;</button>'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Choose which activit'+plural+' to add to your training log. <span style="color:var(--amber);font-weight:600">PLAN MATCH</span> activities will let you mark a planned workout complete.</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+      '<span style="font-size:11px;color:var(--muted)">'+acts.length+' new activit'+plural+' available</span>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button class="btn btn-sm btn-outline" onclick="stravaSelectAll(true)">All</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="stravaSelectAll(false)">None</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:14px">'+rowsHtml+'</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>'+
+      '<button class="btn btn-pink" id="strava-import-btn" onclick="stravaImportSelected()">Import Selected ('+acts.length+')</button>'+
+    '</div>'+
+  '</div>';
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.addEventListener('click',function(e){if(e.target===wrap)closeAllModals();});
+  wrap.innerHTML=html;
+  document.getElementById('modal-container').appendChild(wrap);
+}
+
+function stravaSelectAll(checked){
+  document.querySelectorAll('.strava-act-chk').forEach(function(chk){chk.checked=checked;});
+  updateStravaImportBtn();
+}
+
+function updateStravaImportBtn(){
+  var n=document.querySelectorAll('.strava-act-chk:checked').length;
+  var btn=document.getElementById('strava-import-btn');
+  if(btn)btn.textContent='Import Selected ('+n+')';
+}
+
+function stravaImportSelected(){
+  var selectedIdxs=[];
+  document.querySelectorAll('.strava-act-chk:checked').forEach(function(chk){
+    selectedIdxs.push(parseInt(chk.dataset.idx));
+  });
+  closeAllModals();
+  if(selectedIdxs.length===0)return;
+  var selected=selectedIdxs.map(function(i){return stravaSelectableActs[i];});
+  stravaMatchQueue=[];
+  stravaNomatchQueue=[];
+  selected.forEach(function(act){
+    var date=(act.start_date_local||'').slice(0,10);
+    var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed;});
+    if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
+    else stravaNomatchQueue.push(act);
+  });
+  processNextStravaItem();
 }
 
 function processNextStravaItem(){
