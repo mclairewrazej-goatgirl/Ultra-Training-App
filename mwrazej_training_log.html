@@ -3063,6 +3063,8 @@ function stravaAddAsActivity(act){
   }else if(strengthTypes.includes(sType)){
     var sub=sType==='Yoga'?'Yoga':sType==='RockClimbing'?'Indoor Climbing':'Gym Strength';
     DB.strengths.push(Object.assign({},base,{actType:'strength',subtype:sub}));
+  }else if(['Hike','Walk'].includes(sType)&&isCycling()===false){
+    DB.runs.push(Object.assign({},base,{actType:'run',runType:'hike',terrain:'trail',workoutDetails:'',nutritionEntries:[]}));
   }else{
     var crossSub='Cross Train';
     if(['Hike','Walk'].includes(sType))crossSub='Hike';
