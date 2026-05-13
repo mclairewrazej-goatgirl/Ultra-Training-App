@@ -1,0 +1,18 @@
+{
+  "name": "Ultra Training Log",
+  "short_name": "Ultra Log",
+  "description": "Personal ultra-running training log with Strava integration",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#e91e8c",
+  "background_color": "#0d1117",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
