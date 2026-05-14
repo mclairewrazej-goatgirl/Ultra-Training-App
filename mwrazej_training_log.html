@@ -3056,10 +3056,17 @@ function stravaAddAsActivity(act){
     else if(sType==='VirtualRun')terrain='treadmill';
     DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',terrain:terrain,workoutDetails:'',nutritionEntries:[]}));
   }else if(rideTypes.includes(sType)){
-    var bikeType='Road';
-    if(sType==='GravelRide')bikeType='Gravel';
-    if(sType==='MountainBikeRide')bikeType='Mountain';
-    DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',bikeType:bikeType,terrain:'road',workoutDetails:'',nutritionEntries:[]}));
+    if(isCycling()){
+      var bikeType='Road';
+      if(sType==='GravelRide')bikeType='Gravel';
+      if(sType==='MountainBikeRide')bikeType='Mountain';
+      DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',bikeType:bikeType,terrain:'road',workoutDetails:'',nutritionEntries:[]}));
+    }else{
+      var crossBikeType='Road Bike';
+      if(sType==='GravelRide')crossBikeType='Gravel Bike';
+      if(sType==='MountainBikeRide')crossBikeType='Mountain Bike';
+      DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossBikeType,rpe:0,nutritionEntries:[]}));
+    }
   }else if(strengthTypes.includes(sType)){
     var sub=sType==='Yoga'?'Yoga':sType==='RockClimbing'?'Indoor Climbing':'Gym Strength';
     DB.strengths.push(Object.assign({},base,{actType:'strength',subtype:sub}));
