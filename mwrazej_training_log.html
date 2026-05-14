@@ -3050,7 +3050,7 @@ function stravaAddAsActivity(act){
   var rideTypes=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
   var strengthTypes=['RockClimbing','WeightTraining','Crossfit','Yoga'];
   var skiTypes=['NordicSki','BackcountrySki','AlpineSki'];
-  if(runTypes.includes(sType)||(!rideTypes.includes(sType)&&!strengthTypes.includes(sType)&&!skiTypes.includes(sType)&&!['Hike','Walk'].includes(sType)&&isCycling()===false&&sType!=='')){
+  if((runTypes.includes(sType)&&!isCycling())||(!rideTypes.includes(sType)&&!strengthTypes.includes(sType)&&!skiTypes.includes(sType)&&!['Hike','Walk'].includes(sType)&&isCycling()===false&&sType!=='')){
     var terrain='road';
     if(sType==='TrailRun')terrain='trail';
     else if(sType==='VirtualRun')terrain='treadmill';
@@ -3076,6 +3076,7 @@ function stravaAddAsActivity(act){
     var crossSub='Cross Train';
     if(['Hike','Walk'].includes(sType))crossSub='Hike';
     else if(skiTypes.includes(sType))crossSub='Skate Ski';
+    else if(runTypes.includes(sType))crossSub='Run';
     DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossSub,rpe:0,nutritionEntries:[]}));
   }
 }
