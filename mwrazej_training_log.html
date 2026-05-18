@@ -105,6 +105,14 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .ftab{padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer;color:var(--muted);transition:.12s}
 .ftab.active{background:var(--surface2);color:var(--text);border:1px solid var(--border2)}
 .ftab:hover:not(.active){color:var(--text)}
+.plan-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:10px;transition:.12s}
+.plan-card:hover{border-color:var(--border2)}
+.plan-icon{width:36px;height:36px;border-radius:8px;background:rgba(233,30,140,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--pink)}
+.plan-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px}
+.plan-meta{font-size:10px;color:var(--muted)}
+.plan-actions{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
+.plans-empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:13px}
+.pdf-modal-body{width:100%;height:70vh;border:none;display:block}
 .log-entry{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:10px;cursor:pointer;transition:.12s}
 .log-entry:hover{border-color:var(--border2)}
 .log-entry-header{display:flex;align-items:flex-start;justify-content:space-between}
@@ -230,6 +238,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 </head>
 <body>
 <!-- Login screen -->
@@ -273,6 +282,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
   <div class="nav-item" id="nav-nutrition" onclick="showPage('nutrition',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>Nutrition
+  </div>
+  <div class="nav-item" id="nav-training-plans" onclick="showPage('training-plans',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Training Plans
   </div>
   <div id="ski-resources-section" style="display:none">
     <div class="nav-section">Ski Resources</div>
@@ -607,6 +619,27 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div>
 
+<!-- TRAINING PLANS -->
+<div class="page" id="page-training-plans">
+  <div class="page-header">
+    <div><div class="page-title">Training Plans</div><div class="page-sub">Upload and view your PDF training plans.</div></div>
+    <div class="header-btns">
+      <label class="btn btn-pink" id="upload-plan-btn" style="cursor:pointer">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload PDF
+        <input type="file" id="plan-file-input" accept="application/pdf" style="display:none" onchange="uploadPlan(this)">
+      </label>
+    </div>
+  </div>
+  <div id="plan-upload-progress" style="display:none;margin-bottom:16px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px" id="plan-upload-status">Uploading...</div>
+    <div style="background:var(--surface2);border-radius:4px;height:4px;overflow:hidden">
+      <div id="plan-upload-bar" style="background:var(--pink);height:100%;width:0%;transition:width .2s"></div>
+    </div>
+  </div>
+  <div id="training-plans-list"></div>
+</div>
+
 </main>
 </div>
 
@@ -642,8 +675,9 @@ var FIREBASE_CONFIG = {
 // ────────────────────────────────────────────────────────────────────────────
 
 firebase.initializeApp(FIREBASE_CONFIG);
-var fbAuth  = firebase.auth();
-var fbStore = firebase.firestore();
+var fbAuth    = firebase.auth();
+var fbStore   = firebase.firestore();
+var fbStorage = firebase.storage();
 var currentUser = null;
 var saveTimer   = null;
 
@@ -697,7 +731,7 @@ fbAuth.onAuthStateChanged(function(user){
     var av=document.getElementById('user-avatar');
     if(user.photoURL){av.src=user.photoURL;av.style.display='block';}
     // Reset DB before loading fresh data
-    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',seasonalSport:{enabled:false,startMD:'11-01',endMD:'04-30'}};
+    DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],trainingPlans:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',seasonalSport:{enabled:false,startMD:'11-01',endMD:'04-30'}};
     load();
   }else{
     document.getElementById('login-overlay').style.display='flex';
@@ -705,7 +739,7 @@ fbAuth.onAuthStateChanged(function(user){
   }
 });
 
-var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',seasonalSport:{enabled:false,startMD:'11-01',endMD:'04-30'}};
+var DB={runs:[],crosses:[],strengths:[],recoveries:[],races:[],plans:[],nutrition:[],trainingPlans:[],goals:{},weeklyGoals:{},goalCelebrations:{},logName:'',theme:'dark',primarySport:'',seasonalSport:{enabled:false,startMD:'11-01',endMD:'04-30'}};
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 var editingId=null,editingType=null,raceFilter='upcoming',logFilter='all';
 var goalsWeekOffset=0;
@@ -1762,13 +1796,14 @@ function showPage(id,el){
   if(id==='goals')renderGoals();
   if(id==='calculator'){renderPresets();renderConvTable();renderPaceChart();}
   if(id==='nutrition')renderNutrition();
+  if(id==='training-plans')renderTrainingPlans();
   history.replaceState(null,'','#'+id);
   closeSidebar();
 }
 
 function navigateToHash(){
   var hash=location.hash.replace('#','');
-  var valid=['dashboard','log','calendar','calculator','goals','races','nutrition'];
+  var valid=['dashboard','log','calendar','calculator','goals','races','nutrition','training-plans'];
   if(valid.indexOf(hash)!==-1){
     showPage(hash,document.getElementById('nav-'+hash));
   }
@@ -3096,6 +3131,88 @@ function showStravaToast(msg){
 
 function escHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── TRAINING PLANS ──────────────────────────────────────────────────────────
+
+function renderTrainingPlans(){
+  if(!Array.isArray(DB.trainingPlans))DB.trainingPlans=[];
+  var el=document.getElementById('training-plans-list');
+  if(!el)return;
+  if(DB.trainingPlans.length===0){
+    el.innerHTML='<div class="plans-empty"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3;display:block;margin:0 auto 12px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>No training plans yet.<br><span style="font-size:11px">Upload a PDF to get started.</span></div>';
+    return;
+  }
+  el.innerHTML=DB.trainingPlans.slice().reverse().map(function(p){
+    var kb=p.size?Math.round(p.size/1024)+'KB':'';
+    var dt=p.uploadedAt?new Date(p.uploadedAt).toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'}):'';
+    var meta=[dt,kb].filter(Boolean).join(' · ');
+    return '<div class="plan-card">'+
+      '<div class="plan-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>'+
+      '<div style="min-width:0;flex:1"><div class="plan-name">'+escHtml(p.name)+'</div><div class="plan-meta">'+escHtml(meta)+'</div></div>'+
+      '<div class="plan-actions">'+
+        '<button class="btn btn-outline btn-sm" onclick="viewPlanPDF(\''+escHtml(p.downloadURL)+'\',\''+escHtml(p.name.replace(/'/g,"\\'"))+'\')">View</button>'+
+        '<button class="btn btn-danger btn-sm" onclick="deletePlanPDF(\''+escHtml(p.id)+'\')">Delete</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function uploadPlan(input){
+  var file=input.files[0];
+  input.value='';
+  if(!file)return;
+  if(file.type!=='application/pdf'){alert('Please select a PDF file.');return;}
+  if(file.size>20*1024*1024){alert('File must be under 20MB.');return;}
+  if(!currentUser){alert('Please sign in first.');return;}
+  var planId='plan_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+  var storePath='users/'+currentUser.uid+'/training-plans/'+planId;
+  var ref=fbStorage.ref(storePath);
+  var progress=document.getElementById('plan-upload-progress');
+  var bar=document.getElementById('plan-upload-bar');
+  var status=document.getElementById('plan-upload-status');
+  progress.style.display='block';
+  status.textContent='Uploading '+file.name+'…';
+  var task=ref.put(file);
+  task.on('state_changed',
+    function(snap){bar.style.width=Math.round(snap.bytesTransferred/snap.totalBytes*100)+'%';},
+    function(err){progress.style.display='none';alert('Upload failed: '+err.message);},
+    function(){
+      task.snapshot.ref.getDownloadURL().then(function(url){
+        if(!Array.isArray(DB.trainingPlans))DB.trainingPlans=[];
+        DB.trainingPlans.push({id:planId,name:file.name,size:file.size,uploadedAt:Date.now(),downloadURL:url,storagePath:storePath});
+        save();
+        progress.style.display='none';
+        bar.style.width='0%';
+        renderTrainingPlans();
+      });
+    }
+  );
+}
+
+function deletePlanPDF(id){
+  if(!confirm('Delete this training plan?'))return;
+  if(!Array.isArray(DB.trainingPlans))DB.trainingPlans=[];
+  var plan=DB.trainingPlans.find(function(p){return p.id===id;});
+  if(plan&&plan.storagePath){
+    fbStorage.ref(plan.storagePath).delete().catch(function(){});
+  }
+  DB.trainingPlans=DB.trainingPlans.filter(function(p){return p.id!==id;});
+  save();
+  renderTrainingPlans();
+}
+
+function viewPlanPDF(url,name){
+  var mc=document.getElementById('modal-container');
+  mc.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeAllModals()">'+
+    '<div class="modal" style="max-width:900px;width:95vw;padding:16px">'+
+      '<div class="modal-title">'+escHtml(name)+'<button class="modal-close" onclick="closeAllModals()">✕</button></div>'+
+      '<iframe src="'+escHtml(url)+'#toolbar=1" class="pdf-modal-body" title="'+escHtml(name)+'"></iframe>'+
+      '<div style="margin-top:10px;display:flex;justify-content:flex-end">'+
+        '<a href="'+escHtml(url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Open in new tab ↗</a>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
 }
 
 // ────────────────────────────────────────────────────────────────────────────
