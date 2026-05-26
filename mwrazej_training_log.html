@@ -2751,6 +2751,7 @@ function updateCompletionNutritionCalc(){
 
 var stravaMatchQueue=[];
 var stravaNomatchQueue=[];
+var stravaRaceQueue=[];
 
 function renderStravaStatus(){
   var connected=DB.stravaTokens&&DB.stravaTokens.accessToken;
@@ -2895,9 +2896,22 @@ function showStravaSelectModal(acts){
     var durMin=Math.round((act.moving_time||0)/60);
     var sType=act.type||act.sport_type||'Activity';
     var hasPlan=DB.plans.some(function(p){return p.date===date&&!p.completed;});
+    var actDistKm=(act.distance||0)/1000;
+    var hasRaceMatch=DB.races.some(function(r){
+      if(r.result||r.date!==date)return false;
+      var tol=Math.max(1,(r.dist||0)*0.1);
+      if(Math.abs(actDistKm-(r.dist||0))>tol)return false;
+      var runT=['Run','TrailRun','VirtualRun'];
+      var rideT=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
+      var skiT=['NordicSki','BackcountrySki','AlpineSki'];
+      return (r.raceType==='run'&&runT.includes(sType))||(r.raceType==='bike'&&rideT.includes(sType))||(r.raceType==='skimo'&&skiT.includes(sType));
+    });
     var d=date?new Date(date+'T12:00:00'):null;
     var dateStr=d?(months[d.getMonth()]+' '+d.getDate()):date;
     var stats=[distKm>0?distKm+' km':'',durMin>0?minsToHM(durMin):''].filter(Boolean).join(' · ');
+    var badge=hasRaceMatch
+      ?'<span style="font-size:9px;font-weight:700;color:var(--pink);background:rgba(255,100,130,.15);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">RACE DAY</span>'
+      :hasPlan?'<span style="font-size:9px;font-weight:700;color:var(--amber);background:rgba(255,171,64,.12);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">PLAN MATCH</span>':'';
     return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
       '<input type="checkbox" class="strava-act-chk" data-idx="'+idx+'" checked onchange="updateStravaImportBtn()" style="width:15px;height:15px;accent-color:var(--pink);flex-shrink:0">'+
       '<div style="flex:1;min-width:0">'+
@@ -2907,7 +2921,7 @@ function showStravaSelectModal(acts){
           (stats?' &middot; '+stats:'')+
         '</div>'+
       '</div>'+
-      (hasPlan?'<span style="font-size:9px;font-weight:700;color:var(--amber);background:rgba(255,171,64,.12);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">PLAN MATCH</span>':'')+
+      badge+
     '</label>';
   }).join('');
   var plural=acts.length===1?'y':'ies';
@@ -2919,7 +2933,7 @@ function showStravaSelectModal(acts){
       '</div>'+
       '<button class="modal-close" onclick="closeAllModals()" style="font-size:22px">&times;</button>'+
     '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Choose which activit'+plural+' to add to your training log. <span style="color:var(--amber);font-weight:600">PLAN MATCH</span> activities will let you mark a planned workout complete.</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Choose which activit'+plural+' to add to your training log. <span style="color:var(--pink);font-weight:600">RACE DAY</span> activities match a scheduled race. <span style="color:var(--amber);font-weight:600">PLAN MATCH</span> activities will let you mark a planned workout complete.</div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
       '<span style="font-size:11px;color:var(--muted)">'+acts.length+' new activit'+plural+' available</span>'+
       '<div style="display:flex;gap:6px">'+
@@ -2961,16 +2975,33 @@ function stravaImportSelected(){
   var selected=selectedIdxs.map(function(i){return stravaSelectableActs[i];});
   stravaMatchQueue=[];
   stravaNomatchQueue=[];
+  stravaRaceQueue=[];
   selected.forEach(function(act){
     var date=(act.start_date_local||'').slice(0,10);
     var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed;});
-    if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
+    var actDistKm=(act.distance||0)/1000;
+    var sType=act.type||act.sport_type||'';
+    var runT=['Run','TrailRun','VirtualRun'];
+    var rideT=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
+    var skiT=['NordicSki','BackcountrySki','AlpineSki'];
+    var racesForDate=DB.races.filter(function(r){
+      if(r.result||r.date!==date)return false;
+      var tol=Math.max(1,(r.dist||0)*0.1);
+      if(Math.abs(actDistKm-(r.dist||0))>tol)return false;
+      return (r.raceType==='run'&&runT.includes(sType))||(r.raceType==='bike'&&rideT.includes(sType))||(r.raceType==='skimo'&&skiT.includes(sType));
+    });
+    if(racesForDate.length>0)stravaRaceQueue.push({stravaAct:act,races:racesForDate,plans:plansForDate});
+    else if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
     else stravaNomatchQueue.push(act);
   });
   processNextStravaItem();
 }
 
 function processNextStravaItem(){
+  if(stravaRaceQueue.length>0){
+    setTimeout(function(){showStravaRaceMatchModal(stravaRaceQueue[0]);},150);
+    return;
+  }
   if(stravaMatchQueue.length>0){
     setTimeout(function(){showStravaMatchModal(stravaMatchQueue[0]);},150);
     return;
@@ -3064,6 +3095,79 @@ function stravaAddAndSkip(stravaActId){
     stravaMatchQueue=stravaMatchQueue.filter(function(i){return String(i.stravaAct.id)!==stravaActId;});
     save();renderAll();
     showStravaToast('Activity added to your training log.');
+  }
+  closeAllModals();
+  processNextStravaItem();
+}
+
+function showStravaRaceMatchModal(item){
+  var act=item.stravaAct;
+  var races=item.races;
+  var actId=String(act.id);
+  var date=(act.start_date_local||'').slice(0,10);
+  var distKm=parseFloat(((act.distance||0)/1000).toFixed(2));
+  var durMin=Math.round((act.moving_time||0)/60);
+  var vert=Math.round(act.total_elevation_gain||0);
+  var hr=act.average_heartrate?Math.round(act.average_heartrate):0;
+  var statsHtml='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
+  if(distKm>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+distKm+' km</div><div class="detail-lbl">Distance</div></div>';
+  if(durMin>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+minsToHM(durMin)+'</div><div class="detail-lbl">Finish Time</div></div>';
+  if(vert>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+vert+' m</div><div class="detail-lbl">Elevation</div></div>';
+  if(hr>0)statsHtml+='<div class="detail-box"><div class="detail-val" style="color:#FC4C02">'+hr+' bpm</div><div class="detail-lbl">Avg HR</div></div>';
+  statsHtml+='</div>';
+  var raceBtns=races.map(function(r){
+    return '<button class="btn btn-pink btn-sm" style="width:100%;justify-content:center;margin-bottom:6px" onclick="stravaApplyToRace(\''+r.id+'\',\''+actId+'\')">&#127937; Yes — record result for: '+escHtml(r.name)+(r.dist?' ('+r.dist+' km)':'')+'</button>';
+  }).join('');
+  var html='<div class="view-modal" style="max-width:480px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>'+
+        '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#FC4C02">Strava Activity Synced</span>'+
+      '</div>'+
+      '<button class="modal-close" onclick="stravaSkipRaceMatch(\''+actId+'\')" style="font-size:22px">&times;</button>'+
+    '</div>'+
+    '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">'+escHtml(act.name||'Activity')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+date+' &middot; '+escHtml(act.type||act.sport_type||'')+'</div>'+
+    statsHtml+
+    '<div style="font-size:13px;font-weight:600;color:var(--pink);margin-bottom:6px">&#127937; Race day match!</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">This activity matches a race you have scheduled. Was this your race?</div>'+
+    raceBtns+
+    '<button class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:4px" onclick="stravaSkipRaceMatch(\''+actId+'\')">No — just add to log</button>'+
+  '</div>';
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML=html;
+  wrap.addEventListener('click',function(e){if(e.target===wrap)stravaSkipRaceMatch(actId);});
+  document.getElementById('modal-container').appendChild(wrap);
+}
+
+function stravaApplyToRace(raceId,stravaActId){
+  var qItem=stravaRaceQueue.find(function(i){return String(i.stravaAct.id)===stravaActId;});
+  var race=DB.races.find(function(r){return r.id===raceId;});
+  if(qItem&&race){
+    var act=qItem.stravaAct;
+    var totalSec=act.moving_time||0;
+    var h=Math.floor(totalSec/3600);
+    var m=Math.floor((totalSec%3600)/60);
+    var s=totalSec%60;
+    race.result=h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+    race.stravaActivityId=stravaActId;
+    stravaAddAsActivity(act);
+    celebrate('Race result saved! &#127937;');
+    maybeCelebrateWeeklyGoal();
+  }
+  markStravaProcessed(stravaActId);
+  stravaRaceQueue=stravaRaceQueue.filter(function(i){return String(i.stravaAct.id)!==stravaActId;});
+  save();renderAll();closeAllModals();
+  processNextStravaItem();
+}
+
+function stravaSkipRaceMatch(stravaActId){
+  var qItem=stravaRaceQueue.find(function(i){return String(i.stravaAct.id)===stravaActId;});
+  if(qItem){
+    if(qItem.plans&&qItem.plans.length>0)stravaMatchQueue.push({stravaAct:qItem.stravaAct,plans:qItem.plans});
+    else stravaNomatchQueue.push(qItem.stravaAct);
+    stravaRaceQueue=stravaRaceQueue.filter(function(i){return String(i.stravaAct.id)!==stravaActId;});
   }
   closeAllModals();
   processNextStravaItem();
