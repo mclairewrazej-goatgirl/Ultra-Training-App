@@ -1,3 +1,8 @@
+export interface NutritionLogEntry {
+  itemId: string;
+  servings: number;
+}
+
 export interface RunEntry {
   id: string;
   date: string;
@@ -11,7 +16,7 @@ export interface RunEntry {
   hr: number | string;
   notes: string;
   workoutDetails?: string;
-  nutritionEntries?: unknown[];
+  nutritionEntries?: NutritionLogEntry[];
 }
 
 export interface CrossEntry {

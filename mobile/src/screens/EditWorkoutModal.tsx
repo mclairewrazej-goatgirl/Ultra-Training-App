@@ -6,20 +6,20 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry } from '../types';
+import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem } from '../types';
 import { colors } from '../theme';
 
 type ActType = 'run' | 'cross' | 'strength' | 'recovery';
 
-const RUN_TYPES    = ['easy', 'long', 'tempo', 'interval', 'race', 'hike'];
-const CROSS_TYPES  = ['Cycling', 'Swimming', 'Rowing', 'Yoga', 'Cross Train'];
-const STRENGTH_SUB = ['Full Body', 'Upper Body', 'Lower Body', 'Core', 'PT'];
-const RECOVERY_SUB = ['Rest Day', 'Easy Walk', 'Stretching', 'Foam Rolling', 'Sauna'];
-
-function subtypeFor(act: ActivityEntry): string {
-  if (act.actType === 'run') return (act as RunEntry).runType ?? 'easy';
-  return (act as any).subtype ?? '';
-}
+const RUN_TYPES    = ['easy','long','tempo','interval','hike','race'];
+const TERRAIN_OPT  = ['trail','road','treadmill'];
+const BIKE_TYPES   = ['Gravel','Road','Mountain','Fat Bike'];
+const RIDE_TYPES   = ['easy','long','workout'];
+const CROSS_RUN    = ['Skate Ski','Classic Ski','Backcountry Ski','Alpine Ski','Outdoor Climb','Alpine Climb','Gravel Bike','Road Bike','Mountain Bike','Fat Bike'];
+const CROSS_CYCLE  = ['Run','Hike','Skate Ski','Classic Ski','Backcountry Ski','Alpine Ski','Outdoor Climb','Alpine Climb'];
+const STRENGTH_SUB = ['Indoor Climbing','Gym Strength'];
+const RECOVERY_SUB = ['Yoga/Stretch','Massage','Physio'];
+const RPE_OPTS     = ['1','2','3','4','5','6','7','8','9','10'];
 
 interface Props {
   visible: boolean;
@@ -31,83 +31,119 @@ interface Props {
 }
 
 export default function EditWorkoutModal({ visible, entry, user, db, onSaved, onClose }: Props) {
-  const [date,    setDate]    = useState('');
-  const [dist,    setDist]    = useState('');
-  const [dur,     setDur]     = useState('');
-  const [vert,    setVert]    = useState('');
-  const [hr,      setHr]      = useState('');
-  const [notes,   setNotes]   = useState('');
-  const [subtype, setSubtype] = useState('');
-  const [saving,  setSaving]  = useState(false);
+  const [date,     setDate]     = useState('');
+  const [dist,     setDist]     = useState('');
+  const [dur,      setDur]      = useState('');
+  const [vert,     setVert]     = useState('');
+  const [hr,       setHr]       = useState('');
+  const [notes,    setNotes]    = useState('');
+  const [subtype,  setSubtype]  = useState('');
+  const [terrain,  setTerrain]  = useState('trail');
+  const [bikeType, setBikeType] = useState('Gravel');
+  const [rpe,      setRpe]      = useState('5');
+  const [showNutr, setShowNutr] = useState(false);
+  const [nutrQty,  setNutrQty]  = useState<Record<string, number>>({});
+  const [saving,   setSaving]   = useState(false);
 
-  // Populate fields whenever the entry changes
   React.useEffect(() => {
     if (!entry) return;
     setDate(entry.date);
-    setSubtype(subtypeFor(entry));
     setNotes((entry as any).notes ?? '');
-    setDist(String((entry as any).dist ?? ''));
-    setDur(String((entry as any).dur ?? ''));
-    setVert(String((entry as any).vert ?? ''));
-    setHr(String((entry as any).hr ?? ''));
-  }, [entry]);
+    setDist(String((entry as any).dist  || ''));
+    setDur(String((entry as any).dur    || ''));
+    setVert(String((entry as any).vert  || ''));
+    setHr(String((entry as any).hr      || ''));
+
+    if (entry.actType === 'run') {
+      const r = entry as RunEntry;
+      setSubtype(r.runType ?? 'easy');
+      setTerrain(r.terrain || 'trail');
+      setBikeType(r.bikeType || 'Gravel');
+      const nutrMap: Record<string, number> = {};
+      ((r.nutritionEntries ?? []) as any[]).forEach((ne: any) => {
+        if (ne.itemId && ne.servings > 0) nutrMap[ne.itemId] = ne.servings;
+      });
+      setNutrQty(nutrMap);
+      setShowNutr(Object.keys(nutrMap).length > 0);
+    } else {
+      setSubtype((entry as any).subtype ?? '');
+      setRpe(String((entry as any).rpe ?? '5'));
+    }
+  }, [entry, visible]);
 
   if (!entry) return null;
 
-  const actType = entry.actType as ActType;
+  const actType   = entry.actType as ActType;
+  const isCycling = db.primarySport === 'cycling';
+  const isRide    = actType === 'run' && !!(entry as RunEntry).bikeType;
+  const crossTypes = isCycling ? CROSS_CYCLE : CROSS_RUN;
+
   const accentColor = actType === 'run' ? colors.pink
     : actType === 'cross' ? colors.blue
     : actType === 'strength' ? colors.amber
     : colors.green;
 
   const subtypeOptions = () => {
-    if (actType === 'run')      return RUN_TYPES;
-    if (actType === 'cross')    return CROSS_TYPES;
+    if (actType === 'run')      return isRide ? RIDE_TYPES : RUN_TYPES;
+    if (actType === 'cross')    return crossTypes;
     if (actType === 'strength') return STRENGTH_SUB;
     return RECOVERY_SUB;
   };
 
+  const adjustQty = (id: string, delta: number) => {
+    setNutrQty(prev => {
+      const n = Math.max(0, (prev[id] ?? 0) + delta);
+      if (n === 0) { const { [id]: _, ...rest } = prev; return rest; }
+      return { ...prev, [id]: n };
+    });
+  };
+
   const handleSave = async () => {
     if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Invalid date', 'Use YYYY-MM-DD format, e.g. 2025-06-08');
+      Alert.alert('Invalid date', 'Use YYYY-MM-DD format');
       return;
     }
     setSaving(true);
     const newDB: TrainingDB = { ...db };
 
     if (actType === 'run') {
+      const nutritionEntries = showNutr
+        ? Object.entries(nutrQty).map(([itemId, servings]) => ({ itemId, servings }))
+        : [];
       const updated: RunEntry = {
         ...(entry as RunEntry),
         date, runType: subtype,
+        terrain: isRide ? '' : terrain,
+        bikeType: isRide ? bikeType : undefined,
         dist: Number(dist) || 0, dur: Number(dur) || 0,
-        vert: Number(vert) || 0, hr: Number(hr) || 0, notes,
+        vert: Number(vert) || 0, hr: Number(hr) || 0,
+        notes, nutritionEntries,
       };
-      newDB.runs = db.runs.map((r) => r.id === entry.id ? updated : r);
+      newDB.runs = db.runs.map(r => r.id === entry.id ? updated : r);
     } else if (actType === 'cross') {
       const updated: CrossEntry = {
         ...(entry as CrossEntry),
         date, subtype,
         dist: Number(dist) || 0, dur: Number(dur) || 0,
-        vert: Number(vert) || 0, notes,
+        vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes,
       };
-      newDB.crosses = db.crosses.map((r) => r.id === entry.id ? updated : r);
+      newDB.crosses = db.crosses.map(r => r.id === entry.id ? updated : r);
     } else if (actType === 'strength') {
       const updated: StrengthEntry = {
         ...(entry as StrengthEntry),
         date, subtype, dur: Number(dur) || 0, notes,
       };
-      newDB.strengths = db.strengths.map((r) => r.id === entry.id ? updated : r);
+      newDB.strengths = db.strengths.map(r => r.id === entry.id ? updated : r);
     } else {
       const updated: RecoveryEntry = {
         ...(entry as RecoveryEntry),
         date, subtype, dur: Number(dur) || 0, notes,
       };
-      newDB.recoveries = db.recoveries.map((r) => r.id === entry.id ? updated : r);
+      newDB.recoveries = db.recoveries.map(r => r.id === entry.id ? updated : r);
     }
 
     try {
-      const docRef = doc(firestoreDB, 'users', user.uid, 'db', 'data');
-      await setDoc(docRef, JSON.parse(JSON.stringify(newDB)));
+      await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
       onClose();
     } catch (err: any) {
@@ -118,83 +154,199 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete workout', 'Are you sure? This cannot be undone.', [
+    Alert.alert('Delete workout', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          setSaving(true);
-          const newDB: TrainingDB = {
-            ...db,
-            runs:       db.runs.filter((r) => r.id !== entry.id),
-            crosses:    db.crosses.filter((r) => r.id !== entry.id),
-            strengths:  db.strengths.filter((r) => r.id !== entry.id),
-            recoveries: db.recoveries.filter((r) => r.id !== entry.id),
-          };
-          try {
-            const docRef = doc(firestoreDB, 'users', user.uid, 'db', 'data');
-            await setDoc(docRef, JSON.parse(JSON.stringify(newDB)));
-            onSaved(newDB);
-            onClose();
-          } catch (err: any) {
-            Alert.alert('Delete failed', err.message);
-          } finally {
-            setSaving(false);
-          }
-        },
-      },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        setSaving(true);
+        const newDB: TrainingDB = {
+          ...db,
+          runs:       db.runs.filter(r => r.id !== entry.id),
+          crosses:    db.crosses.filter(r => r.id !== entry.id),
+          strengths:  db.strengths.filter(r => r.id !== entry.id),
+          recoveries: db.recoveries.filter(r => r.id !== entry.id),
+        };
+        try {
+          await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+          onSaved(newDB);
+          onClose();
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        } finally {
+          setSaving(false);
+        }
+      }},
     ]);
   };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.modalContainer}>
-        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.cancelBtn}>Cancel</Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Workout</Text>
-          <TouchableOpacity onPress={handleDelete}>
-            <Text style={styles.deleteBtn}>Delete</Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDelete}><Text style={styles.deleteBtn}>Delete</Text></TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
-          {/* Activity type label */}
-          <View style={[styles.typeBadge, { backgroundColor: accentColor + '22', borderColor: accentColor }]}>
+          <View style={[styles.typeBadge, { backgroundColor: accentColor+'22', borderColor: accentColor }]}>
             <Text style={[styles.typeBadgeText, { color: accentColor }]}>
-              {actType.charAt(0).toUpperCase() + actType.slice(1)}
+              {actType === 'run' && isRide ? 'Ride'
+                : actType === 'run' ? 'Run'
+                : actType.charAt(0).toUpperCase() + actType.slice(1)}
             </Text>
           </View>
 
           {/* Subtype */}
-          <Text style={styles.label}>{actType === 'run' ? 'Run Type' : 'Subtype'}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subtypeScroll}>
-            {subtypeOptions().map((s) => (
+          <Text style={styles.label}>
+            {actType === 'run' ? (isRide ? 'RIDE TYPE' : 'RUN TYPE') : 'ACTIVITY'}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+            {subtypeOptions().map(s => (
               <TouchableOpacity
                 key={s}
                 style={[styles.chip, subtype === s && { borderColor: accentColor }]}
                 onPress={() => setSubtype(s)}
               >
-                <Text style={[styles.chipText, subtype === s && { color: accentColor }]}>{s}</Text>
+                <Text style={[styles.chipText, subtype === s && { color: accentColor }]}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          <Field label="Date (YYYY-MM-DD)" value={date} onChange={setDate} />
+          {/* Terrain — run, not ride */}
+          {actType === 'run' && !isRide && (
+            <>
+              <Text style={styles.label}>TERRAIN</Text>
+              <View style={styles.chipRow}>
+                {TERRAIN_OPT.map(t => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.chip, terrain === t && { borderColor: accentColor }]}
+                    onPress={() => setTerrain(t)}
+                  >
+                    <Text style={[styles.chipText, terrain === t && { color: accentColor }]}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
-          {(actType === 'run' || actType === 'cross') && (
-            <Field label="Distance (miles)" value={dist} onChange={setDist} keyboard="decimal-pad" />
+          {/* Bike type — ride */}
+          {actType === 'run' && isRide && (
+            <>
+              <Text style={styles.label}>BIKE TYPE</Text>
+              <View style={styles.chipRow}>
+                {BIKE_TYPES.map(b => (
+                  <TouchableOpacity
+                    key={b}
+                    style={[styles.chip, bikeType === b && { borderColor: accentColor }]}
+                    onPress={() => setBikeType(b)}
+                  >
+                    <Text style={[styles.chipText, bikeType === b && { color: accentColor }]}>{b}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
           )}
-          <Field label="Duration (minutes)" value={dur} onChange={setDur} keyboard="decimal-pad" />
+
+          {/* Date */}
+          <Text style={styles.label}>DATE</Text>
+          <TextInput style={styles.input} value={date} onChangeText={setDate}
+            placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted2} />
+
+          {/* Distance */}
           {(actType === 'run' || actType === 'cross') && (
-            <Field label="Elevation Gain (ft)" value={vert} onChange={setVert} keyboard="decimal-pad" />
+            <>
+              <Text style={styles.label}>DISTANCE (KM)</Text>
+              <TextInput style={styles.input} value={dist} onChangeText={setDist}
+                keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.muted2} />
+            </>
           )}
+
+          {/* Duration */}
+          <Text style={styles.label}>DURATION (MIN)</Text>
+          <TextInput style={styles.input} value={dur} onChangeText={setDur}
+            keyboardType="decimal-pad" placeholder="60" placeholderTextColor={colors.muted2} />
+
+          {/* Elevation */}
+          {(actType === 'run' || actType === 'cross') && (
+            <>
+              <Text style={styles.label}>ELEVATION GAIN (M)</Text>
+              <TextInput style={styles.input} value={vert} onChangeText={setVert}
+                keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
+            </>
+          )}
+
+          {/* HR — run only */}
           {actType === 'run' && (
-            <Field label="Avg Heart Rate (bpm)" value={hr} onChange={setHr} keyboard="decimal-pad" />
+            <>
+              <Text style={styles.label}>AVG HEART RATE (BPM)</Text>
+              <TextInput style={styles.input} value={hr} onChangeText={setHr}
+                keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
+            </>
           )}
-          <Field label="Notes" value={notes} onChange={setNotes} multiline />
+
+          {/* RPE — cross only */}
+          {actType === 'cross' && (
+            <>
+              <Text style={styles.label}>RPE (1–10)</Text>
+              <View style={styles.rpeRow}>
+                {RPE_OPTS.map(r => (
+                  <TouchableOpacity
+                    key={r}
+                    style={[styles.rpeChip, rpe === r && { backgroundColor: accentColor, borderColor: accentColor }]}
+                    onPress={() => setRpe(r)}
+                  >
+                    <Text style={[styles.rpeChipText, rpe === r && { color: '#fff' }]}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Notes */}
+          <Text style={styles.label}>NOTES</Text>
+          <TextInput style={[styles.input, styles.inputMulti]} value={notes} onChangeText={setNotes}
+            multiline numberOfLines={3} textAlignVertical="top"
+            placeholder="How did it feel?" placeholderTextColor={colors.muted2} />
+
+          {/* Nutrition — run only */}
+          {actType === 'run' && db.nutrition.length > 0 && (
+            <TouchableOpacity style={styles.nutrToggle} onPress={() => setShowNutr(v => !v)}>
+              <View style={[styles.checkbox, showNutr && { backgroundColor: colors.pink, borderColor: colors.pink }]}>
+                {showNutr && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.nutrToggleText}>Add nutrition?</Text>
+            </TouchableOpacity>
+          )}
+
+          {showNutr && actType === 'run' && (
+            <View style={styles.nutrSection}>
+              {(db.nutrition as NutritionItem[]).map(item => {
+                const qty = nutrQty[item.id] ?? 0;
+                return (
+                  <View key={item.id} style={styles.nutrRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.nutrName}>{item.name}</Text>
+                      <Text style={styles.nutrUnit}>per {item.servingUnit || 'serving'}</Text>
+                    </View>
+                    <View style={styles.qtyRow}>
+                      <TouchableOpacity style={styles.qtyBtn} onPress={() => adjustQty(item.id, -1)}>
+                        <Text style={styles.qtyBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.qtyVal}>{qty}</Text>
+                      <TouchableOpacity style={styles.qtyBtn} onPress={() => adjustQty(item.id, 1)}>
+                        <Text style={styles.qtyBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
@@ -209,26 +361,6 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
   );
 }
 
-function Field({ label, value, onChange, keyboard, multiline }: {
-  label: string; value: string; onChange: (v: string) => void;
-  keyboard?: 'decimal-pad'; multiline?: boolean;
-}) {
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={[styles.input, multiline && styles.inputMultiline]}
-        value={value}
-        onChangeText={onChange}
-        placeholderTextColor={colors.muted2}
-        keyboardType={keyboard ?? 'default'}
-        multiline={multiline}
-        numberOfLines={multiline ? 3 : 1}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   modalContainer: { flex: 1, backgroundColor: colors.bg },
   header: {
@@ -237,8 +369,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   headerTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  cancelBtn: { fontSize: 15, color: colors.muted },
-  deleteBtn: { fontSize: 15, color: colors.red, fontWeight: '600' },
+  cancelBtn:   { fontSize: 15, color: colors.muted },
+  deleteBtn:   { fontSize: 15, color: colors.red, fontWeight: '600' },
 
   content: { padding: 20, paddingBottom: 60 },
 
@@ -249,10 +381,11 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontSize: 13, fontWeight: '700' },
 
   label: {
-    fontSize: 12, color: colors.muted, fontWeight: '600',
+    fontSize: 11, color: colors.muted, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 16,
   },
-  subtypeScroll: { marginBottom: 4 },
+
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1, borderColor: colors.border, borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 6, marginRight: 8,
@@ -260,13 +393,40 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 13, color: colors.muted, fontWeight: '500' },
 
-  fieldGroup: {},
+  rpeRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  rpeChip: {
+    borderWidth: 1, borderColor: colors.border, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 7, minWidth: 34, alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  rpeChipText: { fontSize: 13, color: colors.muted, fontWeight: '700' },
+
   input: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
     borderRadius: 10, padding: 12, color: colors.text, fontSize: 15,
   },
-  inputMultiline: { minHeight: 80, textAlignVertical: 'top' },
+  inputMulti: { minHeight: 80, textAlignVertical: 'top' },
 
-  saveBtn: { borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 32 },
+  nutrToggle:     { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 10 },
+  checkbox:       { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  checkmark:      { color: '#fff', fontSize: 13, fontWeight: '700' },
+  nutrToggleText: { fontSize: 14, color: colors.text, fontWeight: '600' },
+
+  nutrSection: {
+    marginTop: 10, backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+  },
+  nutrRow: {
+    flexDirection: 'row', alignItems: 'center', padding: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  nutrName: { fontSize: 13, fontWeight: '600', color: colors.text },
+  nutrUnit: { fontSize: 11, color: colors.muted, marginTop: 1 },
+  qtyRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  qtyBtn:   { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
+  qtyBtnText: { fontSize: 18, color: colors.text, fontWeight: '700', lineHeight: 22 },
+  qtyVal:   { fontSize: 15, color: colors.text, fontWeight: '700', minWidth: 24, textAlign: 'center' },
+
+  saveBtn:     { borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 32 },
   saveBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
 });

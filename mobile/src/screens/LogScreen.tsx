@@ -17,7 +17,7 @@ const FILTERS: { key: FilterType; label: string }[] = [
 
 function fmtDist(d: number | string) {
   const n = Number(d);
-  return n > 0 ? `${n.toFixed(1)} mi` : null;
+  return n > 0 ? `${n.toFixed(1)} km` : null;
 }
 
 function fmtDur(d: number | string) {

@@ -168,7 +168,7 @@ export default function App() {
           </Tab.Screen>
 
           <Tab.Screen name="Profile">
-            {() => <ProfileScreen user={user} db={db} />}
+            {() => <ProfileScreen user={user} db={db} onSaved={handleDBUpdate} />}
           </Tab.Screen>
         </Tab.Navigator>
       </NavigationContainer>
