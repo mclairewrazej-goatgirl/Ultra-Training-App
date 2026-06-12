@@ -21,7 +21,8 @@ export default function LoginScreen() {
   const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
 
   const [, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
+    androidClientId: GOOGLE_WEB_CLIENT_ID,
+    webClientId:     GOOGLE_WEB_CLIENT_ID,
     redirectUri,
   });
 
@@ -40,7 +41,9 @@ export default function LoginScreen() {
   }, [response]);
 
   const handleSignIn = async () => {
-    Alert.alert('Debug: Redirect URI', redirectUri);
+    setLoading(true);
+    await promptAsync({ useProxy: true });
+    setLoading(false);
   };
 
   return (
