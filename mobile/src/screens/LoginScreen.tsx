@@ -40,9 +40,7 @@ export default function LoginScreen() {
   }, [response]);
 
   const handleSignIn = async () => {
-    setLoading(true);
-    await promptAsync({ useProxy: true });
-    setLoading(false);
+    Alert.alert('Debug: Redirect URI', redirectUri);
   };
 
   return (
