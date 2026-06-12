@@ -152,7 +152,7 @@ export default function App() {
             )}
           </Tab.Screen>
 
-          <Tab.Screen name="Add" options={{ title: 'Log Workout' }}>
+          <Tab.Screen name="Add" options={{ title: 'Log an Activity' }}>
             {() => (
               <AddWorkoutScreen
                 user={user}

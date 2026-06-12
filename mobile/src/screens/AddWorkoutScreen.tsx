@@ -155,14 +155,13 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       {onClose && (
         <View style={styles.modalHeader}>
           <View style={{ width: 44 }} />
-          <Text style={styles.modalTitle}>Log a Workout</Text>
+          <Text style={styles.modalTitle}>Log an Activity</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
         </View>
       )}
       <ScrollView contentContainerStyle={styles.content}>
-      {!onClose && <Text style={styles.heading}>Log a Workout</Text>}
 
       {/* Activity type */}
       <Text style={styles.label}>TYPE</Text>
