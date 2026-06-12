@@ -22,8 +22,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: WEB_CLIENT_ID,
-    webClientId:  WEB_CLIENT_ID,
+    expoClientId:   WEB_CLIENT_ID,
+    webClientId:    WEB_CLIENT_ID,
+    androidClientId: WEB_CLIENT_ID,
+    iosClientId:    WEB_CLIENT_ID,
     responseType: ResponseType.IdToken,
     scopes: ['profile', 'email'],
   });
