@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
-import { TrainingDB, ActivityEntry } from '../types';
+import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry } from '../types';
 
 interface Props {
   user: User;
@@ -12,7 +12,7 @@ interface Props {
   onNavigateToAdd: () => void;
 }
 
-function getThisWeekRange() {
+function getWeekRange() {
   const now = new Date();
   const day = now.getDay();
   const monday = new Date(now);
@@ -24,91 +24,164 @@ function getThisWeekRange() {
   return { monday, sunday };
 }
 
-function fmtDist(d: number | string) {
-  const n = Number(d);
-  return n > 0 ? `${n.toFixed(1)} km` : '';
+function fmtDist(n: number) {
+  return n > 0 ? `${n.toFixed(1)} km` : '—';
 }
-
-function fmtDur(d: number | string) {
-  const mins = Number(d);
-  if (!mins) return '';
+function fmtHours(mins: number) {
+  if (!mins) return '—';
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
+function fmtVert(m: number) {
+  return m > 0 ? `${Math.round(m)} m` : '—';
+}
 
 function actLabel(act: ActivityEntry) {
   if (act.actType === 'run') {
-    const r = act as import('../types').RunEntry;
+    const r = act as RunEntry;
     return r.runType
       ? r.runType.charAt(0).toUpperCase() + r.runType.slice(1) + ' Run'
       : 'Run';
   }
-  if (act.actType === 'cross') {
-    const c = act as import('../types').CrossEntry;
-    return c.subtype || 'Cross-Training';
-  }
-  if (act.actType === 'strength') return 'Strength';
+  if (act.actType === 'cross') return (act as CrossEntry).subtype || 'Cross-Training';
+  if (act.actType === 'strength') return (act as StrengthEntry).subtype || 'Strength';
   if (act.actType === 'recovery') return 'Recovery';
   return 'Workout';
 }
 
+const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
 export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
-  const { monday, sunday } = useMemo(getThisWeekRange, []);
+  const { monday, sunday } = useMemo(getWeekRange, []);
+  const isCycling = db.primarySport === 'cycling';
+  const todayISO = new Date().toISOString().slice(0, 10);
 
-  const allActivities: ActivityEntry[] = useMemo(() => {
-    const all: ActivityEntry[] = [
-      ...db.runs,
-      ...db.crosses,
-      ...db.strengths,
-      ...db.recoveries,
-    ];
-    return all.sort((a, b) => b.date.localeCompare(a.date));
-  }, [db]);
+  const allActivities: ActivityEntry[] = useMemo(() => (
+    [...db.runs, ...db.crosses, ...db.strengths, ...db.recoveries]
+      .sort((a, b) => b.date.localeCompare(a.date))
+  ), [db]);
 
-  const weekActivities = useMemo(() => {
-    return allActivities.filter((a) => {
-      const d = new Date(a.date + 'T12:00:00');
-      return d >= monday && d <= sunday;
-    });
-  }, [allActivities, monday, sunday]);
+  const inWeek = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d >= monday && d <= sunday;
+  };
 
-  const weeklyStats = useMemo(() => {
-    let dist = 0, mins = 0, count = 0;
-    weekActivities.forEach((a) => {
-      count++;
-      if ('dist' in a) dist += Number(a.dist) || 0;
-      if ('dur' in a) mins += Number(a.dur) || 0;
-    });
-    return { dist, mins, count };
-  }, [weekActivities]);
+  const weekRuns      = useMemo(() => db.runs.filter(r => inWeek(r.date)),      [db, monday]);
+  const weekCross     = useMemo(() => db.crosses.filter(c => inWeek(c.date)),   [db, monday]);
+  const weekStrength  = useMemo(() => db.strengths.filter(s => inWeek(s.date)), [db, monday]);
 
-  const recentActivities = allActivities.slice(0, 7);
+  // Running / cycling weekly stats
+  const runStats = useMemo(() => {
+    const dist     = weekRuns.reduce((s, r) => s + (Number(r.dist) || 0), 0);
+    const vert     = weekRuns.reduce((s, r) => s + (Number(r.vert) || 0), 0);
+    const mins     = weekRuns.reduce((s, r) => s + (Number(r.dur)  || 0), 0);
+    const longest  = weekRuns.reduce((max, r) => Math.max(max, Number(r.dist) || 0), 0);
+    return { dist, vert, mins, longest };
+  }, [weekRuns]);
+
+  // Cross-training weekly stats
+  const crossStats = useMemo(() => {
+    const dist     = weekCross.reduce((s, c) => s + (Number(c.dist) || 0), 0);
+    const vert     = weekCross.reduce((s, c) => s + (Number(c.vert) || 0), 0);
+    const crossMin = weekCross.reduce((s, c) => s + (Number(c.dur)  || 0), 0);
+    const strMin   = weekStrength.reduce((s, x) => s + (Number(x.dur) || 0), 0);
+    return { dist, vert, totalMins: crossMin + strMin, strengthCount: weekStrength.length };
+  }, [weekCross, weekStrength]);
+
+  // Activity dot map for mini calendar (by weekday index 0=Mon)
+  const weekDotMap = useMemo(() => {
+    const map: Record<number, string[]> = {};
+    const addDot = (dateStr: string, color: string) => {
+      const d = new Date(dateStr + 'T12:00:00');
+      if (d < monday || d > sunday) return;
+      const idx = (d.getDay() + 6) % 7; // 0=Mon
+      if (!map[idx]) map[idx] = [];
+      if (!map[idx].includes(color)) map[idx].push(color);
+    };
+    db.runs.forEach(r       => addDot(r.date, colors.pink));
+    db.crosses.forEach(c    => addDot(c.date, colors.blue));
+    db.strengths.forEach(s  => addDot(s.date, colors.amber));
+    db.recoveries.forEach(r => addDot(r.date, colors.green));
+    return map;
+  }, [db, monday, sunday]);
+
+  // Week day labels + ISO dates
+  const weekDays = useMemo(() => (
+    Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return { iso: d.toISOString().slice(0, 10), num: d.getDate() };
+    })
+  ), [monday]);
+
+  const weekRangeLabel = (() => {
+    const start = monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const end   = sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `${start} – ${end}`;
+  })();
 
   const firstName = user.displayName?.split(' ')[0] ?? 'Athlete';
+  const recentActivities = allActivities.slice(0, 6);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
+
+      {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
-          <Text style={styles.subGreeting}>Here's your week so far</Text>
+          <Text style={styles.subGreeting}>{weekRangeLabel}</Text>
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={onNavigateToAdd}>
           <Text style={styles.addBtnText}>+ Log</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Weekly Stats */}
-      <View style={styles.statsRow}>
-        <StatCard label="Workouts" value={String(weeklyStats.count)} color={colors.pink} />
-        <StatCard label="Distance" value={fmtDist(weeklyStats.dist) || '—'} color={colors.blue} />
-        <StatCard label="Time" value={fmtDur(weeklyStats.mins) || '—'} color={colors.green} />
+      {/* ── Running / Cycling ──────────────────────────────── */}
+      <Text style={styles.sectionLabel}>{isCycling ? 'CYCLING' : 'RUNNING'}</Text>
+      <View style={styles.grid}>
+        <StatCard label="Weekly Distance" value={fmtDist(runStats.dist)}    color={colors.pink}  />
+        <StatCard label="Weekly Vert"     value={fmtVert(runStats.vert)}    color={colors.blue}  />
+        <StatCard label="Time on Feet"    value={fmtHours(runStats.mins)}   color={colors.purple} />
+        <StatCard label={isCycling ? 'Longest Ride' : 'Longest Run'} value={fmtDist(runStats.longest)} color={colors.amber} />
       </View>
 
-      {/* Recent Activities */}
-      <Text style={styles.sectionTitle}>Recent Activities</Text>
+      {/* ── Cross-Training ─────────────────────────────────── */}
+      <Text style={styles.sectionLabel}>CROSS-TRAINING</Text>
+      <View style={styles.grid}>
+        <StatCard label="Total Hours"     value={fmtHours(crossStats.totalMins)}       color={colors.pink}  />
+        <StatCard label="Total Distance"  value={fmtDist(crossStats.dist)}             color={colors.blue}  />
+        <StatCard label="Total Vert"      value={fmtVert(crossStats.vert)}             color={colors.green} />
+        <StatCard label="Strength"        value={`${crossStats.strengthCount} sessions`} color={colors.amber} />
+      </View>
+
+      {/* ── This Week mini-calendar ────────────────────────── */}
+      <Text style={styles.sectionLabel}>THIS WEEK</Text>
+      <View style={styles.miniCal}>
+        {weekDays.map((day, i) => {
+          const isToday = day.iso === todayISO;
+          const dots    = weekDotMap[i] ?? [];
+          return (
+            <View key={day.iso} style={[styles.miniDay, isToday && styles.miniDayToday]}>
+              <Text style={[styles.miniDayName, isToday && styles.miniDayNameToday]}>
+                {WEEK_DAYS[i]}
+              </Text>
+              <Text style={[styles.miniDayNum, isToday && styles.miniDayNumToday]}>
+                {day.num}
+              </Text>
+              <View style={styles.miniDots}>
+                {dots.slice(0, 2).map((c, di) => (
+                  <View key={di} style={[styles.miniDot, { backgroundColor: c }]} />
+                ))}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* ── Recent Activities ──────────────────────────────── */}
+      <Text style={styles.sectionLabel}>RECENT ACTIVITY</Text>
 
       {recentActivities.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -116,9 +189,7 @@ export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
           <Text style={styles.emptySubText}>Tap "+ Log" to record your first workout.</Text>
         </View>
       ) : (
-        recentActivities.map((act) => (
-          <ActivityRow key={act.id} act={act} />
-        ))
+        recentActivities.map(act => <ActivityRow key={act.id} act={act} />)
       )}
     </ScrollView>
   );
@@ -135,9 +206,10 @@ function StatCard({ label, value, color }: { label: string; value: string; color
 
 function ActivityRow({ act }: { act: ActivityEntry }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
-  const dist = 'dist' in act ? fmtDist((act as any).dist) : '';
-  const dur  = 'dur' in act ? fmtDur((act as any).dur) : '';
-  const meta = [dist, dur].filter(Boolean).join(' · ');
+  const dist = 'dist' in act && Number((act as any).dist) > 0
+    ? `${Number((act as any).dist).toFixed(1)} km` : '';
+  const dur = 'dur' in act ? fmtHours(Number((act as any).dur)) : '';
+  const meta = [dist, dur === '—' ? '' : dur].filter(Boolean).join(' · ');
   const dateStr = new Date(act.date + 'T12:00:00').toLocaleDateString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric',
   });
@@ -147,7 +219,7 @@ function ActivityRow({ act }: { act: ActivityEntry }) {
       <View style={[styles.actDot, { backgroundColor: dotColor }]} />
       <View style={styles.actInfo}>
         <Text style={styles.actLabel}>{actLabel(act)}</Text>
-        <Text style={styles.actMeta}>{dateStr}{meta ? ' · ' + meta : ''}</Text>
+        <Text style={styles.actMeta}>{dateStr}{meta ? '  ·  ' + meta : ''}</Text>
       </View>
     </View>
   );
@@ -155,73 +227,66 @@ function ActivityRow({ act }: { act: ActivityEntry }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, paddingBottom: 40 },
+  content:   { padding: 16, paddingBottom: 40 },
 
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 24,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 20,
   },
-  greeting: { fontSize: 22, fontWeight: '800', color: colors.text },
-  subGreeting: { fontSize: 14, color: colors.muted, marginTop: 2 },
+  greeting:    { fontSize: 22, fontWeight: '800', color: colors.text },
+  subGreeting: { fontSize: 13, color: colors.muted, marginTop: 2 },
   addBtn: {
-    backgroundColor: colors.pink,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: colors.pink, borderRadius: 10,
+    paddingHorizontal: 16, paddingVertical: 8,
   },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 28,
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.muted,
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginTop: 4,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    borderTopWidth: 3,
-    borderTopColor: colors.pink,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statValue: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  statLabel: { fontSize: 11, color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 12,
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  statCard: {
+    width: '47.5%',
+    backgroundColor: colors.surface, borderRadius: 12,
+    padding: 12, borderTopWidth: 3, borderWidth: 1, borderColor: colors.border,
   },
+  statValue: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  statLabel: { fontSize: 10, color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  miniCal: {
+    flexDirection: 'row', backgroundColor: colors.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+    marginBottom: 16, overflow: 'hidden',
+  },
+  miniDay: {
+    flex: 1, alignItems: 'center', paddingVertical: 10,
+    borderRightWidth: 0.5, borderRightColor: colors.border,
+  },
+  miniDayToday:     { backgroundColor: colors.pink + '18' },
+  miniDayName:      { fontSize: 10, color: colors.muted, fontWeight: '600', marginBottom: 4 },
+  miniDayNameToday: { color: colors.pink },
+  miniDayNum:       { fontSize: 13, fontWeight: '600', color: colors.text },
+  miniDayNumToday:  { color: colors.pink, fontWeight: '800' },
+  miniDots:         { flexDirection: 'row', gap: 2, marginTop: 4, height: 8, alignItems: 'center' },
+  miniDot:          { width: 4, height: 4, borderRadius: 2 },
 
   emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface, borderRadius: 12,
+    padding: 24, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
   },
-  emptyText: { fontSize: 15, color: colors.text, fontWeight: '600', marginBottom: 4 },
+  emptyText:    { fontSize: 15, color: colors.text, fontWeight: '600', marginBottom: 4 },
   emptySubText: { fontSize: 13, color: colors.muted },
 
   actRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface, borderRadius: 12,
+    padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: colors.border, gap: 12,
   },
-  actDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  actDot:  { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
   actInfo: { flex: 1 },
   actLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
-  actMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  actMeta:  { fontSize: 12, color: colors.muted, marginTop: 2 },
 });
