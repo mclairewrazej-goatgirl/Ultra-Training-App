@@ -273,7 +273,7 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
 
 // ─── Plan Workout Modal ───────────────────────────────────────────────────────
 
-function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
+export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
   date: string; user: User; db: TrainingDB;
   onSaved: (u: TrainingDB) => void; onClose: () => void;
 }) {

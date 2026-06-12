@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView,
 } from 'react-native';
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
@@ -10,7 +10,6 @@ import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
 interface Props {
   user: User;
   db: TrainingDB;
-  onNavigateToAdd: () => void;
 }
 
 function getWeekRange() {
@@ -53,7 +52,7 @@ function actLabel(act: ActivityEntry) {
 
 const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
+export default function DashboardScreen({ user, db }: Props) {
   const { monday, sunday } = useMemo(getWeekRange, []);
   const isCycling = db.primarySport === 'cycling';
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -160,9 +159,6 @@ export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
           <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
           <Text style={styles.subGreeting}>{weekRangeLabel}</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={onNavigateToAdd}>
-          <Text style={styles.addBtnText}>+ Log</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── Running / Cycling ──────────────────────────────── */}
@@ -275,12 +271,6 @@ const styles = StyleSheet.create({
   },
   greeting:    { fontSize: 22, fontWeight: '800', color: colors.text },
   subGreeting: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  addBtn: {
-    backgroundColor: colors.pink, borderRadius: 10,
-    paddingHorizontal: 16, paddingVertical: 8,
-  },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: colors.muted,
     letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginTop: 4,

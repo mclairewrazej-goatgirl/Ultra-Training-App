@@ -138,13 +138,19 @@ export default function App() {
               <DashboardScreen
                 user={user}
                 db={db}
-                onNavigateToAdd={() => {/* navigate via tab */}}
               />
             )}
           </Tab.Screen>
 
           <Tab.Screen name="Activity Log" options={{ tabBarLabel: 'Log' }}>
-            {() => <LogScreen db={db} onEditEntry={setEditingEntry} />}
+            {() => (
+              <LogScreen
+                user={user}
+                db={db}
+                onSaved={handleDBUpdate}
+                onEditEntry={setEditingEntry}
+              />
+            )}
           </Tab.Screen>
 
           <Tab.Screen name="Add" options={{ title: 'Log Workout' }}>

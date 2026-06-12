@@ -27,20 +27,28 @@ interface Props {
   user: User;
   db: TrainingDB;
   onSaved: (updatedDB: TrainingDB) => void;
+  initialType?: ActType;
+  onClose?: () => void;
 }
 
-export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
+export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClose }: Props) {
   const isCycling = db.primarySport === 'cycling';
   const crossTypes = isCycling ? CROSS_CYCLE : CROSS_RUN;
 
-  const [actType,  setActType]  = useState<ActType>('run');
+  const [actType,  setActType]  = useState<ActType>(initialType ?? 'run');
   const [date,     setDate]     = useState(todayISO());
   const [dist,     setDist]     = useState('');
   const [dur,      setDur]      = useState('');
   const [vert,     setVert]     = useState('');
   const [hr,       setHr]       = useState('');
   const [notes,    setNotes]    = useState('');
-  const [subtype,  setSubtype]  = useState('easy');
+  const [subtype,  setSubtype]  = useState(() => {
+    const t = initialType ?? 'run';
+    if (t === 'cross')    return crossTypes[0];
+    if (t === 'strength') return STRENGTH_SUB[0];
+    if (t === 'recovery') return RECOVERY_SUB[0];
+    return 'easy';
+  });
   const [terrain,  setTerrain]  = useState('trail');
   const [bikeType, setBikeType] = useState('Gravel');
   const [rpe,      setRpe]      = useState('5');
@@ -121,11 +129,15 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
     try {
       await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
-      setDist(''); setDur(''); setVert(''); setHr(''); setNotes('');
-      setDate(todayISO()); setActType('run'); setSubtype('easy');
-      setTerrain('trail'); setBikeType('Gravel'); setRpe('5');
-      setShowNutr(false); setNutrQty({});
-      Alert.alert('Saved!', 'Workout logged successfully');
+      if (onClose) {
+        onClose();
+      } else {
+        setDist(''); setDur(''); setVert(''); setHr(''); setNotes('');
+        setDate(todayISO()); setActType('run'); setSubtype('easy');
+        setTerrain('trail'); setBikeType('Gravel'); setRpe('5');
+        setShowNutr(false); setNutrQty({});
+        Alert.alert('Saved!', 'Workout logged successfully');
+      }
     } catch (err: any) {
       Alert.alert('Save failed', err.message);
     } finally {
@@ -139,8 +151,18 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
     : colors.green;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Log a Workout</Text>
+    <View style={styles.container}>
+      {onClose && (
+        <View style={styles.modalHeader}>
+          <View style={{ width: 44 }} />
+          <Text style={styles.modalTitle}>Log a Workout</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <Text style={styles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <ScrollView contentContainerStyle={styles.content}>
+      {!onClose && <Text style={styles.heading}>Log a Workout</Text>}
 
       {/* Activity type */}
       <Text style={styles.label}>TYPE</Text>
@@ -331,7 +353,8 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
       >
         <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Workout'}</Text>
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -339,6 +362,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content:   { padding: 20, paddingBottom: 60 },
   heading:   { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 20 },
+
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, backgroundColor: colors.surface,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  closeBtn:   { width: 44, alignItems: 'flex-end' },
+  closeBtnText: { fontSize: 22, color: colors.muted, fontWeight: '300' },
 
   label: {
     fontSize: 11, color: colors.muted, fontWeight: '600',
