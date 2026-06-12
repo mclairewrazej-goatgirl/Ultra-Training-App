@@ -41,9 +41,10 @@ function actTitle(act: ActivityEntry): string {
 
 interface Props {
   db: TrainingDB;
+  onEditEntry: (entry: ActivityEntry) => void;
 }
 
-export default function LogScreen({ db }: Props) {
+export default function LogScreen({ db, onEditEntry }: Props) {
   const [filter, setFilter] = useState<FilterType>('all');
 
   const allActivities: ActivityEntry[] = useMemo(() => {
@@ -87,13 +88,13 @@ export default function LogScreen({ db }: Props) {
             <Text style={styles.emptyText}>No activities to show.</Text>
           </View>
         }
-        renderItem={({ item }) => <LogItem act={item} />}
+        renderItem={({ item }) => <LogItem act={item} onPress={() => onEditEntry(item)} />}
       />
     </View>
   );
 }
 
-function LogItem({ act }: { act: ActivityEntry }) {
+function LogItem({ act, onPress }: { act: ActivityEntry; onPress: () => void }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
   const dist = 'dist' in act ? fmtDist((act as any).dist) : null;
   const dur  = 'dur' in act ? fmtDur((act as any).dur) : null;
@@ -106,7 +107,7 @@ function LogItem({ act }: { act: ActivityEntry }) {
   });
 
   return (
-    <View style={styles.item}>
+    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.itemHeader}>
         <View style={styles.itemLeft}>
           <View style={[styles.dot, { backgroundColor: dotColor }]} />
@@ -122,7 +123,7 @@ function LogItem({ act }: { act: ActivityEntry }) {
       </View>
       {vert && <Text style={styles.detail}>↑ {vert}</Text>}
       {notes ? <Text style={styles.notes} numberOfLines={2}>{notes}</Text> : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
