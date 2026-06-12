@@ -5,6 +5,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { ResponseType } from 'expo-auth-session';
 import {
   signInAnonymously,
   GoogleAuthProvider,
@@ -15,35 +16,27 @@ import { colors } from '../theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// To enable Google Sign-In (required for shared data between web + mobile):
-//
-//  1. Open Firebase Console → your project → Authentication → Sign-in method
-//  2. Make sure Google is enabled.
-//  3. Under Google → Web SDK configuration, copy the "Web client ID".
-//  4. Go to Google Cloud Console → APIs & Services → Credentials.
-//     Create an OAuth 2.0 Client ID of type "Web application".
-//     Add https://auth.expo.io as an authorized redirect URI.
-//     Copy that client ID as EXPO_CLIENT_ID below.
-//  5. Paste both values in the constants below and rebuild.
-// ─────────────────────────────────────────────────────────────────────────────
-const EXPO_CLIENT_ID = '';   // paste expoClientId here (for Expo Go testing)
-const WEB_CLIENT_ID  = '';   // paste webClientId here  (from Firebase Console)
+const WEB_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
-  const googleEnabled = !!(EXPO_CLIENT_ID && WEB_CLIENT_ID);
-
   const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId:   EXPO_CLIENT_ID || undefined,
-    webClientId:    WEB_CLIENT_ID  || undefined,
+    expoClientId: WEB_CLIENT_ID,
+    webClientId:  WEB_CLIENT_ID,
+    responseType: ResponseType.IdToken,
+    scopes: ['profile', 'email'],
   });
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const { id_token } = response.params;
-      const credential = GoogleAuthProvider.credential(id_token);
+      const idToken = response.params.id_token ?? response.authentication?.idToken;
+      if (!idToken) {
+        Alert.alert('Sign-in failed', 'No ID token returned from Google.');
+        setLoading(false);
+        return;
+      }
+      const credential = GoogleAuthProvider.credential(idToken);
       signInWithCredential(auth, credential).catch(err => {
         Alert.alert('Sign-in failed', err.message);
         setLoading(false);
@@ -83,29 +76,20 @@ export default function LoginScreen() {
           Sign in with the same Google account you use on the web app to access all your training data on your phone.
         </Text>
 
-        {googleEnabled ? (
-          <TouchableOpacity
-            style={[styles.googleBtn, (!request || loading) && styles.btnDisabled]}
-            onPress={handleGoogleSignIn}
-            disabled={!request || loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#222" />
-            ) : (
-              <>
-                <Text style={styles.googleIcon}>G</Text>
-                <Text style={styles.googleBtnText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.setupNotice}>
-            <Text style={styles.setupNoticeText}>
-              Google Sign-In not configured yet.{'\n'}
-              See the comment in LoginScreen.tsx to set up your OAuth client IDs.
-            </Text>
-          </View>
-        )}
+        <TouchableOpacity
+          style={[styles.googleBtn, (!request || loading) && styles.btnDisabled]}
+          onPress={handleGoogleSignIn}
+          disabled={!request || loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#222" />
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
