@@ -6,7 +6,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, ActivityEntry, PlannedWorkout, Race } from '../types';
+import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry } from '../types';
 import { colors, actColors } from '../theme';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -234,11 +234,12 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
               {plan.notes ? <Text style={styles.planNotes} numberOfLines={1}>{plan.notes}</Text> : null}
             </View>
             <View style={styles.planActions}>
-              {!plan.completed && (
-                <TouchableOpacity style={styles.doneBtn} onPress={() => setCompletingPlan(plan)}>
-                  <Text style={styles.doneBtnText}>✓</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.doneBtn, plan.completed && styles.editDoneBtn]}
+                onPress={() => setCompletingPlan(plan)}
+              >
+                <Text style={styles.doneBtnText}>{plan.completed ? '✎' : '✓'}</Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => handleDeletePlan(plan.id)}>
                 <Text style={styles.deletePlan}>✕</Text>
               </TouchableOpacity>
@@ -373,27 +374,90 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
   plan: PlannedWorkout; user: User; db: TrainingDB;
   onSaved: (u: TrainingDB) => void; onClose: () => void;
 }) {
-  const [actualDist, setActualDist] = useState(String(plan.dist || ''));
-  const [actualDur,  setActualDur]  = useState(String(plan.dur  || ''));
-  const [actualVert, setActualVert] = useState('');
-  const [actualHr,   setActualHr]   = useState('');
-  const [compNotes,  setCompNotes]  = useState('');
+  const [actualDist, setActualDist] = useState(
+    plan.actualDist != null ? String(plan.actualDist) : String(plan.dist || ''),
+  );
+  const [actualDur,  setActualDur]  = useState(
+    plan.actualDur  != null ? String(plan.actualDur)  : String(plan.dur  || ''),
+  );
+  const [actualVert, setActualVert] = useState(String(plan.actualVert || ''));
+  const [actualHr,   setActualHr]   = useState(String(plan.actualHr   || ''));
+  const [compNotes,  setCompNotes]  = useState(plan.completionNotes   || '');
   const [saving, setSaving] = useState(false);
 
   const accentColor = planTypeColor(plan.type);
+  const isEditing = !!plan.completed;
 
   const handleSave = async () => {
     setSaving(true);
-    const updated: PlannedWorkout = {
-      ...plan,
-      completed: true,
-      actualDist: Number(actualDist) || 0,
-      actualDur:  Number(actualDur)  || 0,
-      actualVert: Number(actualVert) || 0,
-      actualHr:   Number(actualHr)   || 0,
+
+    const entryId  = plan.completedEntryId || uid();
+    const dist     = Number(actualDist) || 0;
+    const dur      = Number(actualDur)  || 0;
+    const vert     = Number(actualVert) || 0;
+    const hr       = Number(actualHr)   || 0;
+
+    let newRuns       = [...db.runs];
+    let newCrosses    = [...db.crosses];
+    let newStrengths  = [...db.strengths];
+    let newRecoveries = [...db.recoveries];
+
+    if (plan.type === 'Run' || plan.type === 'Race') {
+      const entry: RunEntry = {
+        id: entryId, date: plan.date, actType: 'run',
+        runType: plan.type === 'Race' ? 'race' : 'easy',
+        terrain: '', dist, dur, vert, hr, notes: compNotes,
+      };
+      if (plan.completedEntryId) {
+        newRuns = newRuns.map(r => r.id === entryId ? entry : r);
+      } else {
+        newRuns = [...newRuns, entry];
+      }
+    } else if (plan.type === 'Cross-training') {
+      const entry: CrossEntry = {
+        id: entryId, date: plan.date, actType: 'cross',
+        subtype: 'Run', dist, dur, vert, rpe: 0, notes: compNotes,
+      };
+      if (plan.completedEntryId) {
+        newCrosses = newCrosses.map(c => c.id === entryId ? entry : c);
+      } else {
+        newCrosses = [...newCrosses, entry];
+      }
+    } else if (plan.type === 'Strength') {
+      const entry: StrengthEntry = {
+        id: entryId, date: plan.date, actType: 'strength',
+        subtype: 'Gym Strength', dur, notes: compNotes,
+      };
+      if (plan.completedEntryId) {
+        newStrengths = newStrengths.map(s => s.id === entryId ? entry : s);
+      } else {
+        newStrengths = [...newStrengths, entry];
+      }
+    } else {
+      const entry: RecoveryEntry = {
+        id: entryId, date: plan.date, actType: 'recovery',
+        subtype: 'Stretch', dur, notes: compNotes,
+      };
+      if (plan.completedEntryId) {
+        newRecoveries = newRecoveries.map(r => r.id === entryId ? entry : r);
+      } else {
+        newRecoveries = [...newRecoveries, entry];
+      }
+    }
+
+    const updatedPlan: PlannedWorkout = {
+      ...plan, completed: true, completedEntryId: entryId,
+      actualDist: dist, actualDur: dur, actualVert: vert, actualHr: hr,
       completionNotes: compNotes,
     };
-    const newDB = { ...db, plans: db.plans.map(p => p.id === plan.id ? updated : p) };
+
+    const newDB: TrainingDB = {
+      ...db,
+      runs: newRuns, crosses: newCrosses,
+      strengths: newStrengths, recoveries: newRecoveries,
+      plans: db.plans.map(p => p.id === plan.id ? updatedPlan : p),
+    };
+
     try {
       await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
@@ -410,7 +474,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
-          <Text style={styles.modalTitle}>Mark as Done</Text>
+          <Text style={styles.modalTitle}>{isEditing ? 'Edit Completion' : 'Mark as Done'}</Text>
           <View style={{ width: 60 }} />
         </View>
         <ScrollView contentContainerStyle={styles.modalContent}>
@@ -461,7 +525,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
             style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
             onPress={handleSave} disabled={saving}
           >
-            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : '✓ Mark as Done'}</Text>
+            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : isEditing ? 'Update' : '✓ Mark as Done'}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -549,6 +613,7 @@ const styles = StyleSheet.create({
   planNotes:      { fontSize: 11, color: colors.muted2, marginTop: 2, fontStyle: 'italic' },
   planActions:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 8 },
   doneBtn:        { backgroundColor: colors.green, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  editDoneBtn:    { backgroundColor: colors.blue },
   doneBtnText:    { color: '#fff', fontSize: 12, fontWeight: '700' },
   deletePlan:     { color: colors.red, fontSize: 16 },
 

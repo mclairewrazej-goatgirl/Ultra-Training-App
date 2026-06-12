@@ -62,6 +62,7 @@ export interface PlannedWorkout {
   notes: string;
   planned: true;
   completed?: boolean;
+  completedEntryId?: string;
   actualDist?: number | string;
   actualDur?: number | string;
   actualVert?: number | string;
