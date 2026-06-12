@@ -5,6 +5,7 @@ import {
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
 import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry } from '../types';
+import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
 
 interface Props {
   user: User;
@@ -80,14 +81,40 @@ export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
     return { dist, vert, mins, longest };
   }, [weekRuns]);
 
-  // Cross-training weekly stats
+  const skiActive = isInSkiSeason(db.seasonalSport);
+
+  // Cross-training weekly stats (exclude ski if ski season active, matching web app)
   const crossStats = useMemo(() => {
-    const dist     = weekCross.reduce((s, c) => s + (Number(c.dist) || 0), 0);
-    const vert     = weekCross.reduce((s, c) => s + (Number(c.vert) || 0), 0);
-    const crossMin = weekCross.reduce((s, c) => s + (Number(c.dur)  || 0), 0);
+    const nonSkiCross = skiActive ? weekCross.filter(c => !isSkiSubtype(c.subtype)) : weekCross;
+    const dist     = nonSkiCross.reduce((s, c) => s + (Number(c.dist) || 0), 0);
+    const vert     = nonSkiCross.reduce((s, c) => s + (Number(c.vert) || 0), 0);
+    const crossMin = nonSkiCross.reduce((s, c) => s + (Number(c.dur)  || 0), 0);
     const strMin   = weekStrength.reduce((s, x) => s + (Number(x.dur) || 0), 0);
     return { dist, vert, totalMins: crossMin + strMin, strengthCount: weekStrength.length };
-  }, [weekCross, weekStrength]);
+  }, [weekCross, weekStrength, skiActive]);
+
+  // Ski stats (only calculated when ski season is active)
+  const skiStats = useMemo(() => {
+    if (!skiActive) return null;
+    const ss  = db.seasonalSport;
+    const weekSki = weekCross.filter(c => isSkiSubtype(c.subtype));
+    const [sm, sd] = ss.startMD.split('-').map(Number);
+    const [em, ed] = ss.endMD.split('-').map(Number);
+    const startN = sm * 100 + sd;
+    const endN   = em * 100 + ed;
+    const inRange = (d: string) => {
+      const dt  = new Date(d + 'T12:00:00');
+      const cur = (dt.getMonth() + 1) * 100 + dt.getDate();
+      return startN <= endN ? cur >= startN && cur <= endN : cur >= startN || cur <= endN;
+    };
+    const seasonSki = db.crosses.filter(c => isSkiSubtype(c.subtype) && inRange(c.date));
+    return {
+      days:       weekSki.length,
+      weekVert:   weekSki.reduce((s, c) => s + (Number(c.vert) || 0), 0),
+      weekMins:   weekSki.reduce((s, c) => s + (Number(c.dur)  || 0), 0),
+      seasonVert: seasonSki.reduce((s, c) => s + (Number(c.vert) || 0), 0),
+    };
+  }, [skiActive, weekCross, db.crosses, db.seasonalSport]);
 
   // Activity dot map for mini calendar (by weekday index 0=Mon)
   const weekDotMap = useMemo(() => {
@@ -155,6 +182,19 @@ export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
         <StatCard label="Total Vert"      value={fmtVert(crossStats.vert)}             color={colors.green} />
         <StatCard label="Strength"        value={`${crossStats.strengthCount} sessions`} color={colors.amber} />
       </View>
+
+      {/* ── Ski Season ─────────────────────────────────────── */}
+      {skiActive && skiStats && (
+        <>
+          <Text style={styles.sectionLabel}>SKI SEASON</Text>
+          <View style={styles.grid}>
+            <StatCard label="Days on Snow"  value={String(skiStats.days)}                       color={colors.blue}   />
+            <StatCard label="Weekly Vert"   value={fmtVert(skiStats.weekVert)}                  color={colors.purple} />
+            <StatCard label="Hours on Snow" value={fmtHours(skiStats.weekMins)}                 color={colors.pink}   />
+            <StatCard label="Season Vert"   value={`${skiStats.seasonVert.toLocaleString()} m`} color={colors.green}  />
+          </View>
+        </>
+      )}
 
       {/* ── This Week mini-calendar ────────────────────────── */}
       <Text style={styles.sectionLabel}>THIS WEEK</Text>

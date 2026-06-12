@@ -94,6 +94,12 @@ export interface Race {
   notes: string;
 }
 
+export interface SeasonalSport {
+  enabled: boolean;
+  startMD: string; // MM-DD  e.g. "11-01"
+  endMD: string;   // MM-DD  e.g. "04-30"
+}
+
 export interface TrainingDB {
   runs: RunEntry[];
   crosses: CrossEntry[];
@@ -109,6 +115,7 @@ export interface TrainingDB {
   logName: string;
   theme: string;
   primarySport: string;
+  seasonalSport: SeasonalSport;
 }
 
 export const emptyDB: TrainingDB = {
@@ -126,4 +133,5 @@ export const emptyDB: TrainingDB = {
   logName: '',
   theme: 'dark',
   primarySport: '',
+  seasonalSport: { enabled: false, startMD: '11-01', endMD: '04-30' },
 };
