@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, Alert, Modal,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
 import { User } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -97,25 +98,25 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
       {/* Navigation rows */}
       <View style={styles.navCard}>
         <TouchableOpacity style={styles.navRow} onPress={() => setShowGoals(true)}>
-          <Text style={styles.navIcon}>🎯</Text>
+          <Ionicons name="trophy-outline" size={20} color={colors.muted} style={styles.navIcon} />
           <Text style={styles.navLabel}>My Goals</Text>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
         <View style={styles.navDivider} />
         <TouchableOpacity style={styles.navRow} onPress={() => setShowNutrition(true)}>
-          <Text style={styles.navIcon}>🥗</Text>
+          <Ionicons name="nutrition-outline" size={20} color={colors.muted} style={styles.navIcon} />
           <Text style={styles.navLabel}>My Nutrition</Text>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
         <View style={styles.navDivider} />
         <TouchableOpacity style={styles.navRow} onPress={() => setShowRaces(true)}>
-          <Text style={styles.navIcon}>🏁</Text>
+          <Ionicons name="flag-outline" size={20} color={colors.muted} style={styles.navIcon} />
           <Text style={styles.navLabel}>My Races</Text>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
         <View style={styles.navDivider} />
         <TouchableOpacity style={styles.navRow} onPress={() => setShowSki(true)}>
-          <Text style={styles.navIcon}>⛷️</Text>
+          <Ionicons name="triangle-outline" size={20} color={colors.muted} style={styles.navIcon} />
           <Text style={styles.navLabel}>Ski Season</Text>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
   },
   navRow:    { flexDirection: 'row', alignItems: 'center', padding: 16 },
   navDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: 16 },
-  navIcon:   { fontSize: 20, marginRight: 12 },
+  navIcon:   { marginRight: 12 },
   navLabel:  { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
   navArrow:  { fontSize: 22, color: colors.muted, fontWeight: '300' },
 
