@@ -16,9 +16,7 @@ import { colors } from '../theme';
 WebBrowser.maybeCompleteAuthSession();
 
 const WEB_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
-// Paste the Android OAuth client ID here once created in Google Cloud Console:
-// Type: Android, Package: host.exp.exponent, SHA-1: from your debug keystore
-const ANDROID_CLIENT_ID = '';
+const ANDROID_CLIENT_ID = '528346991243-oone9nirjf6tbe4e6n3forraga04i9oc.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
