@@ -18,19 +18,17 @@ import AddWorkoutScreen   from './src/screens/AddWorkoutScreen';
 import ProfileScreen      from './src/screens/ProfileScreen';
 import EditWorkoutModal   from './src/screens/EditWorkoutModal';
 import CalendarScreen     from './src/screens/CalendarScreen';
-import NutritionScreen    from './src/screens/NutritionScreen';
 
 const Tab = createBottomTabNavigator();
 
 // Simple icon component using text characters so we don't need an icon library
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   const icons: Record<string, string> = {
-    Dashboard:  '⚡',
-    Log:        '📋',
-    Add:        '＋',
-    Calendar:   '📅',
-    Nutrition:  '🥗',
-    Profile:    '👤',
+    Dashboard: '⚡',
+    Log:       '📋',
+    Add:       '＋',
+    Calendar:  '📅',
+    Profile:   '👤',
   };
   return (
     <Text style={{ fontSize: focused ? 22 : 18, opacity: focused ? 1 : 0.5 }}>
@@ -161,10 +159,6 @@ export default function App() {
 
           <Tab.Screen name="Calendar">
             {() => <CalendarScreen user={user} db={db} onSaved={handleDBUpdate} />}
-          </Tab.Screen>
-
-          <Tab.Screen name="Nutrition">
-            {() => <NutritionScreen user={user} db={db} onSaved={handleDBUpdate} />}
           </Tab.Screen>
 
           <Tab.Screen name="Profile">

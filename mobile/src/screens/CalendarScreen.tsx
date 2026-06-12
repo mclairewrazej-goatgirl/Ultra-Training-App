@@ -6,7 +6,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, ActivityEntry, PlannedWorkout } from '../types';
+import { TrainingDB, ActivityEntry, PlannedWorkout, Race } from '../types';
 import { colors, actColors } from '../theme';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -63,6 +63,7 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
     db.crosses.forEach(c    => add(c.date, colors.blue));
     db.strengths.forEach(s  => add(s.date, colors.amber));
     db.recoveries.forEach(r => add(r.date, colors.green));
+    db.races.forEach(r      => add(r.date, colors.red));
     db.plans.forEach(p      => add(p.date, p.completed ? colors.muted2 : planTypeColor(p.type)));
     return map;
   }, [db]);
@@ -76,6 +77,10 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
 
   const selectedPlans: PlannedWorkout[] = useMemo(() => (
     db.plans.filter(p => p.date === selectedDate)
+  ), [selectedDate, db]);
+
+  const selectedRaces: Race[] = useMemo(() => (
+    db.races.filter(r => r.date === selectedDate)
   ), [selectedDate, db]);
 
   const firstDay    = new Date(year, month, 1).getDay();
@@ -185,6 +190,26 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
             </View>
           );
         })}
+
+        {/* Races */}
+        {selectedRaces.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>RACES</Text>
+            {selectedRaces.map(race => (
+              <View key={race.id} style={styles.raceRow}>
+                <Text style={styles.raceName}>🏁 {race.name}</Text>
+                <Text style={styles.raceDetail}>
+                  {[
+                    race.raceType.charAt(0).toUpperCase() + race.raceType.slice(1),
+                    Number(race.dist) > 0 ? `${race.dist} km` : null,
+                    race.result ? `Finish: ${race.result}` : race.goal ? `Goal: ${race.goal}` : null,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+                {race.loc ? <Text style={styles.raceLoc}>📍 {race.loc}</Text> : null}
+              </View>
+            ))}
+          </>
+        )}
 
         {/* Planned workouts */}
         <Text style={styles.sectionLabel}>PLANNED</Text>
@@ -491,6 +516,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', marginBottom: 6, marginTop: 4,
   },
   emptyPlans: { fontSize: 12, color: colors.muted2, marginBottom: 8, fontStyle: 'italic' },
+
+  raceRow: {
+    borderLeftWidth: 3, borderLeftColor: colors.red, paddingLeft: 10, marginBottom: 8,
+    backgroundColor: colors.surface, borderRadius: 8, padding: 10,
+  },
+  raceName:   { fontSize: 13, fontWeight: '700', color: colors.text },
+  raceDetail: { fontSize: 12, color: colors.red, marginTop: 2 },
+  raceLoc:    { fontSize: 11, color: colors.muted2, marginTop: 2 },
 
   actRow: {
     borderLeftWidth: 3, paddingLeft: 10, marginBottom: 8,

@@ -78,12 +78,27 @@ export interface NutritionItem {
   servingUnit: string;
 }
 
+export interface Race {
+  id: string;
+  date: string;
+  name: string;
+  raceType: 'run' | 'bike' | 'skimo';
+  bikeType?: string;
+  skimoCategory?: string;
+  dist: number | string;
+  loc: string;
+  goal: string;
+  vert: number | string;
+  result: string;
+  notes: string;
+}
+
 export interface TrainingDB {
   runs: RunEntry[];
   crosses: CrossEntry[];
   strengths: StrengthEntry[];
   recoveries: RecoveryEntry[];
-  races: unknown[];
+  races: Race[];
   plans: PlannedWorkout[];
   nutrition: NutritionItem[];
   trainingPlans: unknown[];
