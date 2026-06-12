@@ -18,9 +18,9 @@ WebBrowser.maybeCompleteAuthSession();
 // → Web SDK configuration (Web client ID).
 // For Expo Go testing you only need the androidClientId or expoClientId.
 // ---------------------------------------------------------------------------
-const GOOGLE_ANDROID_CLIENT_ID = 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID     = 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_WEB_CLIENT_ID     = 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_ANDROID_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
