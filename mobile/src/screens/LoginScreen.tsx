@@ -3,47 +3,21 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import * as AuthSession from 'expo-auth-session';
-import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { signInAnonymously } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { colors } from '../theme';
-
-// Required for expo-auth-session to complete the OAuth flow
-WebBrowser.maybeCompleteAuthSession();
-
-const GOOGLE_WEB_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
-
-  const [, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: GOOGLE_WEB_CLIENT_ID,
-    webClientId:     GOOGLE_WEB_CLIENT_ID,
-    redirectUri,
-  });
-
-  // Handle the OAuth response when it comes back
-  React.useEffect(() => {
-    if (response?.type === 'success') {
-      const { id_token } = response.params;
-      const credential = GoogleAuthProvider.credential(id_token);
-      setLoading(true);
-      signInWithCredential(auth, credential)
-        .catch((err) => {
-          Alert.alert('Sign-in failed', err.message);
-          setLoading(false);
-        });
-    }
-  }, [response]);
-
-  const handleSignIn = async () => {
+  // Anonymous sign-in lets you explore the app UI without Google OAuth setup.
+  // Replace with Google Sign-In once you have a proper development build.
+  const handleAnonymousSignIn = async () => {
     setLoading(true);
-    await promptAsync({ useProxy: true });
-    setLoading(false);
+    signInAnonymously(auth).catch((err) => {
+      Alert.alert('Sign-in failed', err.message);
+      setLoading(false);
+    });
   };
 
   return (
@@ -55,23 +29,21 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Sign in to continue</Text>
+        <Text style={styles.cardTitle}>Welcome</Text>
         <Text style={styles.cardBody}>
-          Use the same Google account as your web app — your data is shared.
+          Sign in to explore the app. Use "Try the app" to browse the UI,
+          or sign in with Google once you have a development build set up.
         </Text>
 
         <TouchableOpacity
-          style={[styles.googleBtn, loading && styles.btnDisabled]}
-          onPress={handleSignIn}
+          style={[styles.primaryBtn, loading && styles.btnDisabled]}
+          onPress={handleAnonymousSignIn}
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color={colors.bg} />
+            <ActivityIndicator color="#fff" />
           ) : (
-            <>
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleBtnText}>Sign in with Google</Text>
-            </>
+            <Text style={styles.primaryBtnText}>Try the app →</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -125,27 +97,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 20,
   },
-  googleBtn: {
-    flexDirection: 'row',
+  primaryBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.pink,
     borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 20,
-    gap: 10,
   },
   btnDisabled: {
     opacity: 0.6,
   },
-  googleIcon: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#4285F4',
-  },
-  googleBtnText: {
+  primaryBtnText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontWeight: '700',
+    color: '#fff',
   },
 });
