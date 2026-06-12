@@ -22,21 +22,18 @@ import CalendarScreen     from './src/screens/CalendarScreen';
 
 const Tab = createBottomTabNavigator();
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
-const TAB_ICONS: Record<string, { active: IoniconName; inactive: IoniconName }> = {
-  Dashboard:      { active: 'grid',             inactive: 'grid-outline'           },
-  'Activity Log': { active: 'pulse',            inactive: 'pulse-outline'          },
-  Add:            { active: 'add-circle',        inactive: 'add-circle-outline'     },
-  Calendar:       { active: 'calendar',          inactive: 'calendar-outline'       },
-  Profile:        { active: 'person',            inactive: 'person-outline'         },
+const TAB_ICONS: Record<string, [string, string]> = {
+  Dashboard:      ['grid',       'grid-outline'      ],
+  'Activity Log': ['pulse',      'pulse-outline'     ],
+  Add:            ['add-circle', 'add-circle-outline'],
+  Calendar:       ['calendar',   'calendar-outline'  ],
+  Profile:        ['person',     'person-outline'    ],
 };
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  const icon = TAB_ICONS[label];
-  const name = focused ? icon?.active : icon?.inactive;
+  const [active, inactive] = TAB_ICONS[label] ?? ['ellipse', 'ellipse-outline'];
   const color = label === 'Add' ? colors.pink : focused ? colors.pink : colors.muted;
-  return <Ionicons name={name ?? 'ellipse-outline'} size={focused ? 24 : 22} color={color} />;
+  return <Ionicons name={(focused ? active : inactive) as any} size={focused ? 24 : 22} color={color} />;
 }
 
 export default function App() {
