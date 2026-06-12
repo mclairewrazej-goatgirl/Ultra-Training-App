@@ -102,12 +102,6 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
         <View style={styles.navDivider} />
-        <TouchableOpacity style={styles.navRow} onPress={() => setShowSki(true)}>
-          <Text style={styles.navIcon}>⛷️</Text>
-          <Text style={styles.navLabel}>Ski Season</Text>
-          <Text style={styles.navArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.navDivider} />
         <TouchableOpacity style={styles.navRow} onPress={() => setShowNutrition(true)}>
           <Text style={styles.navIcon}>🥗</Text>
           <Text style={styles.navLabel}>My Nutrition</Text>
@@ -117,6 +111,12 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
         <TouchableOpacity style={styles.navRow} onPress={() => setShowRaces(true)}>
           <Text style={styles.navIcon}>🏁</Text>
           <Text style={styles.navLabel}>My Races</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.navDivider} />
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowSki(true)}>
+          <Text style={styles.navIcon}>⛷️</Text>
+          <Text style={styles.navLabel}>Ski Season</Text>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
       </View>
