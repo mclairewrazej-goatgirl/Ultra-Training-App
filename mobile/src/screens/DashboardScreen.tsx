@@ -26,7 +26,7 @@ function getThisWeekRange() {
 
 function fmtDist(d: number | string) {
   const n = Number(d);
-  return n > 0 ? `${n.toFixed(1)} mi` : '';
+  return n > 0 ? `${n.toFixed(1)} km` : '';
 }
 
 function fmtDur(d: number | string) {

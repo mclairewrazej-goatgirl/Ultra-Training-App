@@ -10,6 +10,7 @@ import { colors } from '../theme';
 import { TrainingDB } from '../types';
 import NutritionScreen from './NutritionScreen';
 import RacesScreen     from './RacesScreen';
+import GoalsScreen     from './GoalsScreen';
 
 interface Props {
   user: User;
@@ -20,6 +21,7 @@ interface Props {
 export default function ProfileScreen({ user, db, onSaved }: Props) {
   const [showNutrition, setShowNutrition] = useState(false);
   const [showRaces,     setShowRaces]     = useState(false);
+  const [showGoals,     setShowGoals]     = useState(false);
 
   const isCycling = db.primarySport === 'cycling';
   const totalWorkouts = db.runs.length + db.crosses.length + db.strengths.length + db.recoveries.length;
@@ -92,6 +94,12 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
 
       {/* Navigation rows */}
       <View style={styles.navCard}>
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowGoals(true)}>
+          <Text style={styles.navIcon}>🎯</Text>
+          <Text style={styles.navLabel}>My Goals</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.navDivider} />
         <TouchableOpacity style={styles.navRow} onPress={() => setShowNutrition(true)}>
           <Text style={styles.navIcon}>🥗</Text>
           <Text style={styles.navLabel}>My Nutrition</Text>
@@ -108,6 +116,21 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
+
+      {/* My Goals modal */}
+      <Modal visible={showGoals} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowGoals(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowGoals(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>My Goals</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <GoalsScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
 
       {/* My Nutrition modal */}
       <Modal visible={showNutrition} animationType="slide" presentationStyle="pageSheet"
