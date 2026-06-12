@@ -50,12 +50,27 @@ export type ActivityEntry = RunEntry | CrossEntry | StrengthEntry | RecoveryEntr
 export interface PlannedWorkout {
   id: string;
   date: string;
-  actType: string;
-  subtype: string;
+  type: string;
+  desc: string;
   dist: number | string;
   dur: number | string;
   notes: string;
   planned: true;
+  completed?: boolean;
+  actualDist?: number | string;
+  actualDur?: number | string;
+  actualVert?: number | string;
+  actualHr?: number | string;
+  completionNotes?: string;
+}
+
+export interface NutritionItem {
+  id: string;
+  name: string;
+  carbsPerServing: number | string;
+  hydrationPerServing: number | string;
+  sodiumPerServing: number | string;
+  servingUnit: string;
 }
 
 export interface TrainingDB {
@@ -65,7 +80,7 @@ export interface TrainingDB {
   recoveries: RecoveryEntry[];
   races: unknown[];
   plans: PlannedWorkout[];
-  nutrition: unknown[];
+  nutrition: NutritionItem[];
   trainingPlans: unknown[];
   goals: Record<string, unknown>;
   weeklyGoals: Record<string, unknown>;
