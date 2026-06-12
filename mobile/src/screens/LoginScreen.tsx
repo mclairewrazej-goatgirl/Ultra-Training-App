@@ -5,7 +5,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import { ResponseType } from 'expo-auth-session';
 import {
   signInAnonymously,
   GoogleAuthProvider,
@@ -16,29 +15,34 @@ import { colors } from '../theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const WEB_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
+const WEB_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
+// Paste the Android OAuth client ID here once created in Google Cloud Console:
+// Type: Android, Package: host.exp.exponent, SHA-1: from your debug keystore
+const ANDROID_CLIENT_ID = '';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId:   WEB_CLIENT_ID,
-    webClientId:    WEB_CLIENT_ID,
-    androidClientId: WEB_CLIENT_ID,
-    iosClientId:    WEB_CLIENT_ID,
-    responseType: ResponseType.IdToken,
-    scopes: ['profile', 'email'],
+    expoClientId:    WEB_CLIENT_ID,
+    webClientId:     WEB_CLIENT_ID,
+    androidClientId: ANDROID_CLIENT_ID || WEB_CLIENT_ID,
+    iosClientId:     WEB_CLIENT_ID,
+    scopes: ['openid', 'profile', 'email'],
+    // Authorization code + PKCE flow — works with native Android client ID
+    // (the implicit id_token flow is blocked by Google's current security policy)
   });
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const idToken = response.params.id_token ?? response.authentication?.idToken;
-      if (!idToken) {
-        Alert.alert('Sign-in failed', 'No ID token returned from Google.');
+      const idToken     = response.authentication?.idToken;
+      const accessToken = response.authentication?.accessToken;
+      if (!idToken && !accessToken) {
+        Alert.alert('Sign-in failed', 'No token returned. Make sure the Android client ID is configured.');
         setLoading(false);
         return;
       }
-      const credential = GoogleAuthProvider.credential(idToken);
+      const credential = GoogleAuthProvider.credential(idToken ?? null, accessToken);
       signInWithCredential(auth, credential).catch(err => {
         Alert.alert('Sign-in failed', err.message);
         setLoading(false);
