@@ -180,7 +180,7 @@ export default function SkiSeasonScreen({ user, db, onSaved }: Props) {
 
       {/* ── What counts ── */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>⛷️ What counts as a ski activity?</Text>
+        <Text style={styles.infoTitle}>What counts as a ski activity?</Text>
         <Text style={styles.infoBody}>
           Cross-training entries logged with any of these subtypes:{'\n'}
           {SKI_SUBTYPES.join('  ·  ')}
