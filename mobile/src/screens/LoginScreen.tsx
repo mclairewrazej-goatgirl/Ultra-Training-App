@@ -5,6 +5,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { colors } from '../theme';
@@ -12,23 +13,16 @@ import { colors } from '../theme';
 // Required for expo-auth-session to complete the OAuth flow
 WebBrowser.maybeCompleteAuthSession();
 
-// ---------------------------------------------------------------------------
-// SETUP REQUIRED: Replace these with your Google OAuth client IDs.
-// Find them in Firebase Console → Authentication → Sign-in method → Google
-// → Web SDK configuration (Web client ID).
-// For Expo Go testing you only need the androidClientId or expoClientId.
-// ---------------------------------------------------------------------------
-const GOOGLE_ANDROID_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
-const GOOGLE_WEB_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+
   const [, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId:     GOOGLE_IOS_CLIENT_ID,
-    webClientId:     GOOGLE_WEB_CLIENT_ID,
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    redirectUri,
   });
 
   // Handle the OAuth response when it comes back
@@ -46,16 +40,8 @@ export default function LoginScreen() {
   }, [response]);
 
   const handleSignIn = async () => {
-    if (GOOGLE_WEB_CLIENT_ID.startsWith('YOUR_')) {
-      Alert.alert(
-        'Setup needed',
-        'Open src/screens/LoginScreen.tsx and replace the placeholder Google client IDs. ' +
-        'Find them in Firebase Console → Authentication → Sign-in method → Google.',
-      );
-      return;
-    }
     setLoading(true);
-    await promptAsync();
+    await promptAsync({ useProxy: true });
     setLoading(false);
   };
 
