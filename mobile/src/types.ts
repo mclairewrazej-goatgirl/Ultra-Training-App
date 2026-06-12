@@ -47,13 +47,24 @@ export interface RecoveryEntry {
 
 export type ActivityEntry = RunEntry | CrossEntry | StrengthEntry | RecoveryEntry;
 
+export interface PlannedWorkout {
+  id: string;
+  date: string;
+  actType: string;
+  subtype: string;
+  dist: number | string;
+  dur: number | string;
+  notes: string;
+  planned: true;
+}
+
 export interface TrainingDB {
   runs: RunEntry[];
   crosses: CrossEntry[];
   strengths: StrengthEntry[];
   recoveries: RecoveryEntry[];
   races: unknown[];
-  plans: unknown[];
+  plans: PlannedWorkout[];
   nutrition: unknown[];
   trainingPlans: unknown[];
   goals: Record<string, unknown>;
