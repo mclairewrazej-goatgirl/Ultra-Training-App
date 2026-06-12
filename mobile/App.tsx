@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { ActivityEntry } from './src/types';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -21,24 +22,21 @@ import CalendarScreen     from './src/screens/CalendarScreen';
 
 const Tab = createBottomTabNavigator();
 
-// Simple icon component using text characters so we don't need an icon library
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TAB_ICONS: Record<string, { active: IoniconName; inactive: IoniconName }> = {
+  Dashboard:      { active: 'grid',             inactive: 'grid-outline'           },
+  'Activity Log': { active: 'pulse',            inactive: 'pulse-outline'          },
+  Add:            { active: 'add-circle',        inactive: 'add-circle-outline'     },
+  Calendar:       { active: 'calendar',          inactive: 'calendar-outline'       },
+  Profile:        { active: 'person',            inactive: 'person-outline'         },
+};
+
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    Dashboard:      '⚡',
-    'Activity Log': '📋',
-    Add:            '＋',
-    Calendar:       '📅',
-    Profile:        '👤',
-  };
-  return (
-    <Text style={{
-      fontSize: focused ? 22 : 18,
-      opacity: focused ? 1 : 0.5,
-      color: label === 'Add' ? colors.pink : undefined,
-    }}>
-      {icons[label] ?? '•'}
-    </Text>
-  );
+  const icon = TAB_ICONS[label];
+  const name = focused ? icon?.active : icon?.inactive;
+  const color = label === 'Add' ? colors.pink : focused ? colors.pink : colors.muted;
+  return <Ionicons name={name ?? 'ellipse-outline'} size={focused ? 24 : 22} color={color} />;
 }
 
 export default function App() {
