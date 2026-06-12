@@ -40,9 +40,9 @@ function fmtVert(m: number) {
 function actLabel(act: ActivityEntry) {
   if (act.actType === 'run') {
     const r = act as RunEntry;
-    return r.runType
-      ? r.runType.charAt(0).toUpperCase() + r.runType.slice(1) + ' Run'
-      : 'Run';
+    if (!r.runType) return 'Run';
+    const cap = r.runType.charAt(0).toUpperCase() + r.runType.slice(1);
+    return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
   }
   if (act.actType === 'cross') return (act as CrossEntry).subtype || 'Cross-Training';
   if (act.actType === 'strength') return (act as StrengthEntry).subtype || 'Strength';

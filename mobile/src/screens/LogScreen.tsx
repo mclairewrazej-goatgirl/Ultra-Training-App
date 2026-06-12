@@ -41,8 +41,10 @@ function fmtDur(d: number | string) {
 
 function actTitle(act: ActivityEntry): string {
   if (act.actType === 'run') {
-    const rt = (act as any).runType ?? '';
-    return rt ? rt.charAt(0).toUpperCase() + rt.slice(1) + ' Run' : 'Run';
+    const rt: string = (act as any).runType ?? '';
+    if (!rt) return 'Run';
+    const cap = rt.charAt(0).toUpperCase() + rt.slice(1);
+    return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
   }
   if (act.actType === 'cross') return (act as any).subtype || 'Cross-Training';
   if (act.actType === 'strength') return (act as any).subtype || 'Strength';

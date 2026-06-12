@@ -180,9 +180,12 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
             <View key={act.id} style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}>
               <Text style={[styles.actType, { color: actColors[act.actType] }]}>
                 {act.actType === 'run'
-                  ? ((act as any).runType
-                      ? (act as any).runType.charAt(0).toUpperCase() + (act as any).runType.slice(1) + ' Run'
-                      : 'Run')
+                  ? (() => {
+                      const rt: string = (act as any).runType ?? '';
+                      if (!rt) return 'Run';
+                      const cap = rt.charAt(0).toUpperCase() + rt.slice(1);
+                      return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
+                    })()
                   : (act as any).subtype || act.actType.charAt(0).toUpperCase() + act.actType.slice(1)}
               </Text>
               {detail ? <Text style={styles.actDetail}>{detail}</Text> : null}

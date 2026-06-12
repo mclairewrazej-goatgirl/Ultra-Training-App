@@ -10,7 +10,7 @@ import { colors } from '../theme';
 
 type ActType = 'run' | 'cross' | 'strength' | 'recovery';
 
-const RUN_TYPES    = ['easy','long','tempo','interval','hike','race'];
+const RUN_TYPES    = ['Easy', 'Workout', 'Long Run', 'Recovery', 'Hike'];
 const TERRAIN_OPT  = ['trail','road','treadmill'];
 const BIKE_TYPES   = ['Gravel','Road','Mountain','Fat Bike'];
 const RIDE_TYPES   = ['easy','long','workout'];
@@ -47,7 +47,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
     if (t === 'cross')    return crossTypes[0];
     if (t === 'strength') return STRENGTH_SUB[0];
     if (t === 'recovery') return RECOVERY_SUB[0];
-    return 'easy';
+    return 'Easy';
   });
   const [terrain,  setTerrain]  = useState('trail');
   const [bikeType, setBikeType] = useState('Gravel');
@@ -59,7 +59,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
   const changeActType = (t: ActType) => {
     setActType(t);
     setSubtype(
-      t === 'run'      ? 'easy' :
+      t === 'run'      ? 'Easy' :
       t === 'cross'    ? crossTypes[0] :
       t === 'strength' ? STRENGTH_SUB[0] :
                          RECOVERY_SUB[0]
@@ -133,7 +133,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         onClose();
       } else {
         setDist(''); setDur(''); setVert(''); setHr(''); setNotes('');
-        setDate(todayISO()); setActType('run'); setSubtype('easy');
+        setDate(todayISO()); setActType('run'); setSubtype('Easy');
         setTerrain('trail'); setBikeType('Gravel'); setRpe('5');
         setShowNutr(false); setNutrQty({});
         Alert.alert('Saved!', 'Workout logged successfully');
