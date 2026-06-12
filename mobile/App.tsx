@@ -31,7 +31,11 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
     Profile:        '👤',
   };
   return (
-    <Text style={{ fontSize: focused ? 22 : 18, opacity: focused ? 1 : 0.5 }}>
+    <Text style={{
+      fontSize: focused ? 22 : 18,
+      opacity: focused ? 1 : 0.5,
+      color: label === 'Add' ? colors.pink : undefined,
+    }}>
       {icons[label] ?? '•'}
     </Text>
   );
