@@ -40,6 +40,7 @@ export interface CrossEntry {
   rpe: number | string;
   notes: string;
   stravaId?: string;
+  nutritionEntries?: NutritionLogEntry[];
 }
 
 export interface StrengthEntry {

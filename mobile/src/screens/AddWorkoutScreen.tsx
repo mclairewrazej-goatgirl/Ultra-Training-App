@@ -106,10 +106,13 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       };
       newDB.runs = [...db.runs, entry];
     } else if (actType === 'cross') {
+      const nutritionEntries = showNutr
+        ? Object.entries(nutrQty).map(([itemId, servings]) => ({ itemId, servings }))
+        : [];
       const entry: CrossEntry = {
         id: uid(), date, actType: 'cross',
         subtype, dist: Number(dist) || 0, dur: Number(dur) || 0,
-        vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes,
+        vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes, nutritionEntries,
       };
       newDB.crosses = [...db.crosses, entry];
     } else if (actType === 'strength') {
@@ -310,8 +313,8 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         multiline numberOfLines={3} textAlignVertical="top"
       />
 
-      {/* Add nutrition toggle — runs only, if library has items */}
-      {actType === 'run' && db.nutrition.length > 0 && (
+      {/* Add nutrition toggle — runs and cross-training, if library has items */}
+      {(actType === 'run' || actType === 'cross') && db.nutrition.length > 0 && (
         <TouchableOpacity style={styles.nutrToggle} onPress={() => setShowNutr(v => !v)}>
           <View style={[styles.checkbox, showNutr && { backgroundColor: colors.pink, borderColor: colors.pink }]}>
             {showNutr && <Text style={styles.checkmark}>✓</Text>}
@@ -320,7 +323,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         </TouchableOpacity>
       )}
 
-      {showNutr && actType === 'run' && (
+      {showNutr && (actType === 'run' || actType === 'cross') && (
         <View style={styles.nutrSection}>
           {(db.nutrition as NutritionItem[]).map(item => {
             const qty = nutrQty[item.id] ?? 0;

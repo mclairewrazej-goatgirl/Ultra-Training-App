@@ -81,12 +81,18 @@ export interface StravaActivity {
   average_heartrate?: number;
 }
 
-export async function fetchStravaActivities(accessToken: string): Promise<StravaActivity[]> {
-  const after = Math.floor(Date.now() / 1000) - 60 * 24 * 3600; // last 60 days
-  const resp = await fetch(
-    `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=100`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
+export type SyncRange = 'count5' | 'days7' | 'days14' | 'days30' | 'days60';
+
+export async function fetchStravaActivities(accessToken: string, range: SyncRange = 'count5'): Promise<StravaActivity[]> {
+  let url: string;
+  if (range === 'count5') {
+    url = 'https://www.strava.com/api/v3/athlete/activities?per_page=5';
+  } else {
+    const days: Record<string, number> = { days7: 7, days14: 14, days30: 30, days60: 60 };
+    const after = Math.floor(Date.now() / 1000) - days[range] * 24 * 3600;
+    url = `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=100`;
+  }
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!resp.ok) throw new Error('Failed to fetch Strava activities — please try again.');
   return resp.json();
 }
