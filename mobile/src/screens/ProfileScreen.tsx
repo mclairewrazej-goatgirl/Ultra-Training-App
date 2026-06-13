@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Image, Alert, Modal,
+  View, Text, StyleSheet, TouchableOpacity, Image, Alert, Modal, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
@@ -49,7 +49,7 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Avatar */}
       <View style={styles.profileCard}>
         {user.photoURL ? (
@@ -185,7 +185,7 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
           <RacesScreen user={user} db={db} onSaved={onSaved} />
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -199,7 +199,8 @@ function StatBox({ label, value, color }: { label: string; value: number; color:
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: 20 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  content:   { padding: 20, paddingBottom: 40 },
 
   profileCard: {
     alignItems: 'center', backgroundColor: colors.surface,
