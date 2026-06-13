@@ -250,6 +250,7 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
             ? {
                 ...p,
                 completed:        true,
+                completedEntryId: item.entry.id,
                 actualDist:       mToKm(item.activity.distance),
                 actualDur:        secToMin(item.activity.moving_time),
                 actualVert:       Math.round(item.activity.total_elevation_gain),

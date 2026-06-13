@@ -373,10 +373,25 @@ export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
 
 // ─── Mark as Done Modal ───────────────────────────────────────────────────────
 
+const TERRAIN_OPTS   = ['Trail', 'Road', 'Treadmill'];
+const CROSS_SUBTYPES = ['Hiking', 'Cycling', 'Swimming', 'Skate Ski', 'Classic Ski', 'Snowshoe', 'E-Bike', 'Other'];
+const ACT_TYPES      = ['Run', 'Cross', 'Strength', 'Recovery'] as const;
+type CompActType = typeof ACT_TYPES[number];
+
+function initActType(planType: string): CompActType {
+  if (planType === 'Run' || planType === 'Race') return 'Run';
+  if (planType === 'Cross-training') return 'Cross';
+  if (planType === 'Strength') return 'Strength';
+  return 'Recovery';
+}
+
 function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
   plan: PlannedWorkout; user: User; db: TrainingDB;
   onSaved: (u: TrainingDB) => void; onClose: () => void;
 }) {
+  const [actType,   setActType]   = useState<CompActType>(initActType(plan.type));
+  const [terrain,   setTerrain]   = useState('Trail');
+  const [crossSub,  setCrossSub]  = useState(CROSS_SUBTYPES[0]);
   const [actualDist, setActualDist] = useState(
     plan.actualDist != null ? String(plan.actualDist) : String(plan.dist || ''),
   );
@@ -386,66 +401,65 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
   const [actualVert, setActualVert] = useState(String(plan.actualVert || ''));
   const [actualHr,   setActualHr]   = useState(String(plan.actualHr   || ''));
   const [compNotes,  setCompNotes]  = useState(plan.completionNotes   || '');
+  const [showNutr,   setShowNutr]   = useState(false);
+  const [nutrQty,    setNutrQty]    = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
 
   const accentColor = planTypeColor(plan.type);
-  const isEditing = !!plan.completed;
+  const isEditing   = !!plan.completed;
+  const isRace      = plan.type === 'Race';
 
   const handleSave = async () => {
     setSaving(true);
 
-    const entryId  = plan.completedEntryId || uid();
-    const dist     = Number(actualDist) || 0;
-    const dur      = Number(actualDur)  || 0;
-    const vert     = Number(actualVert) || 0;
-    const hr       = Number(actualHr)   || 0;
+    const entryId = plan.completedEntryId || uid();
+    const dist    = Number(actualDist) || 0;
+    const dur     = Number(actualDur)  || 0;
+    const vert    = Number(actualVert) || 0;
+    const hr      = Number(actualHr)   || 0;
+    const nutritionEntries = showNutr
+      ? Object.entries(nutrQty).filter(([, v]) => v > 0).map(([itemId, servings]) => ({ itemId, servings }))
+      : [];
 
     let newRuns       = [...db.runs];
     let newCrosses    = [...db.crosses];
     let newStrengths  = [...db.strengths];
     let newRecoveries = [...db.recoveries];
 
-    if (plan.type === 'Run' || plan.type === 'Race') {
+    if (actType === 'Run') {
       const entry: RunEntry = {
         id: entryId, date: plan.date, actType: 'run',
-        runType: plan.type === 'Race' ? 'race' : 'easy',
-        terrain: '', dist, dur, vert, hr, notes: compNotes,
+        runType: isRace ? 'race' : 'easy',
+        terrain: terrain.toLowerCase(),
+        dist, dur, vert, hr, notes: compNotes, nutritionEntries,
       };
-      if (plan.completedEntryId) {
-        newRuns = newRuns.map(r => r.id === entryId ? entry : r);
-      } else {
-        newRuns = [...newRuns, entry];
-      }
-    } else if (plan.type === 'Cross-training') {
+      newRuns = plan.completedEntryId
+        ? newRuns.map(r => r.id === entryId ? entry : r)
+        : [...newRuns, entry];
+    } else if (actType === 'Cross') {
       const entry: CrossEntry = {
         id: entryId, date: plan.date, actType: 'cross',
-        subtype: 'Run', dist, dur, vert, rpe: 0, notes: compNotes,
+        subtype: crossSub, dist, dur, vert, rpe: 0, notes: compNotes, nutritionEntries,
       };
-      if (plan.completedEntryId) {
-        newCrosses = newCrosses.map(c => c.id === entryId ? entry : c);
-      } else {
-        newCrosses = [...newCrosses, entry];
-      }
-    } else if (plan.type === 'Strength') {
+      newCrosses = plan.completedEntryId
+        ? newCrosses.map(c => c.id === entryId ? entry : c)
+        : [...newCrosses, entry];
+    } else if (actType === 'Strength') {
       const entry: StrengthEntry = {
         id: entryId, date: plan.date, actType: 'strength',
         subtype: 'Gym Strength', dur, notes: compNotes,
       };
-      if (plan.completedEntryId) {
-        newStrengths = newStrengths.map(s => s.id === entryId ? entry : s);
-      } else {
-        newStrengths = [...newStrengths, entry];
-      }
+      newStrengths = plan.completedEntryId
+        ? newStrengths.map(s => s.id === entryId ? entry : s)
+        : [...newStrengths, entry];
     } else {
       const entry: RecoveryEntry = {
         id: entryId, date: plan.date, actType: 'recovery',
         subtype: 'Stretch', dur, notes: compNotes,
       };
-      if (plan.completedEntryId) {
-        newRecoveries = newRecoveries.map(r => r.id === entryId ? entry : r);
-      } else {
-        newRecoveries = [...newRecoveries, entry];
-      }
+      newRecoveries = plan.completedEntryId
+        ? newRecoveries.map(r => r.id === entryId ? entry : r)
+        : [...newRecoveries, entry];
     }
 
     const updatedPlan: PlannedWorkout = {
@@ -489,6 +503,62 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
             </Text>
           </View>
 
+          {/* Activity type — hidden for Race plans */}
+          {!isRace && (
+            <>
+              <Text style={styles.fieldLabel}>ACTIVITY TYPE</Text>
+              <View style={styles.chipRow}>
+                {ACT_TYPES.map(t => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeChip, actType === t && { borderColor: accentColor, backgroundColor: accentColor + '22' }]}
+                    onPress={() => setActType(t)}
+                  >
+                    <Text style={[styles.typeChipText, actType === t && { color: accentColor }]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Terrain — runs only */}
+          {actType === 'Run' && (
+            <>
+              <Text style={styles.fieldLabel}>TERRAIN</Text>
+              <View style={styles.chipRow}>
+                {TERRAIN_OPTS.map(t => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeChip, terrain === t && { borderColor: accentColor, backgroundColor: accentColor + '22' }]}
+                    onPress={() => setTerrain(t)}
+                  >
+                    <Text style={[styles.typeChipText, terrain === t && { color: accentColor }]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Cross-training subtype */}
+          {actType === 'Cross' && (
+            <>
+              <Text style={styles.fieldLabel}>ACTIVITY</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.chipRow}>
+                  {CROSS_SUBTYPES.map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[styles.typeChip, crossSub === s && { borderColor: colors.blue, backgroundColor: colors.blue + '22' }]}
+                      onPress={() => setCrossSub(s)}
+                    >
+                      <Text style={[styles.typeChipText, crossSub === s && { color: colors.blue }]}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
+
           <Text style={styles.sectionHeading}>Actual Stats</Text>
 
           <View style={styles.row}>
@@ -507,22 +577,52 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.fieldLabel}>ELEVATION GAIN (M)</Text>
+              <Text style={styles.fieldLabel}>ELEV GAIN (M)</Text>
               <TextInput style={styles.input} value={actualVert} onChangeText={setActualVert}
                 keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
             </View>
             <View style={{ width: 12 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.fieldLabel}>AVG HEART RATE</Text>
+              <Text style={styles.fieldLabel}>AVG HR (BPM)</Text>
               <TextInput style={styles.input} value={actualHr} onChangeText={setActualHr}
                 keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
             </View>
           </View>
 
-          <Text style={styles.fieldLabel}>COMPLETION NOTES</Text>
+          <Text style={styles.fieldLabel}>NOTES</Text>
           <TextInput style={[styles.input, styles.inputMulti]} value={compNotes} onChangeText={setCompNotes}
             multiline numberOfLines={3} placeholder="How did it go?" placeholderTextColor={colors.muted2}
             textAlignVertical="top" />
+
+          {/* Nutrition toggle */}
+          {(actType === 'Run' || actType === 'Cross') && db.nutrition.length > 0 && (
+            <TouchableOpacity style={styles.nutrToggle} onPress={() => setShowNutr(v => !v)}>
+              <View style={[styles.checkbox, showNutr && { backgroundColor: accentColor, borderColor: accentColor }]}>
+                {showNutr && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.nutrToggleText}>Add nutrition?</Text>
+            </TouchableOpacity>
+          )}
+
+          {showNutr && (actType === 'Run' || actType === 'Cross') && (
+            <View style={styles.nutrSection}>
+              {(db.nutrition as any[]).map((item: any) => {
+                const qty = nutrQty[item.id] ?? 0;
+                return (
+                  <View key={item.id} style={styles.nutrRow}>
+                    <Text style={styles.nutrName}>{item.name}</Text>
+                    <View style={styles.nutrQtyRow}>
+                      <TouchableOpacity onPress={() => setNutrQty(q => ({ ...q, [item.id]: Math.max(0, (q[item.id] ?? 0) - 0.5) }))}
+                        style={styles.nutrBtn}><Text style={styles.nutrBtnText}>−</Text></TouchableOpacity>
+                      <Text style={styles.nutrQty}>{qty > 0 ? qty : '—'}</Text>
+                      <TouchableOpacity onPress={() => setNutrQty(q => ({ ...q, [item.id]: (q[item.id] ?? 0) + 0.5 }))}
+                        style={styles.nutrBtn}><Text style={styles.nutrBtnText}>+</Text></TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
@@ -659,4 +759,27 @@ const styles = StyleSheet.create({
   planSummaryDesc:   { fontSize: 13, color: colors.text, marginBottom: 4 },
   planSummaryTarget: { fontSize: 12, color: colors.muted },
   sectionHeading:    { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 8, marginBottom: 4 },
+
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+  nutrToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
+  checkbox: {
+    width: 20, height: 20, borderWidth: 2, borderColor: colors.border,
+    borderRadius: 4, alignItems: 'center', justifyContent: 'center',
+  },
+  checkmark: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  nutrToggleText: { fontSize: 14, color: colors.text },
+  nutrSection: { marginTop: 12 },
+  nutrRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: colors.border,
+  },
+  nutrName: { fontSize: 14, color: colors.text, flex: 1 },
+  nutrQtyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  nutrBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center',
+  },
+  nutrBtnText: { fontSize: 18, color: colors.text, lineHeight: 22 },
+  nutrQty: { fontSize: 15, color: colors.text, minWidth: 30, textAlign: 'center' },
 });
