@@ -350,6 +350,18 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
         {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
         {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
 
+        {/* Y-axis goal value labels */}
+        {bandTop !== null && runGoal.max > 0 && (
+          <Text style={[vcStyles.goalLabel, { top: Math.max(0, bandTop - 12) }]}>
+            {fmtV(runGoal.max)}
+          </Text>
+        )}
+        {bandBottom !== null && runGoal.min > 0 && (
+          <Text style={[vcStyles.goalLabel, { top: bandBottom + 2 }]}>
+            {fmtV(runGoal.min)}
+          </Text>
+        )}
+
         {/* Bars */}
         <View style={vcStyles.barsRow}>
           <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  label={isCycling ? 'Ride' : 'Run'} value={fmtV(run)} />
@@ -504,6 +516,10 @@ const vcStyles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0,
     borderTopWidth: 1, borderColor: colors.pink + '60',
     borderStyle: 'dashed',
+  },
+  goalLabel: {
+    position: 'absolute', right: 4,
+    fontSize: 9, fontWeight: '700', color: colors.pink + 'cc',
   },
   barsRow: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
