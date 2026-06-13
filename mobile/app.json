@@ -16,10 +16,17 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0d1117"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mwrazej.ultratraining"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ad72ff90-2554-494d-a1a2-0af894a11226"
+      }
+    },
+    "owner": "mwrazej"
   }
 }
