@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
 import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry } from '../types';
 import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
+import { normalizeGoal } from './GoalsScreen';
 
 interface Props {
   user: User;
@@ -179,6 +180,9 @@ export default function DashboardScreen({ user, db }: Props) {
         <StatCard label="Strength"        value={`${crossStats.strengthCount} sessions`} color={colors.amber} />
       </View>
 
+      {/* ── Volume History ─────────────────────────────────── */}
+      <VolumeChart db={db} isCycling={isCycling} skiActive={skiActive} />
+
       {/* ── Ski Season ─────────────────────────────────────── */}
       {skiActive && skiStats && (
         <>
@@ -230,6 +234,133 @@ export default function DashboardScreen({ user, db }: Props) {
     </ScrollView>
   );
 }
+
+// ─── Volume History Chart ─────────────────────────────────────────────────────
+
+type Metric = 'dist' | 'time' | 'vert';
+
+function getMondayOfWeek(weeksBack: number): Date {
+  const now = new Date();
+  const d = new Date(now);
+  d.setDate(now.getDate() - ((now.getDay() + 6) % 7) - weeksBack * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: boolean) {
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  const inW = (d: string) => { const dt = new Date(d + 'T12:00:00'); return dt >= monday && dt <= sunday; };
+  const runs   = db.runs.filter(r => inW(r.date));
+  const crosses = skiActive
+    ? db.crosses.filter(c => inW(c.date) && !isSkiSubtype(c.subtype))
+    : db.crosses.filter(c => inW(c.date));
+  const key = metric === 'time' ? 'dur' : metric;
+  const sum = (arr: any[]) => arr.reduce((s, x) => s + (Number(x[key]) || 0), 0);
+  return { run: sum(runs), cross: sum(crosses) };
+}
+
+function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: boolean; skiActive: boolean }) {
+  const [metric,    setMetric]    = useState<Metric>('dist');
+  const [weeksBack, setWeeksBack] = useState(0);
+
+  const monday = useMemo(() => getMondayOfWeek(weeksBack), [weeksBack]);
+  const { run, cross } = useMemo(
+    () => getVolumeData(db, monday, metric, skiActive),
+    [db, monday, metric, skiActive],
+  );
+  const total = run + cross;
+
+  const goals    = normalizeGoal(db.goals);
+  const runGoal  = goals.run[metric]   as { min: number; max: number };
+  const crossGoal = goals.cross[metric] as { min: number; max: number };
+
+  const CHART_H = 130;
+  const maxVal  = Math.max(total, runGoal.max || 0, crossGoal.max || 0, 1);
+  const pct     = (v: number) => Math.min(1, v / maxVal);
+
+  const fmtV = (v: number) => {
+    if (metric === 'dist') return `${v.toFixed(1)} km`;
+    if (metric === 'time') return fmtHours(v);
+    return `${Math.round(v)} m`;
+  };
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const weekLabel = weeksBack === 0
+    ? 'Current Week'
+    : `${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+
+  const bandTop    = runGoal.max > 0 ? CHART_H - Math.round(pct(runGoal.max) * CHART_H) : null;
+  const bandBottom = runGoal.min > 0 ? CHART_H - Math.round(pct(runGoal.min) * CHART_H) : null;
+
+  return (
+    <View style={vcStyles.card}>
+      {/* Header row */}
+      <View style={vcStyles.headerRow}>
+        <Text style={styles.sectionLabel}>VOLUME HISTORY</Text>
+        <View style={vcStyles.chips}>
+          {(['dist','time','vert'] as Metric[]).map(m => (
+            <TouchableOpacity
+              key={m}
+              style={[vcStyles.chip, metric === m && vcStyles.chipActive]}
+              onPress={() => setMetric(m)}
+            >
+              <Text style={[vcStyles.chipText, metric === m && vcStyles.chipTextActive]}>
+                {m === 'dist' ? 'Dist' : m === 'time' ? 'Time' : 'Vert'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Week navigation */}
+      <View style={vcStyles.weekNav}>
+        <TouchableOpacity onPress={() => setWeeksBack(w => w + 1)} style={vcStyles.navBtn}>
+          <Text style={vcStyles.navArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={vcStyles.weekLabel}>{weekLabel}</Text>
+        <TouchableOpacity
+          onPress={() => setWeeksBack(w => Math.max(0, w - 1))}
+          style={vcStyles.navBtn}
+          disabled={weeksBack === 0}
+        >
+          <Text style={[vcStyles.navArrow, weeksBack === 0 && { opacity: 0.2 }]}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Chart */}
+      <View style={[vcStyles.chartArea, { height: CHART_H }]}>
+        {/* Goal range band */}
+        {bandTop !== null && bandBottom !== null && bandBottom > bandTop && (
+          <View style={[vcStyles.goalBand, { top: bandTop, height: bandBottom - bandTop }]} />
+        )}
+        {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
+        {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
+
+        {/* Bars */}
+        <View style={vcStyles.barsRow}>
+          <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  label={isCycling ? 'Ride' : 'Run'} value={fmtV(run)} />
+          <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  label="Cross"                      value={fmtV(cross)} />
+          <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} label="Total"                      value={fmtV(total)} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ChartBar({ height, color, label, value }: { height: number; color: string; label: string; value: string }) {
+  return (
+    <View style={vcStyles.barGroup}>
+      <Text style={[vcStyles.barValue, { color }]}>{height > 2 ? value : '—'}</Text>
+      <View style={[vcStyles.bar, { height: Math.max(height, 2), backgroundColor: color }]} />
+      <Text style={vcStyles.barLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -319,4 +450,54 @@ const styles = StyleSheet.create({
   actInfo: { flex: 1 },
   actLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
   actMeta:  { fontSize: 12, color: colors.muted, marginTop: 2 },
+});
+
+const vcStyles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border,
+    marginBottom: 16, overflow: 'hidden',
+  },
+  headerRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4,
+  },
+  chips:        { flexDirection: 'row', gap: 4 },
+  chip:         { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
+  chipActive:   { backgroundColor: colors.pink, borderColor: colors.pink },
+  chipText:     { fontSize: 10, fontWeight: '700', color: colors.muted },
+  chipTextActive: { color: '#fff' },
+
+  weekNav: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6,
+  },
+  navBtn:    { padding: 8 },
+  navArrow:  { fontSize: 22, color: colors.muted, fontWeight: '300' },
+  weekLabel: { fontSize: 12, fontWeight: '600', color: colors.text },
+
+  chartArea: {
+    position: 'relative',
+    marginHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  goalBand: {
+    position: 'absolute', left: 0, right: 0,
+    backgroundColor: '#7c4dff18',
+  },
+  goalLine: {
+    position: 'absolute', left: 0, right: 0,
+    borderTopWidth: 1, borderColor: colors.pink + '60',
+    borderStyle: 'dashed',
+  },
+  barsRow: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'flex-end',
+    justifyContent: 'space-around', paddingBottom: 0,
+  },
+  barGroup:  { alignItems: 'center', flex: 1 },
+  bar:       { width: 36, borderRadius: 4 },
+  barValue:  { fontSize: 9, fontWeight: '700', marginBottom: 3 },
+  barLabel:  { fontSize: 9, color: colors.muted, marginTop: 4, marginBottom: 8 },
 });

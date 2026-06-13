@@ -19,7 +19,7 @@ interface SportGoal {
 }
 interface GoalObj { run: SportGoal; cross: SportGoal; }
 
-function normalizeGoal(g: any): GoalObj {
+export function normalizeGoal(g: any): GoalObj {
   return {
     run: {
       enabled: g?.run?.enabled ?? true,
