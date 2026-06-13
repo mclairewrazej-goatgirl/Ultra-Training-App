@@ -13,6 +13,7 @@ import NutritionScreen  from './NutritionScreen';
 import RacesScreen      from './RacesScreen';
 import GoalsScreen      from './GoalsScreen';
 import SkiSeasonScreen  from './SkiSeasonScreen';
+import StravaScreen     from './StravaScreen';
 
 interface Props {
   user: User;
@@ -25,6 +26,9 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
   const [showRaces,     setShowRaces]     = useState(false);
   const [showGoals,     setShowGoals]     = useState(false);
   const [showSki,       setShowSki]       = useState(false);
+  const [showStrava,    setShowStrava]    = useState(false);
+
+  const stravaConnected = !!(db.stravaTokens?.accessToken);
 
   const isCycling = db.primarySport === 'cycling';
   const totalWorkouts = db.runs.length + db.crosses.length + db.strengths.length + db.recoveries.length;
@@ -120,6 +124,12 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
           <Text style={styles.navLabel}>Ski Season</Text>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
+        <View style={styles.navDivider} />
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowStrava(true)}>
+          <Ionicons name="bicycle-outline" size={20} color={stravaConnected ? '#FC4C02' : colors.muted} style={styles.navIcon} />
+          <Text style={[styles.navLabel, stravaConnected && { color: '#FC4C02' }]}>Strava</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
@@ -183,6 +193,21 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
             <View style={{ width: 60 }} />
           </View>
           <RacesScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
+
+      {/* Strava modal */}
+      <Modal visible={showStrava} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowStrava(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowStrava(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>Strava</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <StravaScreen user={user} db={db} onSaved={onSaved} />
         </View>
       </Modal>
     </ScrollView>

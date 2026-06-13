@@ -1,3 +1,11 @@
+export interface StravaTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  athleteId: number;
+  athleteName: string;
+}
+
 export interface NutritionLogEntry {
   itemId: string;
   servings: number;
@@ -17,6 +25,7 @@ export interface RunEntry {
   notes: string;
   workoutDetails?: string;
   nutritionEntries?: NutritionLogEntry[];
+  stravaId?: string;
 }
 
 export interface CrossEntry {
@@ -30,6 +39,7 @@ export interface CrossEntry {
   vert: number | string;
   rpe: number | string;
   notes: string;
+  stravaId?: string;
 }
 
 export interface StrengthEntry {
@@ -39,6 +49,7 @@ export interface StrengthEntry {
   subtype: string;
   dur: number | string;
   notes: string;
+  stravaId?: string;
 }
 
 export interface RecoveryEntry {
@@ -68,6 +79,7 @@ export interface PlannedWorkout {
   actualVert?: number | string;
   actualHr?: number | string;
   completionNotes?: string;
+  stravaActivityId?: string;
 }
 
 export interface NutritionItem {
@@ -92,6 +104,7 @@ export interface Race {
   vert: number | string;
   result: string;
   notes: string;
+  stravaActivityId?: string;
 }
 
 export interface SeasonalSport {
@@ -116,6 +129,8 @@ export interface TrainingDB {
   theme: string;
   primarySport: string;
   seasonalSport: SeasonalSport;
+  stravaTokens?: StravaTokens;
+  stravaProcessedIds?: string[];
 }
 
 export const emptyDB: TrainingDB = {
@@ -134,4 +149,5 @@ export const emptyDB: TrainingDB = {
   theme: 'dark',
   primarySport: '',
   seasonalSport: { enabled: false, startMD: '11-01', endMD: '04-30' },
+  stravaProcessedIds: [],
 };
