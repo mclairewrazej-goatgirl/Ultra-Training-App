@@ -14,10 +14,11 @@ React Native / Expo mobile companion to the Ultra Training web app. Uses the sam
 6. [Configuring Client IDs in the App](#configuring-client-ids-in-the-app)
 7. [Running the App](#running-the-app)
 8. [Building for Production](#building-for-production)
-9. [Updating the App](#updating-the-app)
-10. [Project Structure](#project-structure)
-11. [Firestore Data Model](#firestore-data-model)
-12. [Troubleshooting](#troubleshooting)
+9. [Rebuilding After Code Changes](#rebuilding-after-code-changes)
+10. [Updating the App](#updating-the-app)
+11. [Project Structure](#project-structure)
+12. [Firestore Data Model](#firestore-data-model)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -37,7 +38,7 @@ React Native / Expo mobile companion to the Ultra Training web app. Uses the sam
 | Local persistence | @react-native-async-storage/async-storage | ^3 |
 | Gradients | expo-linear-gradient | ^56 |
 
-The app uses **Expo's managed workflow** — you do not need Xcode or Android Studio for development or testing (Expo Go handles it). You only need the native build tools when producing a standalone binary for the App Store or Play Store.
+The app uses **Expo's managed workflow** and is distributed as a native build via **EAS Build** (Expo Application Services). Google Sign-in requires a proper native build — it does not work in Expo Go. You do not need Xcode or Android Studio to build or run the app; EAS compiles everything in the cloud.
 
 > **Important:** This project is pinned to Expo v56. Always refer to the versioned docs at https://docs.expo.dev/versions/v56.0.0/ rather than the latest Expo docs, as APIs change between major versions.
 
@@ -48,9 +49,12 @@ The app uses **Expo's managed workflow** — you do not need Xcode or Android St
 - **Node.js** 18 or later (`node --version`)
 - **npm** 9 or later (`npm --version`)
 - **Expo CLI** — install globally once: `npm install -g expo-cli`
-- **Expo Go** app on your physical device (iOS App Store or Google Play), or an iOS Simulator / Android Emulator
+- **EAS CLI** — install globally once: `npm install -g eas-cli`
+- A physical **iOS or Android device** with the app installed as a native build (see [Building for Production](#building-for-production))
 - A **Google account** to sign in to Firebase Console
 - A **Firebase project** (see [Firebase Setup](#firebase-setup) below)
+
+> **Note on Expo Go:** This app does **not** use Expo Go. Google Sign-in requires native OAuth client IDs that are not compatible with the Expo Go sandbox. All testing and distribution is done through native EAS builds.
 
 ---
 
@@ -108,7 +112,7 @@ Firebase needs to know about each platform client separately.
 3. Enter the Android package name. The default for this project is `com.ultratraining.app` — if you haven't set a custom one in `app.json`, use that placeholder or update `app.json` first.
 4. (Optional) Enter a nickname like "Ultra Training Android".
 5. Click **Register app**.
-6. Download `google-services.json`. You will need this if you do a native build (EAS Build handles it automatically — see [Building for Production](#building-for-production)).
+6. Download `google-services.json`. You will need this for EAS builds — see [Building for Production](#building-for-production).
 7. Skip the "Add Firebase SDK" steps — the SDK is already in the project.
 
 #### iOS
@@ -146,7 +150,7 @@ These values are safe to commit — they identify the Firebase project but acces
 
 ## Google Cloud & OAuth Setup
 
-Firebase Authentication uses Google OAuth behind the scenes. To make "Sign in with Google" work on iOS and Android, you need OAuth 2.0 client IDs from Google Cloud Console.
+Firebase Authentication uses Google OAuth behind the scenes. To make "Sign in with Google" work on iOS and Android native builds, you need OAuth 2.0 client IDs from Google Cloud Console.
 
 ### How the auth flow works
 
@@ -205,12 +209,12 @@ Go to **APIs & Services → Credentials → Create Credentials → OAuth client 
 - **Application type**: Android
 - **Name**: Ultra Training Android
 - **Package name**: must match what you put in Firebase (e.g., `com.ultratraining.app`)
-- **SHA-1 certificate fingerprint**: Get this from your keystore. For development/Expo Go testing, run:
+- **SHA-1 certificate fingerprint**: Get this from your EAS build keystore. Run:
   ```bash
   cd mobile
-  npx expo credentials:manager
+  eas credentials
   ```
-  Follow the prompts to generate or retrieve the debug SHA-1. For production, use your release keystore's SHA-1.
+  Select Android, then view the keystore to retrieve the SHA-1. For production, use your release keystore's SHA-1.
 - Click **Create**.
 - Copy the **Client ID** — this is your `GOOGLE_ANDROID_CLIENT_ID`.
 
@@ -244,7 +248,10 @@ npm install
 
 # 3. Configure your Google client IDs (see next section)
 
-# 4. Start the dev server
+# 4. Log in to EAS
+eas login
+
+# 5. Start the dev server (connects to an installed native build)
 npm start
 ```
 
@@ -264,7 +271,7 @@ const GOOGLE_WEB_CLIENT_ID     = 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com'
 
 Replace each `YOUR_*_CLIENT_ID` string with the actual client IDs you created in Google Cloud Console. The format is always `<numbers>-<hash>.apps.googleusercontent.com`.
 
-**For quick testing in Expo Go:** You can start with just the `GOOGLE_WEB_CLIENT_ID` — Expo Go on Android uses the web client ID flow. The Android and iOS client IDs are required for standalone (production) builds.
+All three client IDs are required — the Android and iOS client IDs are used by the native OAuth flow, and the Web client ID is required by Firebase Auth to validate the resulting token.
 
 > Do not commit real client IDs to a public repository. Consider moving them to a `.env` file and loading them via `expo-constants` or a similar approach if your repo is public.
 
@@ -272,13 +279,16 @@ Replace each `YOUR_*_CLIENT_ID` string with the actual client IDs you created in
 
 ## Running the App
 
-### On a physical device with Expo Go
+The app runs as a native build installed directly on your device. There is no Expo Go involved.
 
-1. Install **Expo Go** on your phone:
-   - iOS: [App Store](https://apps.apple.com/app/expo-go/id982107779)
-   - Android: [Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent)
-2. Run `npm start` in the `mobile/` directory.
-3. Scan the QR code in the terminal with your phone camera (iOS) or the Expo Go app (Android).
+### On a physical device (native build)
+
+1. Build the app with EAS (see [Building for Production](#building-for-production)) and install it on your device.
+2. In the `mobile/` directory, run:
+   ```bash
+   npm start
+   ```
+3. With the native build open on your device, the app will connect to the local Metro bundler automatically (ensure your phone and computer are on the same network).
 
 ### On an Android Emulator
 
@@ -383,12 +393,92 @@ eas build --platform all
 
 EAS will prompt you for signing credentials (keystore for Android, certificates/provisioning profiles for iOS) and handle them automatically.
 
-### 5. Submit to app stores
+### 5. Install the build on your device
+
+After the build completes, EAS provides a QR code and a download link in the terminal and at [expo.dev](https://expo.dev). Scan the QR code with your phone's camera to open the install page, then tap **Install** to load the app onto your device.
+
+### 6. Submit to app stores
 
 ```bash
 eas submit --platform android
 eas submit --platform ios
 ```
+
+---
+
+## Rebuilding After Code Changes
+
+Use this workflow whenever you make changes to the app — whether through Claude on the web, directly on GitHub, or in your local editor — and need to get those changes onto your phone.
+
+### Step 1 — Pull the latest changes on your computer
+
+Open a terminal, navigate to the project, and pull from the branch you edited:
+
+```bash
+cd ultra-training-app/mobile
+git pull origin main
+```
+
+If you edited a feature branch (e.g., via Claude), replace `main` with that branch name, or merge it first.
+
+### Step 2 — Install any new dependencies
+
+```bash
+npm install
+```
+
+Always run this after pulling — new packages may have been added.
+
+### Step 3 — Decide what kind of rebuild you need
+
+#### JavaScript/TypeScript changes only (no new native packages)
+
+If you only changed files in `src/`, `assets/`, or `App.tsx`, you can push an **OTA (over-the-air) update** — no new build required, no app store submission:
+
+```bash
+eas update --branch production --message "Brief description of what changed"
+```
+
+The update will appear on your device the next time you open the app.
+
+#### Changes that require a full native rebuild
+
+You need a new native build if you:
+
+- Added or removed an npm package that contains native code (any `expo-*` library or package with a `android/` or `ios/` folder)
+- Changed `app.json` values like `bundleIdentifier`, `package`, `version`, or `versionCode`
+- Upgraded the Expo SDK version
+- Changed splash screen or app icon assets
+- Added new native permissions
+
+Run the build:
+
+```bash
+# Android only
+eas build --platform android --profile preview
+
+# iOS only
+eas build --platform ios --profile preview
+
+# Both platforms at once
+eas build --platform all --profile preview
+```
+
+### Step 4 — Get the new build onto your phone
+
+1. When the EAS build finishes, you will see a **QR code and a link** printed in your terminal.
+2. **Scan the QR code** with your phone's camera app (not the barcode scanner — use the standard camera).
+3. Your phone will open a page on [expo.dev](https://expo.dev) or a direct download link.
+4. Tap **Install** (Android) or follow the prompts (iOS — you may need to trust the developer profile in **Settings → General → VPN & Device Management** before the app will launch).
+5. Once installed, open the app and verify your changes are live.
+
+> **Android tip:** If your phone blocks the install with "Install blocked," go to **Settings → Apps → Special app access → Install unknown apps**, find your browser or Files app, and enable "Allow from this source."
+
+> **iOS tip:** If you're distributing to iOS outside the App Store, the device must be registered in your Apple Developer account (or you must use TestFlight). EAS handles device registration automatically when you use `--profile preview` with `distribution: internal`.
+
+### Step 5 — Verify
+
+Open the app, sign in, and confirm the change is working as expected. If something looks wrong, check the Metro bundler output in your terminal for errors.
 
 ---
 
@@ -503,7 +593,7 @@ You haven't replaced the placeholder Google client IDs. See [Configuring Client 
 
 Common causes:
 - The redirect URI in Google Cloud Console doesn't match. Make sure `https://auth.expo.io/@your-expo-username/ultra-training` (with your real Expo username) is listed under **Authorized redirect URIs** for the Web client ID.
-- The SHA-1 fingerprint for the Android client ID doesn't match the one Expo Go is using. Re-run `npx expo credentials:manager` to check.
+- The SHA-1 fingerprint for the Android client ID doesn't match the one in your EAS keystore. Run `eas credentials` to verify the SHA-1 and update the Android OAuth client ID in Google Cloud Console if needed.
 
 ### "auth/configuration-not-found" Firebase error
 
@@ -515,9 +605,9 @@ The Google Sign-In method is not enabled in Firebase Console. Go to **Authentica
 2. Check your Firestore Security Rules — they must allow `read` for authenticated users on `users/{userId}/**`.
 3. Open Firebase Console → Firestore → browse to `users/{your-uid}/db/data` to verify the document exists.
 
-### Expo Go shows "Something went wrong"
+### Metro bundler cache issues after pulling new code
 
-Run `npm start` with the `--clear` flag to reset the Metro bundler cache:
+Reset the cache with the `--clear` flag:
 
 ```bash
 npx expo start --clear
