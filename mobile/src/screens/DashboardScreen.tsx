@@ -13,11 +13,11 @@ interface Props {
   db: TrainingDB;
 }
 
-function getWeekRange() {
+function getWeekRange(weeksBack = 0) {
   const now = new Date();
   const day = now.getDay();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((day + 6) % 7));
+  monday.setDate(now.getDate() - ((day + 6) % 7) - weeksBack * 7);
   monday.setHours(0, 0, 0, 0);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
@@ -54,7 +54,8 @@ function actLabel(act: ActivityEntry) {
 const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function DashboardScreen({ user, db }: Props) {
-  const { monday, sunday } = useMemo(getWeekRange, []);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
   const isCycling = db.primarySport === 'cycling';
   const todayISO = new Date().toISOString().slice(0, 10);
 
@@ -156,9 +157,19 @@ export default function DashboardScreen({ user, db }: Props) {
 
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
+        <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
+        <View style={styles.weekNavRow}>
+          <TouchableOpacity onPress={() => setWeekOffset(w => w + 1)} style={styles.weekNavBtn}>
+            <Text style={styles.weekNavArrow}>‹</Text>
+          </TouchableOpacity>
           <Text style={styles.subGreeting}>{weekRangeLabel}</Text>
+          <TouchableOpacity
+            onPress={() => setWeekOffset(w => Math.max(0, w - 1))}
+            style={styles.weekNavBtn}
+            disabled={weekOffset === 0}
+          >
+            <Text style={[styles.weekNavArrow, weekOffset === 0 && { opacity: 0.2 }]}>›</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -197,7 +208,7 @@ export default function DashboardScreen({ user, db }: Props) {
       )}
 
       {/* ── This Week mini-calendar ────────────────────────── */}
-      <Text style={styles.sectionLabel}>THIS WEEK</Text>
+      <Text style={styles.sectionLabel}>{weekOffset === 0 ? 'THIS WEEK' : 'THAT WEEK'}</Text>
       <View style={styles.miniCal}>
         {weekDays.map((day, i) => {
           const isToday = day.iso === todayISO;
@@ -397,11 +408,14 @@ const styles = StyleSheet.create({
   content:   { padding: 16, paddingBottom: 40 },
 
   header: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', marginBottom: 20,
+    marginBottom: 20,
   },
-  greeting:    { fontSize: 22, fontWeight: '800', color: colors.text },
-  subGreeting: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  greeting:    { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 4 },
+  subGreeting: { fontSize: 13, color: colors.muted },
+
+  weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  weekNavBtn: { padding: 4 },
+  weekNavArrow: { fontSize: 20, color: colors.muted, fontWeight: '300', lineHeight: 22 },
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: colors.muted,
     letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginTop: 4,
