@@ -16,7 +16,7 @@ import { colors } from '../theme';
 WebBrowser.maybeCompleteAuthSession();
 
 const WEB_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
-const ANDROID_CLIENT_ID = '528346991243-oone9nirjf6tbe4e6n3forraga04i9oc.apps.googleusercontent.com';
+const ANDROID_CLIENT_ID = '528346991243-ho1r8skjuope8avrmm7ugl176jomrnqo.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
