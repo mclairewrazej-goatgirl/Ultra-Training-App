@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import {
   signInAnonymously,
   GoogleAuthProvider,
@@ -13,49 +12,31 @@ import {
 import { auth } from '../config/firebase';
 import { colors } from '../theme';
 
-WebBrowser.maybeCompleteAuthSession();
+const WEB_CLIENT_ID = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
 
-const WEB_CLIENT_ID     = '528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com';
-const ANDROID_CLIENT_ID = '528346991243-ho1r8skjuope8avrmm7ugl176jomrnqo.apps.googleusercontent.com';
+GoogleSignin.configure({
+  webClientId: WEB_CLIENT_ID,
+  scopes: ['profile', 'email'],
+});
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId:    WEB_CLIENT_ID,
-    webClientId:     WEB_CLIENT_ID,
-    androidClientId: ANDROID_CLIENT_ID || WEB_CLIENT_ID,
-    iosClientId:     WEB_CLIENT_ID,
-    scopes: ['openid', 'profile', 'email'],
-    // Authorization code + PKCE flow — works with native Android client ID
-    // (the implicit id_token flow is blocked by Google's current security policy)
-  });
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken     = response.authentication?.idToken;
-      const accessToken = response.authentication?.accessToken;
-      if (!idToken && !accessToken) {
-        Alert.alert('Sign-in failed', 'No token returned. Make sure the Android client ID is configured.');
-        setLoading(false);
-        return;
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const result = await GoogleSignin.signIn();
+      const idToken = result.data?.idToken;
+      if (!idToken) throw new Error('No ID token returned from Google.');
+      const credential = GoogleAuthProvider.credential(idToken);
+      await signInWithCredential(auth, credential);
+    } catch (error: any) {
+      if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
+        Alert.alert('Sign-in failed', error.message ?? 'Unknown error');
       }
-      const credential = GoogleAuthProvider.credential(idToken ?? null, accessToken);
-      signInWithCredential(auth, credential).catch(err => {
-        Alert.alert('Sign-in failed', err.message);
-        setLoading(false);
-      });
-    } else if (response?.type === 'error') {
-      Alert.alert('Sign-in failed', response.error?.message ?? 'Unknown error');
-      setLoading(false);
-    } else if (response?.type === 'dismiss') {
       setLoading(false);
     }
-  }, [response]);
-
-  const handleGoogleSignIn = () => {
-    setLoading(true);
-    promptAsync();
   };
 
   const handleAnonymousSignIn = () => {
@@ -81,9 +62,9 @@ export default function LoginScreen() {
         </Text>
 
         <TouchableOpacity
-          style={[styles.googleBtn, (!request || loading) && styles.btnDisabled]}
+          style={[styles.googleBtn, loading && styles.btnDisabled]}
           onPress={handleGoogleSignIn}
-          disabled={!request || loading}
+          disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#222" />
@@ -137,12 +118,6 @@ const styles = StyleSheet.create({
   },
   googleIcon:    { fontSize: 18, fontWeight: '800', color: '#4285F4' },
   googleBtnText: { fontSize: 16, fontWeight: '700', color: '#222' },
-
-  setupNotice: {
-    backgroundColor: colors.surface2, borderRadius: 10,
-    padding: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.border,
-  },
-  setupNoticeText: { fontSize: 13, color: colors.muted, lineHeight: 18, textAlign: 'center' },
 
   divider:     { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
