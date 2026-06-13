@@ -1,16 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal,
-  TextInput, Alert, Dimensions,
+  TextInput, Alert,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
 import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry } from '../types';
 import { colors, actColors } from '../theme';
-
-const SCREEN_W = Dimensions.get('window').width;
-const CELL_W   = SCREEN_W / 7;
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
@@ -53,18 +50,31 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y=>y-1); } else setMonth(m=>m-1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y=>y+1); } else setMonth(m=>m+1); };
 
-  const dotMap = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    const add = (date: string, color: string) => {
+  // Text snippets shown inside calendar cells (plans first, then logged)
+  const contentMap = useMemo(() => {
+    const map: Record<string, { label: string; color: string; done?: boolean }[]> = {};
+    const add = (date: string, item: { label: string; color: string; done?: boolean }) => {
       if (!map[date]) map[date] = [];
-      if (!map[date].includes(color)) map[date].push(color);
+      map[date].push(item);
     };
-    db.runs.forEach(r       => add(r.date, colors.pink));
-    db.crosses.forEach(c    => add(c.date, colors.blue));
-    db.strengths.forEach(s  => add(s.date, colors.amber));
-    db.recoveries.forEach(r => add(r.date, colors.green));
-    db.races.forEach(r      => add(r.date, colors.red));
-    db.plans.forEach(p      => add(p.date, p.completed ? colors.muted2 : planTypeColor(p.type)));
+    // Plans at top of cell
+    db.plans.forEach(p => {
+      const label = p.desc || p.type;
+      add(p.date, { label, color: p.completed ? colors.muted2 : planTypeColor(p.type), done: p.completed });
+    });
+    db.races.forEach(r => add(r.date, { label: r.name || 'Race', color: colors.red }));
+    // Logged activities below
+    db.runs.forEach(r => {
+      const dist = Number(r.dist) > 0 ? ` ${r.dist}k` : '';
+      const type = r.runType ? (r.runType.charAt(0).toUpperCase() + r.runType.slice(1)) : 'Run';
+      add(r.date, { label: `${type}${dist}`, color: colors.pink });
+    });
+    db.crosses.forEach(c => {
+      const dist = Number(c.dist) > 0 ? ` ${c.dist}k` : '';
+      add(c.date, { label: `${c.subtype}${dist}`, color: colors.blue });
+    });
+    db.strengths.forEach(s => add(s.date, { label: s.subtype || 'Strength', color: colors.amber }));
+    db.recoveries.forEach(r => add(r.date, { label: (r as any).subtype || 'Recovery', color: colors.green }));
     return map;
   }, [db]);
 
@@ -91,6 +101,10 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
+  // Explicit week rows so each cell can use flex: 1 (no overflow)
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
   const todayStr = todayISO();
 
   const saveDB = async (newDB: TrainingDB) => {
@@ -114,7 +128,7 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* ── Calendar grid (fixed height, no flex) ─── */}
+      {/* ── Calendar grid ─── */}
       <View>
         <View style={styles.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
@@ -131,35 +145,48 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
         </View>
 
         <View style={styles.grid}>
-          {cells.map((day, i) => {
-            if (!day) return <View key={`e-${i}`} style={styles.cell} />;
-            const iso  = toISO(year, month, day);
-            const dots = dotMap[iso] ?? [];
-            const isToday    = iso === todayStr;
-            const isSelected = iso === selectedDate;
-            return (
-              <TouchableOpacity
-                key={iso}
-                style={[styles.cell, isSelected && styles.cellSelected, isToday && !isSelected && styles.cellToday]}
-                onPress={() => setSelectedDate(iso)}
-              >
-                <Text style={[
-                  styles.dayNum,
-                  isSelected && styles.dayNumSelected,
-                  isToday && !isSelected && styles.dayNumToday,
-                ]}>
-                  {day}
-                </Text>
-                <View style={styles.dotsRow}>
-                  {dots.slice(0,3).map((c, di) => <View key={di} style={[styles.dot, { backgroundColor: c }]} />)}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+          {weeks.map((week, wi) => (
+            <View key={wi} style={styles.weekRow}>
+              {week.map((day, di) => {
+                if (!day) return <View key={`e-${wi}-${di}`} style={styles.cell} />;
+                const iso     = toISO(year, month, day);
+                const items   = contentMap[iso] ?? [];
+                const isToday    = iso === todayStr;
+                const isSelected = iso === selectedDate;
+                return (
+                  <TouchableOpacity
+                    key={iso}
+                    style={[styles.cell, isSelected && styles.cellSelected, isToday && !isSelected && styles.cellToday]}
+                    onPress={() => setSelectedDate(iso)}
+                  >
+                    <Text style={[
+                      styles.dayNum,
+                      isSelected && styles.dayNumSelected,
+                      isToday && !isSelected && styles.dayNumToday,
+                    ]}>
+                      {day}
+                    </Text>
+                    {items.slice(0, 3).map((item, i) => (
+                      <Text
+                        key={i}
+                        style={[styles.cellItem, { color: item.color }]}
+                        numberOfLines={1}
+                      >
+                        {item.done ? '✓ ' : ''}{item.label}
+                      </Text>
+                    ))}
+                    {items.length > 3 && (
+                      <Text style={styles.cellMore}>+{items.length - 3}</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
         </View>
       </View>
 
-      {/* ── Day panel (always visible, fills remaining space) ─── */}
+      {/* ── Day panel (scrollable, fills remaining space) ─── */}
       <ScrollView style={styles.dayPanel} contentContainerStyle={styles.dayPanelContent}>
         <View style={styles.dayPanelHeader}>
           <Text style={styles.dayPanelTitle}>{selectedDateLabel}</Text>
@@ -168,59 +195,11 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Logged activities */}
-        {selectedActivities.length > 0 && (
-          <Text style={styles.sectionLabel}>LOGGED</Text>
-        )}
-        {selectedActivities.map(act => {
-          const dist = Number((act as any).dist) > 0 ? `${(act as any).dist} km` : null;
-          const dur  = Number((act as any).dur)  > 0 ? `${(act as any).dur} min` : null;
-          const detail = [dist, dur].filter(Boolean).join(' · ');
-          return (
-            <View key={act.id} style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}>
-              <Text style={[styles.actType, { color: actColors[act.actType] }]}>
-                {act.actType === 'run'
-                  ? (() => {
-                      const rt: string = (act as any).runType ?? '';
-                      if (!rt) return 'Run';
-                      const cap = rt.charAt(0).toUpperCase() + rt.slice(1);
-                      return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
-                    })()
-                  : (act as any).subtype || act.actType.charAt(0).toUpperCase() + act.actType.slice(1)}
-              </Text>
-              {detail ? <Text style={styles.actDetail}>{detail}</Text> : null}
-              {(act as any).notes ? <Text style={styles.actNotes} numberOfLines={1}>{(act as any).notes}</Text> : null}
-            </View>
-          );
-        })}
-
-        {/* Races */}
-        {selectedRaces.length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>RACES</Text>
-            {selectedRaces.map(race => (
-              <View key={race.id} style={styles.raceRow}>
-                <Text style={styles.raceName}>🏁 {race.name}</Text>
-                <Text style={styles.raceDetail}>
-                  {[
-                    race.raceType.charAt(0).toUpperCase() + race.raceType.slice(1),
-                    Number(race.dist) > 0 ? `${race.dist} km` : null,
-                    race.result ? `Finish: ${race.result}` : race.goal ? `Goal: ${race.goal}` : null,
-                  ].filter(Boolean).join(' · ')}
-                </Text>
-                {race.loc ? <Text style={styles.raceLoc}>📍 {race.loc}</Text> : null}
-              </View>
-            ))}
-          </>
-        )}
-
-        {/* Planned workouts */}
+        {/* ── Planned workouts first ── */}
         <Text style={styles.sectionLabel}>PLANNED</Text>
-
         {selectedPlans.length === 0 && (
           <Text style={styles.emptyPlans}>No planned workouts. Tap "+ Plan" to add one.</Text>
         )}
-
         {selectedPlans.map(plan => (
           <View key={plan.id} style={[styles.planRow, plan.completed && styles.planRowDone]}>
             <View style={styles.planRowLeft}>
@@ -249,6 +228,52 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
             </View>
           </View>
         ))}
+
+        {/* ── Races ── */}
+        {selectedRaces.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>RACES</Text>
+            {selectedRaces.map(race => (
+              <View key={race.id} style={styles.raceRow}>
+                <Text style={styles.raceName}>🏁 {race.name}</Text>
+                <Text style={styles.raceDetail}>
+                  {[
+                    race.raceType.charAt(0).toUpperCase() + race.raceType.slice(1),
+                    Number(race.dist) > 0 ? `${race.dist} km` : null,
+                    race.result ? `Finish: ${race.result}` : race.goal ? `Goal: ${race.goal}` : null,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+                {race.loc ? <Text style={styles.raceLoc}>📍 {race.loc}</Text> : null}
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* ── Logged activities ── */}
+        {selectedActivities.length > 0 && (
+          <Text style={styles.sectionLabel}>LOGGED</Text>
+        )}
+        {selectedActivities.map(act => {
+          const dist = Number((act as any).dist) > 0 ? `${(act as any).dist} km` : null;
+          const dur  = Number((act as any).dur)  > 0 ? `${(act as any).dur} min` : null;
+          const detail = [dist, dur].filter(Boolean).join(' · ');
+          return (
+            <View key={act.id} style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}>
+              <Text style={[styles.actType, { color: actColors[act.actType] }]}>
+                {act.actType === 'run'
+                  ? (() => {
+                      const rt: string = (act as any).runType ?? '';
+                      if (!rt) return 'Run';
+                      const cap = rt.charAt(0).toUpperCase() + rt.slice(1);
+                      return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
+                    })()
+                  : (act as any).subtype || act.actType.charAt(0).toUpperCase() + act.actType.slice(1)}
+              </Text>
+              {detail ? <Text style={styles.actDetail}>{detail}</Text> : null}
+              {(act as any).notes ? <Text style={styles.actNotes} numberOfLines={1}>{(act as any).notes}</Text> : null}
+            </View>
+          );
+        })}
       </ScrollView>
 
       {planModalDate && (
@@ -653,23 +678,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   dayHeader: {
-    width: CELL_W, textAlign: 'center', fontSize: 11,
+    flex: 1, textAlign: 'center', fontSize: 10,
     color: colors.muted, fontWeight: '600', paddingVertical: 5,
   },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.bg },
+  grid:    { backgroundColor: colors.bg },
+  weekRow: { flexDirection: 'row' },
   cell: {
-    width: CELL_W, height: CELL_W,
-    alignItems: 'center', justifyContent: 'center',
+    flex: 1, minHeight: 56,
     borderBottomWidth: 0.5, borderRightWidth: 0.5, borderColor: colors.border,
+    padding: 3,
   },
   cellSelected: { backgroundColor: colors.pink+'22' },
   cellToday:    { backgroundColor: colors.surface2 },
-  dayNum:         { fontSize: 13, color: colors.text },
+  dayNum:         { fontSize: 11, color: colors.text, fontWeight: '500', marginBottom: 1 },
   dayNumSelected: { color: colors.pink, fontWeight: '800' },
   dayNumToday:    { fontWeight: '700', color: colors.blue },
-  dotsRow: { flexDirection: 'row', gap: 2, marginTop: 2 },
-  dot:     { width: 4, height: 4, borderRadius: 2 },
+  cellItem: { fontSize: 8, lineHeight: 10, marginBottom: 1, fontWeight: '500' },
+  cellMore: { fontSize: 7, color: colors.muted2 },
 
   dayPanel:        { flex: 1, backgroundColor: colors.bg },
   dayPanelContent: { padding: 14, paddingBottom: 40 },
