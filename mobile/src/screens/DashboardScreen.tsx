@@ -273,8 +273,9 @@ function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: 
 }
 
 function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: boolean; skiActive: boolean }) {
-  const [metric,    setMetric]    = useState<Metric>('dist');
-  const [weeksBack, setWeeksBack] = useState(0);
+  const [metric,      setMetric]      = useState<Metric>('dist');
+  const [weeksBack,   setWeeksBack]   = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const monday = useMemo(() => getMondayOfWeek(weeksBack), [weeksBack]);
   const { run, cross } = useMemo(
@@ -305,6 +306,11 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
 
   const bandTop    = runGoal.max > 0 ? CHART_H - Math.round(pct(runGoal.max) * CHART_H) : null;
   const bandBottom = runGoal.min > 0 ? CHART_H - Math.round(pct(runGoal.min) * CHART_H) : null;
+
+  // Y-axis ticks at 0, goal min, and goal max
+  const yTicks: { value: number; label: string }[] = [{ value: 0, label: '0' }];
+  if (runGoal.min > 0) yTicks.push({ value: runGoal.min, label: fmtV(runGoal.min) });
+  if (runGoal.max > 0) yTicks.push({ value: runGoal.max, label: fmtV(runGoal.max) });
 
   return (
     <View style={vcStyles.card}>
@@ -341,33 +347,66 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
         </TouchableOpacity>
       </View>
 
-      {/* Chart */}
-      <View style={[vcStyles.chartArea, { height: CHART_H }]}>
-        {/* Goal range band */}
-        {bandTop !== null && bandBottom !== null && bandBottom > bandTop && (
-          <View style={[vcStyles.goalBand, { top: bandTop, height: bandBottom - bandTop }]} />
-        )}
-        {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
-        {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
-
-        {/* Y-axis goal value labels */}
-        {bandTop !== null && runGoal.max > 0 && (
-          <Text style={[vcStyles.goalLabel, { top: Math.max(0, bandTop - 12) }]}>
-            {fmtV(runGoal.max)}
-          </Text>
-        )}
-        {bandBottom !== null && runGoal.min > 0 && (
-          <Text style={[vcStyles.goalLabel, { top: bandBottom + 2 }]}>
-            {fmtV(runGoal.min)}
-          </Text>
-        )}
-
-        {/* Bars */}
-        <View style={vcStyles.barsRow}>
-          <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  label={isCycling ? 'Ride' : 'Run'} value={fmtV(run)} />
-          <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  label="Cross"                      value={fmtV(cross)} />
-          <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} label="Total"                      value={fmtV(total)} />
+      {/* Chart: Y-axis + bars */}
+      <View style={vcStyles.chartWrapper}>
+        {/* Y-axis with goal value ticks */}
+        <View style={[vcStyles.yAxis, { height: CHART_H }]}>
+          {yTicks.map(tick => (
+            <Text
+              key={tick.value}
+              style={[vcStyles.yLabel, { bottom: Math.max(0, Math.round(pct(tick.value) * CHART_H) - 5) }]}
+              numberOfLines={1}
+            >
+              {tick.label}
+            </Text>
+          ))}
         </View>
+
+        {/* Chart area — tap to toggle tooltip */}
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowTooltip(v => !v)}
+          style={[vcStyles.chartArea, { height: CHART_H }]}
+        >
+          {/* Goal range band */}
+          {bandTop !== null && bandBottom !== null && bandBottom > bandTop && (
+            <View style={[vcStyles.goalBand, { top: bandTop, height: bandBottom - bandTop }]} />
+          )}
+          {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
+          {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
+
+          {/* Bars */}
+          <View style={vcStyles.barsRow}>
+            <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  label={isCycling ? 'Ride' : 'Run'} value={fmtV(run)} />
+            <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  label="Cross"                      value={fmtV(cross)} />
+            <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} label="Total"                      value={fmtV(total)} />
+          </View>
+
+          {/* Stats tooltip (tap to show/hide) */}
+          {showTooltip && (
+            <View style={vcStyles.tooltip}>
+              <Text style={vcStyles.tooltipTitle}>{weekLabel}</Text>
+              <Text style={vcStyles.tooltipRow}>
+                <Text style={{ color: colors.pink }}>{isCycling ? 'Ride' : 'Run'}: </Text>
+                <Text style={vcStyles.tooltipVal}>{fmtV(run)}</Text>
+              </Text>
+              <Text style={vcStyles.tooltipRow}>
+                <Text style={{ color: colors.blue }}>Cross: </Text>
+                <Text style={vcStyles.tooltipVal}>{fmtV(cross)}</Text>
+              </Text>
+              <Text style={vcStyles.tooltipRow}>
+                <Text style={{ color: colors.green }}>Total: </Text>
+                <Text style={vcStyles.tooltipVal}>{fmtV(total)}</Text>
+              </Text>
+              {(runGoal.min > 0 || runGoal.max > 0) && (
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.muted }}>Goal: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(runGoal.min)}–{fmtV(runGoal.max)}</Text>
+                </Text>
+              )}
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -488,10 +527,10 @@ const vcStyles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4,
   },
-  chips:        { flexDirection: 'row', gap: 4 },
-  chip:         { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
-  chipActive:   { backgroundColor: colors.pink, borderColor: colors.pink },
-  chipText:     { fontSize: 10, fontWeight: '700', color: colors.muted },
+  chips:          { flexDirection: 'row', gap: 4 },
+  chip:           { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
+  chipActive:     { backgroundColor: colors.pink, borderColor: colors.pink },
+  chipText:       { fontSize: 10, fontWeight: '700', color: colors.muted },
   chipTextActive: { color: '#fff' },
 
   weekNav: {
@@ -502,9 +541,26 @@ const vcStyles = StyleSheet.create({
   navArrow:  { fontSize: 22, color: colors.muted, fontWeight: '300' },
   weekLabel: { fontSize: 12, fontWeight: '600', color: colors.text },
 
-  chartArea: {
+  chartWrapper: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 0,
+  },
+  yAxis: {
+    width: 44,
     position: 'relative',
-    marginHorizontal: 12,
+  },
+  yLabel: {
+    position: 'absolute',
+    right: 6,
+    fontSize: 8,
+    fontWeight: '600',
+    color: colors.muted,
+    lineHeight: 10,
+  },
+  chartArea: {
+    flex: 1,
+    position: 'relative',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -517,17 +573,24 @@ const vcStyles = StyleSheet.create({
     borderTopWidth: 1, borderColor: colors.pink + '60',
     borderStyle: 'dashed',
   },
-  goalLabel: {
-    position: 'absolute', right: 4,
-    fontSize: 9, fontWeight: '700', color: colors.pink + 'cc',
-  },
   barsRow: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'flex-end',
-    justifyContent: 'space-around', paddingBottom: 0,
+    justifyContent: 'space-around',
   },
   barGroup:  { alignItems: 'center', flex: 1 },
-  bar:       { width: 36, borderRadius: 4 },
+  bar:       { width: 32, borderRadius: 4 },
   barValue:  { fontSize: 9, fontWeight: '700', marginBottom: 3 },
   barLabel:  { fontSize: 9, color: colors.muted, marginTop: 4, marginBottom: 8 },
+
+  tooltip: {
+    position: 'absolute', top: 4, left: 4,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.border2,
+    borderRadius: 8, padding: 8,
+    zIndex: 10,
+  },
+  tooltipTitle: { fontSize: 10, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  tooltipRow:   { fontSize: 10, color: colors.muted, marginBottom: 1 },
+  tooltipVal:   { color: colors.text, fontWeight: '700' },
 });
