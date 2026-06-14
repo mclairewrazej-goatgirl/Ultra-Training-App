@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
-import { TrainingDB, ActivityEntry } from '../types';
+import { TrainingDB, ActivityEntry, NutritionItem } from '../types';
 import AddWorkoutScreen from './AddWorkoutScreen';
 import { PlanWorkoutModal } from './CalendarScreen';
 
@@ -53,6 +53,26 @@ function actTitle(act: ActivityEntry): string {
 }
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+function nutrPerHour(
+  entries: { itemId: string; servings: number }[] | undefined,
+  items: NutritionItem[],
+  durMins: number,
+): { carbs: number; hydration: number; sodium: number } | null {
+  if (!entries || entries.length === 0) return null;
+  const hrs = durMins / 60;
+  if (hrs <= 0) return null;
+  let carbs = 0, hydration = 0, sodium = 0;
+  for (const ne of entries) {
+    const item = items.find(n => n.id === ne.itemId);
+    if (!item) continue;
+    carbs     += (Number(item.carbsPerServing)     || 0) * ne.servings;
+    hydration += (Number(item.hydrationPerServing)  || 0) * ne.servings;
+    sodium    += (Number(item.sodiumPerServing)     || 0) * ne.servings;
+  }
+  if (!carbs && !hydration && !sodium) return null;
+  return { carbs: Math.round(carbs / hrs), hydration: Math.round(hydration / hrs), sodium: Math.round(sodium / hrs) };
+}
 
 interface Props {
   user: User;
@@ -125,7 +145,7 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
             <Text style={styles.emptyText}>No activities to show.</Text>
           </View>
         }
-        renderItem={({ item }) => <LogItem act={item} onPress={() => onEditEntry(item)} />}
+        renderItem={({ item }) => <LogItem act={item} onPress={() => onEditEntry(item)} nutrition={db.nutrition} />}
       />
 
       {/* Add Workout Modal */}
@@ -161,13 +181,14 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
   );
 }
 
-function LogItem({ act, onPress }: { act: ActivityEntry; onPress: () => void }) {
+function LogItem({ act, onPress, nutrition = [] }: { act: ActivityEntry; onPress: () => void; nutrition?: NutritionItem[] }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
   const dist = 'dist' in act ? fmtDist((act as any).dist) : null;
   const dur  = 'dur' in act ? fmtDur((act as any).dur) : null;
   const vert = 'vert' in act && Number((act as any).vert) > 0
     ? `${(act as any).vert} m` : null;
   const notes = (act as any).notes || null;
+  const nutrStats = nutrPerHour((act as any).nutritionEntries, nutrition, Number((act as any).dur) || 0);
 
   const dateStr = new Date(act.date + 'T12:00:00').toLocaleDateString(undefined, {
     weekday: 'long', year: 'numeric', month: 'short', day: 'numeric',
@@ -190,6 +211,13 @@ function LogItem({ act, onPress }: { act: ActivityEntry; onPress: () => void }) 
       </View>
       {vert && <Text style={styles.detail}>↑ {vert}</Text>}
       {notes ? <Text style={styles.notes} numberOfLines={2}>{notes}</Text> : null}
+      {nutrStats && (
+        <View style={styles.nutrRow}>
+          {nutrStats.carbs     > 0 && <Text style={styles.nutrStat}>🌾 {nutrStats.carbs} g/hr</Text>}
+          {nutrStats.hydration > 0 && <Text style={styles.nutrStat}>💧 {nutrStats.hydration} ml/hr</Text>}
+          {nutrStats.sodium    > 0 && <Text style={styles.nutrStat}>🧂 {nutrStats.sodium} mg/hr</Text>}
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -272,4 +300,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
   },
+  nutrRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8, marginLeft: 20 },
+  nutrStat: { fontSize: 11, color: colors.blue, fontWeight: '600' },
 });

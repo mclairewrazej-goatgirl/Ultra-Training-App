@@ -6,7 +6,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry } from '../types';
+import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem } from '../types';
 import { colors, actColors } from '../theme';
 
 const MONTHS = ['January','February','March','April','May','June',
@@ -15,6 +15,26 @@ const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const PLAN_TYPES = ['Run','Cross-training','Strength','Recovery','Race'];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+function nutrPerHour(
+  entries: { itemId: string; servings: number }[] | undefined,
+  items: NutritionItem[],
+  durMins: number,
+): { carbs: number; hydration: number; sodium: number } | null {
+  if (!entries || entries.length === 0) return null;
+  const hrs = durMins / 60;
+  if (hrs <= 0) return null;
+  let carbs = 0, hydration = 0, sodium = 0;
+  for (const ne of entries) {
+    const item = items.find(n => n.id === ne.itemId);
+    if (!item) continue;
+    carbs     += (Number(item.carbsPerServing)     || 0) * ne.servings;
+    hydration += (Number(item.hydrationPerServing)  || 0) * ne.servings;
+    sodium    += (Number(item.sodiumPerServing)     || 0) * ne.servings;
+  }
+  if (!carbs && !hydration && !sodium) return null;
+  return { carbs: Math.round(carbs / hrs), hydration: Math.round(hydration / hrs), sodium: Math.round(sodium / hrs) };
+}
 
 function toISO(year: number, month: number, day: number) {
   return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
@@ -259,6 +279,7 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
           const dist = Number((act as any).dist) > 0 ? `${(act as any).dist} km` : null;
           const dur  = Number((act as any).dur)  > 0 ? `${(act as any).dur} min` : null;
           const detail = [dist, dur].filter(Boolean).join(' · ');
+          const nutrStats = nutrPerHour((act as any).nutritionEntries, db.nutrition, Number((act as any).dur) || 0);
           return (
             <View key={act.id} style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}>
               <Text style={[styles.actType, { color: actColors[act.actType] }]}>
@@ -273,6 +294,13 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
               </Text>
               {detail ? <Text style={styles.actDetail}>{detail}</Text> : null}
               {(act as any).notes ? <Text style={styles.actNotes} numberOfLines={1}>{(act as any).notes}</Text> : null}
+              {nutrStats && (
+                <View style={styles.nutrStatsRow}>
+                  {nutrStats.carbs     > 0 && <Text style={styles.nutrStatText}>🌾 {nutrStats.carbs} g/hr</Text>}
+                  {nutrStats.hydration > 0 && <Text style={styles.nutrStatText}>💧 {nutrStats.hydration} ml/hr</Text>}
+                  {nutrStats.sodium    > 0 && <Text style={styles.nutrStatText}>🧂 {nutrStats.sodium} mg/hr</Text>}
+                </View>
+              )}
             </View>
           );
         })}
@@ -724,9 +752,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3, paddingLeft: 10, marginBottom: 8,
     backgroundColor: colors.surface, borderRadius: 8, padding: 10,
   },
-  actType:   { fontSize: 13, fontWeight: '700' },
-  actDetail: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  actNotes:  { fontSize: 11, color: colors.muted2, marginTop: 2, fontStyle: 'italic' },
+  actType:      { fontSize: 13, fontWeight: '700' },
+  actDetail:    { fontSize: 12, color: colors.muted, marginTop: 2 },
+  actNotes:     { fontSize: 11, color: colors.muted2, marginTop: 2, fontStyle: 'italic' },
+  nutrStatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  nutrStatText: { fontSize: 11, color: colors.blue, fontWeight: '600' },
 
   planRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

@@ -68,6 +68,14 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
     } else {
       setSubtype((entry as any).subtype ?? '');
       setRpe(String((entry as any).rpe ?? '5'));
+      if (entry.actType === 'cross') {
+        const nutrMap: Record<string, number> = {};
+        ((entry as CrossEntry).nutritionEntries ?? []).forEach((ne: any) => {
+          if (ne.itemId && ne.servings > 0) nutrMap[ne.itemId] = ne.servings;
+        });
+        setNutrQty(nutrMap);
+        setShowNutr(Object.keys(nutrMap).length > 0);
+      }
     }
   }, [entry, visible]);
 
@@ -121,11 +129,14 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
       };
       newDB.runs = db.runs.map(r => r.id === entry.id ? updated : r);
     } else if (actType === 'cross') {
+      const nutritionEntries = showNutr
+        ? Object.entries(nutrQty).map(([itemId, servings]) => ({ itemId, servings }))
+        : [];
       const updated: CrossEntry = {
         ...(entry as CrossEntry),
         date, subtype,
         dist: Number(dist) || 0, dur: Number(dur) || 0,
-        vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes,
+        vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes, nutritionEntries,
       };
       newDB.crosses = db.crosses.map(r => r.id === entry.id ? updated : r);
     } else if (actType === 'strength') {
@@ -313,17 +324,17 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
             multiline numberOfLines={3} textAlignVertical="top"
             placeholder="How did it feel?" placeholderTextColor={colors.muted2} />
 
-          {/* Nutrition — run only */}
-          {actType === 'run' && db.nutrition.length > 0 && (
+          {/* Nutrition — run and cross */}
+          {(actType === 'run' || actType === 'cross') && db.nutrition.length > 0 && (
             <TouchableOpacity style={styles.nutrToggle} onPress={() => setShowNutr(v => !v)}>
-              <View style={[styles.checkbox, showNutr && { backgroundColor: colors.pink, borderColor: colors.pink }]}>
+              <View style={[styles.checkbox, showNutr && { backgroundColor: accentColor, borderColor: accentColor }]}>
                 {showNutr && <Text style={styles.checkmark}>✓</Text>}
               </View>
               <Text style={styles.nutrToggleText}>Add nutrition?</Text>
             </TouchableOpacity>
           )}
 
-          {showNutr && actType === 'run' && (
+          {showNutr && (actType === 'run' || actType === 'cross') && (
             <View style={styles.nutrSection}>
               {(db.nutrition as NutritionItem[]).map(item => {
                 const qty = nutrQty[item.id] ?? 0;
