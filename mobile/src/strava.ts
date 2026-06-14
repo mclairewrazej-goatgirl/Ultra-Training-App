@@ -76,7 +76,8 @@ export interface StravaActivity {
   sport_type: string;
   start_date_local: string;
   distance: number;        // meters
-  moving_time: number;     // seconds
+  moving_time: number;     // seconds (time actually moving)
+  elapsed_time?: number;   // seconds (wall-clock including stops)
   total_elevation_gain: number; // meters
   average_heartrate?: number;
 }
@@ -139,23 +140,25 @@ export function mapToEntry(act: StravaActivity, primarySport: string): ActivityE
   const notes    = act.name || '';
   const stravaId = String(act.id);
 
+  const elapsed = act.elapsed_time ? Math.round(act.elapsed_time / 60) : undefined;
+
   if (RUN_TYPES.has(type)) {
     const terrain = type === 'TrailRun' ? 'trail' : type === 'VirtualRun' ? 'treadmill' : 'road';
-    return { id: uid(), date, actType: 'run', runType: 'easy', terrain, dist, dur, vert, hr, notes, stravaId } as RunEntry;
+    return { id: uid(), date, actType: 'run', runType: 'easy', terrain, dist, dur, elapsed, vert, hr, notes, stravaId } as RunEntry;
   }
   if (HIKE_TYPES.has(type)) {
     if (primarySport === 'cycling') {
-      return { id: uid(), date, actType: 'cross', subtype: 'Hiking', dist, dur, vert, rpe: 0, notes, stravaId } as CrossEntry;
+      return { id: uid(), date, actType: 'cross', subtype: 'Hiking', dist, dur, elapsed, vert, rpe: 0, notes, stravaId } as CrossEntry;
     }
-    return { id: uid(), date, actType: 'run', runType: 'hike', terrain: 'trail', dist, dur, vert, hr, notes, stravaId } as RunEntry;
+    return { id: uid(), date, actType: 'run', runType: 'hike', terrain: 'trail', dist, dur, elapsed, vert, hr, notes, stravaId } as RunEntry;
   }
   if (RIDE_TYPES.has(type)) {
     if (primarySport === 'cycling') {
       const bikeType = type === 'GravelRide' ? 'Gravel' : type === 'MountainBikeRide' ? 'Mountain' : 'Road';
-      return { id: uid(), date, actType: 'run', runType: 'easy', terrain: 'road', bikeType, dist, dur, vert, hr, notes, stravaId } as RunEntry;
+      return { id: uid(), date, actType: 'run', runType: 'easy', terrain: 'road', bikeType, dist, dur, elapsed, vert, hr, notes, stravaId } as RunEntry;
     }
     const subtype = type === 'GravelRide' ? 'Gravel Bike' : type === 'MountainBikeRide' ? 'Mountain Bike' : 'Road Bike';
-    return { id: uid(), date, actType: 'cross', subtype, dist, dur, vert, rpe: 0, notes, stravaId } as CrossEntry;
+    return { id: uid(), date, actType: 'cross', subtype, dist, dur, elapsed, vert, rpe: 0, notes, stravaId } as CrossEntry;
   }
   if (STR_TYPES.has(type)) {
     const subtype = type === 'Yoga' ? 'Yoga' : type === 'RockClimbing' ? 'Indoor Climbing' : 'Gym Strength';

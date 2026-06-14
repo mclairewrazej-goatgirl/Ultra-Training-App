@@ -34,6 +34,7 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
   const [date,     setDate]     = useState('');
   const [dist,     setDist]     = useState('');
   const [dur,      setDur]      = useState('');
+  const [elapsed,  setElapsed]  = useState('');
   const [vert,     setVert]     = useState('');
   const [hr,       setHr]       = useState('');
   const [notes,    setNotes]    = useState('');
@@ -49,10 +50,11 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
     if (!entry) return;
     setDate(entry.date);
     setNotes((entry as any).notes ?? '');
-    setDist(String((entry as any).dist  || ''));
-    setDur(String((entry as any).dur    || ''));
-    setVert(String((entry as any).vert  || ''));
-    setHr(String((entry as any).hr      || ''));
+    setDist(String((entry as any).dist    || ''));
+    setDur(String((entry as any).dur      || ''));
+    setElapsed(String((entry as any).elapsed || ''));
+    setVert(String((entry as any).vert    || ''));
+    setHr(String((entry as any).hr        || ''));
 
     if (entry.actType === 'run') {
       const r = entry as RunEntry;
@@ -124,6 +126,7 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
         terrain: isRide ? '' : terrain,
         bikeType: isRide ? bikeType : undefined,
         dist: Number(dist) || 0, dur: Number(dur) || 0,
+        elapsed: Number(elapsed) || undefined,
         vert: Number(vert) || 0, hr: Number(hr) || 0,
         notes, nutritionEntries,
       };
@@ -136,6 +139,7 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
         ...(entry as CrossEntry),
         date, subtype,
         dist: Number(dist) || 0, dur: Number(dur) || 0,
+        elapsed: Number(elapsed) || undefined,
         vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes, nutritionEntries,
       };
       newDB.crosses = db.crosses.map(r => r.id === entry.id ? updated : r);
@@ -278,9 +282,18 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
           )}
 
           {/* Duration */}
-          <Text style={styles.label}>DURATION (MIN)</Text>
+          <Text style={styles.label}>{(actType === 'run' || actType === 'cross') ? 'MOVING TIME (MIN)' : 'DURATION (MIN)'}</Text>
           <TextInput style={styles.input} value={dur} onChangeText={setDur}
             keyboardType="decimal-pad" placeholder="60" placeholderTextColor={colors.muted2} />
+
+          {/* Elapsed time — run and cross only */}
+          {(actType === 'run' || actType === 'cross') && (
+            <>
+              <Text style={styles.label}>ELAPSED TIME (MIN)</Text>
+              <TextInput style={styles.input} value={elapsed} onChangeText={setElapsed}
+                keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
+            </>
+          )}
 
           {/* Elevation */}
           {(actType === 'run' || actType === 'cross') && (

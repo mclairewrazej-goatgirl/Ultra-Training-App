@@ -39,6 +39,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
   const [date,     setDate]     = useState(todayISO());
   const [dist,     setDist]     = useState('');
   const [dur,      setDur]      = useState('');
+  const [elapsed,  setElapsed]  = useState('');
   const [vert,     setVert]     = useState('');
   const [hr,       setHr]       = useState('');
   const [notes,    setNotes]    = useState('');
@@ -64,6 +65,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       t === 'strength' ? STRENGTH_SUB[0] :
                          RECOVERY_SUB[0]
     );
+    setElapsed('');
     setShowNutr(false);
     setNutrQty({});
   };
@@ -101,6 +103,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         terrain: isCycling ? '' : terrain,
         bikeType: isCycling ? bikeType : undefined,
         dist: Number(dist) || 0, dur: Number(dur) || 0,
+        elapsed: Number(elapsed) || undefined,
         vert: Number(vert) || 0, hr: Number(hr) || 0,
         notes, workoutDetails: '', nutritionEntries,
       };
@@ -112,6 +115,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       const entry: CrossEntry = {
         id: uid(), date, actType: 'cross',
         subtype, dist: Number(dist) || 0, dur: Number(dur) || 0,
+        elapsed: Number(elapsed) || undefined,
         vert: Number(vert) || 0, rpe: Number(rpe) || 0, notes, nutritionEntries,
       };
       newDB.crosses = [...db.crosses, entry];
@@ -135,7 +139,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       if (onClose) {
         onClose();
       } else {
-        setDist(''); setDur(''); setVert(''); setHr(''); setNotes('');
+        setDist(''); setDur(''); setElapsed(''); setVert(''); setHr(''); setNotes('');
         setDate(todayISO()); setActType('run'); setSubtype('Easy');
         setTerrain('trail'); setBikeType('Gravel'); setRpe('5');
         setShowNutr(false); setNutrQty({});
@@ -259,11 +263,22 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       )}
 
       {/* Duration */}
-      <Text style={styles.label}>DURATION (MIN)</Text>
+      <Text style={styles.label}>{(actType === 'run' || actType === 'cross') ? 'MOVING TIME (MIN)' : 'DURATION (MIN)'}</Text>
       <TextInput
         style={styles.input} value={dur} onChangeText={setDur}
         keyboardType="decimal-pad" placeholder="60" placeholderTextColor={colors.muted2}
       />
+
+      {/* Elapsed time — run and cross only */}
+      {(actType === 'run' || actType === 'cross') && (
+        <>
+          <Text style={styles.label}>ELAPSED TIME (MIN)</Text>
+          <TextInput
+            style={styles.input} value={elapsed} onChangeText={setElapsed}
+            keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2}
+          />
+        </>
+      )}
 
       {/* Elevation */}
       {(actType === 'run' || actType === 'cross') && (

@@ -20,6 +20,7 @@ export interface RunEntry {
   bikeType?: string;
   dist: number | string;
   dur: number | string;
+  elapsed?: number | string;
   vert: number | string;
   hr: number | string;
   notes: string;
@@ -36,6 +37,7 @@ export interface CrossEntry {
   subtype: string;
   dist: number | string;
   dur: number | string;
+  elapsed?: number | string;
   vert: number | string;
   rpe: number | string;
   notes: string;

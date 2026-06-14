@@ -58,9 +58,10 @@ function nutrPerHour(
   entries: { itemId: string; servings: number }[] | undefined,
   items: NutritionItem[],
   durMins: number,
+  elapsedMins?: number,
 ): { carbs: number; hydration: number; sodium: number } | null {
   if (!entries || entries.length === 0) return null;
-  const hrs = durMins / 60;
+  const hrs = (elapsedMins || durMins) / 60;
   if (hrs <= 0) return null;
   let carbs = 0, hydration = 0, sodium = 0;
   for (const ne of entries) {
@@ -188,7 +189,11 @@ function LogItem({ act, onPress, nutrition = [] }: { act: ActivityEntry; onPress
   const vert = 'vert' in act && Number((act as any).vert) > 0
     ? `${(act as any).vert} m` : null;
   const notes = (act as any).notes || null;
-  const nutrStats = nutrPerHour((act as any).nutritionEntries, nutrition, Number((act as any).dur) || 0);
+  const nutrStats = nutrPerHour(
+    (act as any).nutritionEntries, nutrition,
+    Number((act as any).dur) || 0,
+    Number((act as any).elapsed) || undefined,
+  );
 
   const dateStr = new Date(act.date + 'T12:00:00').toLocaleDateString(undefined, {
     weekday: 'long', year: 'numeric', month: 'short', day: 'numeric',
@@ -213,9 +218,24 @@ function LogItem({ act, onPress, nutrition = [] }: { act: ActivityEntry; onPress
       {notes ? <Text style={styles.notes} numberOfLines={2}>{notes}</Text> : null}
       {nutrStats && (
         <View style={styles.nutrRow}>
-          {nutrStats.carbs     > 0 && <Text style={styles.nutrStat}>🌾 {nutrStats.carbs} g/hr</Text>}
-          {nutrStats.hydration > 0 && <Text style={styles.nutrStat}>💧 {nutrStats.hydration} ml/hr</Text>}
-          {nutrStats.sodium    > 0 && <Text style={styles.nutrStat}>🧂 {nutrStats.sodium} mg/hr</Text>}
+          {nutrStats.carbs > 0 && (
+            <View>
+              <Text style={[styles.nutrVal, { color: colors.pink }]}>{nutrStats.carbs}</Text>
+              <Text style={[styles.nutrLabel, { color: colors.pink }]}>G CARBS / HR</Text>
+            </View>
+          )}
+          {nutrStats.hydration > 0 && (
+            <View>
+              <Text style={[styles.nutrVal, { color: colors.blue }]}>{nutrStats.hydration}</Text>
+              <Text style={[styles.nutrLabel, { color: colors.blue }]}>ML / HR</Text>
+            </View>
+          )}
+          {nutrStats.sodium > 0 && (
+            <View>
+              <Text style={[styles.nutrVal, { color: colors.amber }]}>{nutrStats.sodium}</Text>
+              <Text style={[styles.nutrLabel, { color: colors.amber }]}>MG SODIUM / HR</Text>
+            </View>
+          )}
         </View>
       )}
     </TouchableOpacity>
@@ -300,6 +320,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
   },
-  nutrRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8, marginLeft: 20 },
-  nutrStat: { fontSize: 11, color: colors.blue, fontWeight: '600' },
+  nutrRow:   { flexDirection: 'row', gap: 16, marginTop: 10, marginLeft: 20 },
+  nutrVal:   { fontSize: 15, fontWeight: '800' },
+  nutrLabel: { fontSize: 8, fontWeight: '700', letterSpacing: 0.5, marginTop: 1 },
 });

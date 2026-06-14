@@ -20,9 +20,10 @@ function nutrPerHour(
   entries: { itemId: string; servings: number }[] | undefined,
   items: NutritionItem[],
   durMins: number,
+  elapsedMins?: number,
 ): { carbs: number; hydration: number; sodium: number } | null {
   if (!entries || entries.length === 0) return null;
-  const hrs = durMins / 60;
+  const hrs = (elapsedMins || durMins) / 60;
   if (hrs <= 0) return null;
   let carbs = 0, hydration = 0, sodium = 0;
   for (const ne of entries) {
@@ -279,7 +280,11 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
           const dist = Number((act as any).dist) > 0 ? `${(act as any).dist} km` : null;
           const dur  = Number((act as any).dur)  > 0 ? `${(act as any).dur} min` : null;
           const detail = [dist, dur].filter(Boolean).join(' · ');
-          const nutrStats = nutrPerHour((act as any).nutritionEntries, db.nutrition, Number((act as any).dur) || 0);
+          const nutrStats = nutrPerHour(
+            (act as any).nutritionEntries, db.nutrition,
+            Number((act as any).dur) || 0,
+            Number((act as any).elapsed) || undefined,
+          );
           return (
             <View key={act.id} style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}>
               <Text style={[styles.actType, { color: actColors[act.actType] }]}>
@@ -296,9 +301,24 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
               {(act as any).notes ? <Text style={styles.actNotes} numberOfLines={1}>{(act as any).notes}</Text> : null}
               {nutrStats && (
                 <View style={styles.nutrStatsRow}>
-                  {nutrStats.carbs     > 0 && <Text style={styles.nutrStatText}>🌾 {nutrStats.carbs} g/hr</Text>}
-                  {nutrStats.hydration > 0 && <Text style={styles.nutrStatText}>💧 {nutrStats.hydration} ml/hr</Text>}
-                  {nutrStats.sodium    > 0 && <Text style={styles.nutrStatText}>🧂 {nutrStats.sodium} mg/hr</Text>}
+                  {nutrStats.carbs > 0 && (
+                    <View>
+                      <Text style={[styles.nutrStatVal, { color: colors.pink }]}>{nutrStats.carbs}</Text>
+                      <Text style={[styles.nutrStatLabel, { color: colors.pink }]}>G CARBS / HR</Text>
+                    </View>
+                  )}
+                  {nutrStats.hydration > 0 && (
+                    <View>
+                      <Text style={[styles.nutrStatVal, { color: colors.blue }]}>{nutrStats.hydration}</Text>
+                      <Text style={[styles.nutrStatLabel, { color: colors.blue }]}>ML / HR</Text>
+                    </View>
+                  )}
+                  {nutrStats.sodium > 0 && (
+                    <View>
+                      <Text style={[styles.nutrStatVal, { color: colors.amber }]}>{nutrStats.sodium}</Text>
+                      <Text style={[styles.nutrStatLabel, { color: colors.amber }]}>MG SODIUM / HR</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -450,9 +470,10 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
   const [actualDist, setActualDist] = useState(
     plan.actualDist != null ? String(plan.actualDist) : String(plan.dist || ''),
   );
-  const [actualDur,  setActualDur]  = useState(
+  const [actualDur,     setActualDur]     = useState(
     plan.actualDur  != null ? String(plan.actualDur)  : String(plan.dur  || ''),
   );
+  const [actualElapsed, setActualElapsed] = useState('');
   const [actualVert, setActualVert] = useState(String(plan.actualVert || ''));
   const [actualHr,   setActualHr]   = useState(String(plan.actualHr   || ''));
   const [compNotes,  setCompNotes]  = useState(plan.completionNotes   || '');
@@ -468,10 +489,11 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
     setSaving(true);
 
     const entryId = plan.completedEntryId || uid();
-    const dist    = Number(actualDist) || 0;
-    const dur     = Number(actualDur)  || 0;
-    const vert    = Number(actualVert) || 0;
-    const hr      = Number(actualHr)   || 0;
+    const dist    = Number(actualDist)    || 0;
+    const dur     = Number(actualDur)     || 0;
+    const elapsed = Number(actualElapsed) || undefined;
+    const vert    = Number(actualVert)    || 0;
+    const hr      = Number(actualHr)      || 0;
     const nutritionEntries = showNutr
       ? Object.entries(nutrQty).filter(([, v]) => v > 0).map(([itemId, servings]) => ({ itemId, servings }))
       : [];
@@ -486,7 +508,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
         id: entryId, date: plan.date, actType: 'run',
         runType: isRace ? 'race' : 'easy',
         terrain: terrain.toLowerCase(),
-        dist, dur, vert, hr, notes: compNotes, nutritionEntries,
+        dist, dur, elapsed, vert, hr, notes: compNotes, nutritionEntries,
       };
       newRuns = plan.completedEntryId
         ? newRuns.map(r => r.id === entryId ? entry : r)
@@ -494,7 +516,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
     } else if (actType === 'Cross') {
       const entry: CrossEntry = {
         id: entryId, date: plan.date, actType: 'cross',
-        subtype: crossSub, dist, dur, vert, rpe: 0, notes: compNotes, nutritionEntries,
+        subtype: crossSub, dist, dur, elapsed, vert, rpe: 0, notes: compNotes, nutritionEntries,
       };
       newCrosses = plan.completedEntryId
         ? newCrosses.map(c => c.id === entryId ? entry : c)
@@ -624,11 +646,23 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
             </View>
             <View style={{ width: 12 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.fieldLabel}>DURATION (MIN)</Text>
+              <Text style={styles.fieldLabel}>MOVING TIME (MIN)</Text>
               <TextInput style={styles.input} value={actualDur} onChangeText={setActualDur}
                 keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
             </View>
           </View>
+
+          {(actType === 'Run' || actType === 'Cross') && (
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>ELAPSED TIME (MIN)</Text>
+                <TextInput style={styles.input} value={actualElapsed} onChangeText={setActualElapsed}
+                  keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted2} />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={{ flex: 1 }} />
+            </View>
+          )}
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -755,8 +789,9 @@ const styles = StyleSheet.create({
   actType:      { fontSize: 13, fontWeight: '700' },
   actDetail:    { fontSize: 12, color: colors.muted, marginTop: 2 },
   actNotes:     { fontSize: 11, color: colors.muted2, marginTop: 2, fontStyle: 'italic' },
-  nutrStatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  nutrStatText: { fontSize: 11, color: colors.blue, fontWeight: '600' },
+  nutrStatsRow:  { flexDirection: 'row', gap: 12, marginTop: 6 },
+  nutrStatVal:   { fontSize: 13, fontWeight: '800' },
+  nutrStatLabel: { fontSize: 7, fontWeight: '700', letterSpacing: 0.5, marginTop: 1 },
 
   planRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
