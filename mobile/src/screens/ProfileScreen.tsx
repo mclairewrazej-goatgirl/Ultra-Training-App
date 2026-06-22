@@ -22,7 +22,10 @@ function getMondayKey(): string {
   const monday = new Date(now);
   monday.setDate(now.getDate() - ((day + 6) % 7));
   monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().slice(0, 10);
+  const y = monday.getFullYear();
+  const mo = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
 }
 
 function getGoalForWeek(db: TrainingDB, key: string): WeeklyGoal {
