@@ -48,10 +48,13 @@ export function normalizeGoal(g: any): GoalObj {
 
 function getMondayKey(): string {
   const now = new Date();
-  const day = now.getDay();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((day + 6) % 7));
-  return monday.toISOString().slice(0, 10);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+  const y = monday.getFullYear();
+  const mo = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
 }
 
 function isInRange(value: number, range: GoalRange): boolean {

@@ -19,15 +19,17 @@ import AddWorkoutScreen   from './src/screens/AddWorkoutScreen';
 import ProfileScreen      from './src/screens/ProfileScreen';
 import EditWorkoutModal   from './src/screens/EditWorkoutModal';
 import CalendarScreen     from './src/screens/CalendarScreen';
+import ExploreScreen      from './src/screens/ExploreScreen';
 
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS: Record<string, [string, string]> = {
-  Dashboard:      ['grid',       'grid-outline'      ],
-  'Activity Log': ['pulse',      'pulse-outline'     ],
-  Add:            ['add-circle', 'add-circle-outline'],
-  Calendar:       ['calendar',   'calendar-outline'  ],
-  Profile:        ['person',     'person-outline'    ],
+  Dashboard:      ['grid',         'grid-outline'        ],
+  'Activity Log': ['pulse',        'pulse-outline'       ],
+  Add:            ['add-circle',   'add-circle-outline'  ],
+  Explore:        ['stats-chart',  'stats-chart-outline' ],
+  Calendar:       ['calendar',     'calendar-outline'    ],
+  Profile:        ['person',       'person-outline'      ],
 };
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
@@ -160,6 +162,10 @@ export default function App() {
                 onSaved={handleDBUpdate}
               />
             )}
+          </Tab.Screen>
+
+          <Tab.Screen name="Explore">
+            {() => <ExploreScreen db={db} />}
           </Tab.Screen>
 
           <Tab.Screen name="Calendar">

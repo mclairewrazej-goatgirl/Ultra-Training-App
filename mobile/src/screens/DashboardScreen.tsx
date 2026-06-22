@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
 } from 'react-native';
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
@@ -258,6 +258,13 @@ function getMondayOfWeek(weeksBack: number): Date {
   return d;
 }
 
+function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
 function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: boolean) {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
@@ -273,9 +280,10 @@ function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: 
 }
 
 function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: boolean; skiActive: boolean }) {
-  const [metric,      setMetric]      = useState<Metric>('dist');
-  const [weeksBack,   setWeeksBack]   = useState(0);
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [metric,         setMetric]         = useState<Metric>('dist');
+  const [weeksBack,      setWeeksBack]      = useState(0);
+  const [showWeekPicker, setShowWeekPicker] = useState(false);
+  const [showTooltip,    setShowTooltip]    = useState(false);
 
   const monday = useMemo(() => getMondayOfWeek(weeksBack), [weeksBack]);
   const { run, cross } = useMemo(
@@ -284,9 +292,11 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
   );
   const total = run + cross;
 
-  const goals    = normalizeGoal(db.goals);
-  const runGoal  = goals.run[metric]   as { min: number; max: number };
-  const crossGoal = goals.cross[metric] as { min: number; max: number };
+  // Look up per-week goal first, fall back to default
+  const mondayKey = localDateKey(monday);
+  const goals      = normalizeGoal((db.weeklyGoals as any)?.[mondayKey] ?? db.goals);
+  const runGoal    = goals.run[metric]   as { min: number; max: number };
+  const crossGoal  = goals.cross[metric] as { min: number; max: number };
 
   const CHART_H = 130;
   const maxVal  = Math.max(total, runGoal.max || 0, crossGoal.max || 0, 1);
@@ -304,6 +314,7 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
     ? 'Current Week'
     : `${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
+  // Goal band: positions from top of chartArea
   const bandTop    = runGoal.max > 0 ? CHART_H - Math.round(pct(runGoal.max) * CHART_H) : null;
   const bandBottom = runGoal.min > 0 ? CHART_H - Math.round(pct(runGoal.min) * CHART_H) : null;
 
@@ -311,6 +322,19 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
   const yTicks: { value: number; label: string }[] = [{ value: 0, label: '0' }];
   if (runGoal.min > 0) yTicks.push({ value: runGoal.min, label: fmtV(runGoal.min) });
   if (runGoal.max > 0) yTicks.push({ value: runGoal.max, label: fmtV(runGoal.max) });
+
+  // Build week picker options (last 12 weeks)
+  const weekOptions = useMemo(() => (
+    Array.from({ length: 12 }, (_, i) => {
+      const mon = getMondayOfWeek(i);
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      const label = i === 0
+        ? 'Current Week'
+        : `${mon.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sun.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+      return { weeksBack: i, label };
+    })
+  ), []);
 
   return (
     <View style={vcStyles.card}>
@@ -332,20 +356,40 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
         </View>
       </View>
 
-      {/* Week navigation */}
-      <View style={vcStyles.weekNav}>
-        <TouchableOpacity onPress={() => setWeeksBack(w => w + 1)} style={vcStyles.navBtn}>
-          <Text style={vcStyles.navArrow}>‹</Text>
-        </TouchableOpacity>
+      {/* Week navigation — tap to open dropdown */}
+      <TouchableOpacity style={vcStyles.weekNav} onPress={() => setShowWeekPicker(true)}>
         <Text style={vcStyles.weekLabel}>{weekLabel}</Text>
+        <Text style={vcStyles.weekDropIcon}>▾</Text>
+      </TouchableOpacity>
+
+      {/* Week picker modal */}
+      <Modal
+        visible={showWeekPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWeekPicker(false)}
+      >
         <TouchableOpacity
-          onPress={() => setWeeksBack(w => Math.max(0, w - 1))}
-          style={vcStyles.navBtn}
-          disabled={weeksBack === 0}
+          style={vcStyles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowWeekPicker(false)}
         >
-          <Text style={[vcStyles.navArrow, weeksBack === 0 && { opacity: 0.2 }]}>›</Text>
+          <View style={vcStyles.pickerSheet}>
+            <Text style={vcStyles.pickerTitle}>Select Week</Text>
+            {weekOptions.map(opt => (
+              <TouchableOpacity
+                key={opt.weeksBack}
+                style={[vcStyles.pickerRow, weeksBack === opt.weeksBack && vcStyles.pickerRowActive]}
+                onPress={() => { setWeeksBack(opt.weeksBack); setShowWeekPicker(false); }}
+              >
+                <Text style={[vcStyles.pickerRowText, weeksBack === opt.weeksBack && vcStyles.pickerRowTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </TouchableOpacity>
-      </View>
+      </Modal>
 
       {/* Chart: Y-axis + bars */}
       <View style={vcStyles.chartWrapper}>
@@ -363,61 +407,69 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
         </View>
 
         {/* Chart area — tap to toggle tooltip */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setShowTooltip(v => !v)}
-          style={[vcStyles.chartArea, { height: CHART_H }]}
-        >
-          {/* Goal range band */}
-          {bandTop !== null && bandBottom !== null && bandBottom > bandTop && (
-            <View style={[vcStyles.goalBand, { top: bandTop, height: bandBottom - bandTop }]} />
-          )}
-          {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
-          {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
+        <View style={vcStyles.chartColumn}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setShowTooltip(v => !v)}
+            style={[vcStyles.chartArea, { height: CHART_H }]}
+          >
+            {/* Goal range band (top-positioned, matches bar heights from bottom) */}
+            {bandTop !== null && bandBottom !== null && bandBottom > bandTop && (
+              <View style={[vcStyles.goalBand, { top: bandTop, height: bandBottom - bandTop }]} />
+            )}
+            {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
+            {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
 
-          {/* Bars */}
-          <View style={vcStyles.barsRow}>
-            <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  label={isCycling ? 'Ride' : 'Run'} value={fmtV(run)} />
-            <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  label="Cross"                      value={fmtV(cross)} />
-            <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} label="Total"                      value={fmtV(total)} />
-          </View>
-
-          {/* Stats tooltip (tap to show/hide) */}
-          {showTooltip && (
-            <View style={vcStyles.tooltip}>
-              <Text style={vcStyles.tooltipTitle}>{weekLabel}</Text>
-              <Text style={vcStyles.tooltipRow}>
-                <Text style={{ color: colors.pink }}>{isCycling ? 'Ride' : 'Run'}: </Text>
-                <Text style={vcStyles.tooltipVal}>{fmtV(run)}</Text>
-              </Text>
-              <Text style={vcStyles.tooltipRow}>
-                <Text style={{ color: colors.blue }}>Cross: </Text>
-                <Text style={vcStyles.tooltipVal}>{fmtV(cross)}</Text>
-              </Text>
-              <Text style={vcStyles.tooltipRow}>
-                <Text style={{ color: colors.green }}>Total: </Text>
-                <Text style={vcStyles.tooltipVal}>{fmtV(total)}</Text>
-              </Text>
-              {(runGoal.min > 0 || runGoal.max > 0) && (
-                <Text style={vcStyles.tooltipRow}>
-                  <Text style={{ color: colors.muted }}>Goal: </Text>
-                  <Text style={vcStyles.tooltipVal}>{fmtV(runGoal.min)}–{fmtV(runGoal.max)}</Text>
-                </Text>
-              )}
+            {/* Bars — no labels inside, so bars truly align from bottom:0 */}
+            <View style={vcStyles.barsRow}>
+              <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  value={fmtV(run)} />
+              <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  value={fmtV(cross)} />
+              <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} value={fmtV(total)} />
             </View>
-          )}
-        </TouchableOpacity>
+
+            {/* Stats tooltip (tap to show/hide) */}
+            {showTooltip && (
+              <View style={vcStyles.tooltip}>
+                <Text style={vcStyles.tooltipTitle}>{weekLabel}</Text>
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.pink }}>{isCycling ? 'Ride' : 'Run'}: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(run)}</Text>
+                </Text>
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.blue }}>Cross: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(cross)}</Text>
+                </Text>
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.green }}>Total: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(total)}</Text>
+                </Text>
+                {(runGoal.min > 0 || runGoal.max > 0) && (
+                  <Text style={vcStyles.tooltipRow}>
+                    <Text style={{ color: colors.muted }}>Goal: </Text>
+                    <Text style={vcStyles.tooltipVal}>{fmtV(runGoal.min)}–{fmtV(runGoal.max)}</Text>
+                  </Text>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Bar labels below chart area so bars align from exact bottom */}
+          <View style={vcStyles.barLabelsRow}>
+            <Text style={vcStyles.barLabel}>{isCycling ? 'Ride' : 'Run'}</Text>
+            <Text style={vcStyles.barLabel}>Cross</Text>
+            <Text style={vcStyles.barLabel}>Total</Text>
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
-function ChartBar({ height, color, label, value }: { height: number; color: string; label: string; value: string }) {
+function ChartBar({ height, color, value }: { height: number; color: string; value: string }) {
   return (
     <View style={vcStyles.barGroup}>
       <Text style={[vcStyles.barValue, { color }]}>{height > 2 ? value : '—'}</Text>
       <View style={[vcStyles.bar, { height: Math.max(height, 2), backgroundColor: color }]} />
-      <Text style={vcStyles.barLabel}>{label}</Text>
     </View>
   );
 }
@@ -534,17 +586,37 @@ const vcStyles = StyleSheet.create({
   chipTextActive: { color: '#fff' },
 
   weekNav: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 12, paddingVertical: 8, gap: 6,
   },
-  navBtn:    { padding: 8 },
-  navArrow:  { fontSize: 22, color: colors.muted, fontWeight: '300' },
-  weekLabel: { fontSize: 12, fontWeight: '600', color: colors.text },
+  weekLabel:    { fontSize: 12, fontWeight: '600', color: colors.text },
+  weekDropIcon: { fontSize: 12, color: colors.muted },
+
+  pickerOverlay: {
+    flex: 1, backgroundColor: '#000000aa',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  pickerSheet: {
+    backgroundColor: colors.surface, borderRadius: 16,
+    borderWidth: 1, borderColor: colors.border,
+    width: '100%', maxWidth: 360, padding: 8,
+  },
+  pickerTitle: {
+    fontSize: 13, fontWeight: '700', color: colors.muted,
+    textTransform: 'uppercase', letterSpacing: 1,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  pickerRow: {
+    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10,
+  },
+  pickerRowActive:    { backgroundColor: colors.pink + '22' },
+  pickerRowText:      { fontSize: 14, color: colors.text },
+  pickerRowTextActive: { color: colors.pink, fontWeight: '700' },
 
   chartWrapper: {
     flexDirection: 'row',
     paddingHorizontal: 12,
-    paddingBottom: 0,
+    paddingBottom: 8,
   },
   yAxis: {
     width: 44,
@@ -558,8 +630,8 @@ const vcStyles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 10,
   },
+  chartColumn: { flex: 1 },
   chartArea: {
-    flex: 1,
     position: 'relative',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -578,10 +650,14 @@ const vcStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-end',
     justifyContent: 'space-around',
   },
-  barGroup:  { alignItems: 'center', flex: 1 },
-  bar:       { width: 32, borderRadius: 4 },
-  barValue:  { fontSize: 9, fontWeight: '700', marginBottom: 3 },
-  barLabel:  { fontSize: 9, color: colors.muted, marginTop: 4, marginBottom: 8 },
+  barGroup:     { alignItems: 'center', flex: 1 },
+  bar:          { width: 32, borderRadius: 4 },
+  barValue:     { fontSize: 9, fontWeight: '700', marginBottom: 3 },
+  barLabelsRow: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    paddingTop: 5,
+  },
+  barLabel: { fontSize: 9, color: colors.muted, flex: 1, textAlign: 'center' },
 
   tooltip: {
     position: 'absolute', top: 4, left: 4,
