@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry } from '../types';
+import { TrainingDB, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionEntry } from '../types';
 import { colors } from '../theme';
 
 type ActType = 'run' | 'cross' | 'strength' | 'recovery';
@@ -30,23 +30,30 @@ interface Props {
 }
 
 export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
-  const [actType, setActType]   = useState<ActType>('run');
-  const [date, setDate]         = useState(todayISO());
-  const [dist, setDist]         = useState('');
-  const [dur, setDur]           = useState('');
-  const [vert, setVert]         = useState('');
-  const [hr, setHr]             = useState('');
-  const [notes, setNotes]       = useState('');
-  const [subtype, setSubtype]   = useState('easy');
-  const [saving, setSaving]     = useState(false);
+  const [actType, setActType]       = useState<ActType>('run');
+  const [date, setDate]             = useState(todayISO());
+  const [dist, setDist]             = useState('');
+  const [movingTime, setMovingTime] = useState('');
+  const [elapsedTime, setElapsedTime] = useState('');
+  const [useMovingTime, setUseMovingTime] = useState(false);
+  const [vert, setVert]             = useState('');
+  const [hr, setHr]                 = useState('');
+  const [notes, setNotes]           = useState('');
+  const [subtype, setSubtype]       = useState('easy');
+  const [saving, setSaving]         = useState(false);
 
-  // Reset subtype when act type changes
+  // Nutrition
+  const [showNutrition, setShowNutrition] = useState(false);
+  const [nutritionEntries, setNutritionEntries] = useState<{ nutritionId: string; qty: string }[]>([]);
+
   const changeActType = (t: ActType) => {
     setActType(t);
     if (t === 'run')      setSubtype('easy');
     if (t === 'cross')    setSubtype('Cycling');
     if (t === 'strength') setSubtype('Full Body');
     if (t === 'recovery') setSubtype('Rest Day');
+    setMovingTime(''); setElapsedTime(''); setUseMovingTime(false);
+    setShowNutrition(false); setNutritionEntries([]);
   };
 
   const subtypeOptions = () => {
@@ -54,6 +61,58 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
     if (actType === 'cross')    return CROSS_TYPES;
     if (actType === 'strength') return STRENGTH_SUB;
     return RECOVERY_SUB;
+  };
+
+  // Effective duration for saving to dur field
+  const effectiveDurMins = (): number => {
+    if (useMovingTime && Number(movingTime) > 0) return Number(movingTime);
+    if (!useMovingTime && Number(elapsedTime) > 0) return Number(elapsedTime);
+    return Number(elapsedTime) || Number(movingTime) || 0;
+  };
+
+  // Nutrition calculation
+  const nutritionCalc = () => {
+    const durMins = effectiveDurMins();
+    if (!durMins || nutritionEntries.length === 0) return null;
+    const hrs = durMins / 60;
+    let totalCarbs = 0, totalHydration = 0, totalSodium = 0;
+    let valid = false;
+    nutritionEntries.forEach((e: { nutritionId: string; qty: string }) => {
+      const item = db.nutrition.find((n) => n.id === e.nutritionId);
+      if (item && Number(e.qty) > 0) {
+        const qty = Number(e.qty);
+        totalCarbs += (item.carbsPerServing || 0) * qty;
+        totalHydration += (item.hydrationPerServing || 0) * qty;
+        totalSodium += (item.sodiumPerServing || 0) * qty;
+        valid = true;
+      }
+    });
+    if (!valid) return null;
+    return {
+      carbsHr: (totalCarbs / hrs).toFixed(1),
+      mlHr: (totalHydration / hrs).toFixed(0),
+      sodiumHr: (totalSodium / hrs).toFixed(0),
+    };
+  };
+
+  const addNutritionRow = () => {
+    if (!db.nutrition.length) {
+      Alert.alert('No nutrition items', 'Add nutrition items in the web app first.');
+      return;
+    }
+    setNutritionEntries((prev: { nutritionId: string; qty: string }[]) => [...prev, { nutritionId: db.nutrition[0].id, qty: '1' }]);
+  };
+
+  const updateNutritionEntry = (index: number, field: 'nutritionId' | 'qty', value: string) => {
+    setNutritionEntries((prev: { nutritionId: string; qty: string }[]) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const removeNutritionEntry = (index: number) => {
+    setNutritionEntries((prev: { nutritionId: string; qty: string }[]) => prev.filter((_: { nutritionId: string; qty: string }, i: number) => i !== index));
   };
 
   const handleSave = async () => {
@@ -64,18 +123,26 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
     setSaving(true);
 
     const newDB: TrainingDB = { ...db };
+    const savedNutrition: NutritionEntry[] = nutritionEntries
+      .filter((e) => e.nutritionId && Number(e.qty) > 0)
+      .map((e) => ({ nutritionId: e.nutritionId, qty: Number(e.qty) }));
+
+    const durMins = effectiveDurMins();
 
     if (actType === 'run') {
       const entry: RunEntry = {
         id: uid(), date, actType: 'run',
         runType: subtype, terrain: 'trail',
         dist: Number(dist) || 0,
-        dur:  Number(dur)  || 0,
+        dur: durMins,
+        movingTime: Number(movingTime) || 0,
+        elapsedTime: Number(elapsedTime) || 0,
+        useMovingTime,
         vert: Number(vert) || 0,
-        hr:   Number(hr)   || 0,
+        hr: Number(hr) || 0,
         notes,
         workoutDetails: '',
-        nutritionEntries: [],
+        nutritionEntries: savedNutrition,
       };
       newDB.runs = [...db.runs, entry];
     } else if (actType === 'cross') {
@@ -83,17 +150,21 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
         id: uid(), date, actType: 'cross',
         subtype,
         dist: Number(dist) || 0,
-        dur:  Number(dur)  || 0,
+        dur: durMins,
+        movingTime: Number(movingTime) || 0,
+        elapsedTime: Number(elapsedTime) || 0,
+        useMovingTime,
         vert: Number(vert) || 0,
         rpe: 0,
         notes,
+        nutritionEntries: savedNutrition,
       };
       newDB.crosses = [...db.crosses, entry];
     } else if (actType === 'strength') {
       const entry: StrengthEntry = {
         id: uid(), date, actType: 'strength',
         subtype,
-        dur: Number(dur) || 0,
+        dur: Number(elapsedTime) || Number(movingTime) || 0,
         notes,
       };
       newDB.strengths = [...db.strengths, entry];
@@ -101,7 +172,7 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
       const entry: RecoveryEntry = {
         id: uid(), date, actType: 'recovery',
         subtype,
-        dur: Number(dur) || 0,
+        dur: Number(elapsedTime) || Number(movingTime) || 0,
         notes,
       };
       newDB.recoveries = [...db.recoveries, entry];
@@ -111,10 +182,10 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
       const docRef = doc(firestoreDB, 'users', user.uid, 'db', 'data');
       await setDoc(docRef, JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
-      // Reset form
-      setDist(''); setDur(''); setVert(''); setHr(''); setNotes('');
+      setDist(''); setMovingTime(''); setElapsedTime(''); setVert(''); setHr(''); setNotes('');
       setDate(todayISO()); setActType('run'); setSubtype('easy');
-      Alert.alert('Saved!', 'Workout logged successfully 🎉');
+      setUseMovingTime(false); setShowNutrition(false); setNutritionEntries([]);
+      Alert.alert('Saved!', 'Workout logged successfully');
     } catch (err: any) {
       Alert.alert('Save failed', err.message);
     } finally {
@@ -126,6 +197,9 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
     : actType === 'cross' ? colors.blue
     : actType === 'strength' ? colors.amber
     : colors.green;
+
+  const showTimeFields = actType === 'run' || actType === 'cross';
+  const nutCalc = showNutrition ? nutritionCalc() : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -148,9 +222,7 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
       </View>
 
       {/* Subtype */}
-      <Text style={styles.label}>
-        {actType === 'run' ? 'Run Type' : 'Subtype'}
-      </Text>
+      <Text style={styles.label}>{actType === 'run' ? 'Run Type' : 'Subtype'}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subtypeScroll}>
         {subtypeOptions().map((s) => (
           <TouchableOpacity
@@ -163,21 +235,116 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
         ))}
       </ScrollView>
 
-      {/* Date */}
       <InputField label="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} placeholder="2025-06-08" />
 
-      {/* Conditional fields */}
       {actType !== 'recovery' && actType !== 'strength' && (
         <InputField label="Distance (miles)" value={dist} onChangeText={setDist} placeholder="0.0" keyboardType="decimal-pad" />
       )}
-      <InputField label="Duration (minutes)" value={dur} onChangeText={setDur} placeholder="60" keyboardType="decimal-pad" />
+
+      {/* Moving / elapsed time */}
+      {showTimeFields && (
+        <>
+          <InputField label="Moving Time (minutes)" value={movingTime} onChangeText={setMovingTime} placeholder="60" keyboardType="decimal-pad" />
+          <InputField label="Elapsed Time (minutes)" value={elapsedTime} onChangeText={setElapsedTime} placeholder="65" keyboardType="decimal-pad" />
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Use moving time for dashboard</Text>
+            <Switch
+              value={useMovingTime}
+              onValueChange={setUseMovingTime}
+              trackColor={{ true: accentColor, false: colors.border }}
+              thumbColor="#fff"
+            />
+          </View>
+          <Text style={styles.switchHint}>
+            {useMovingTime ? 'Moving time will count toward weekly totals' : 'Elapsed time will count toward weekly totals'}
+          </Text>
+        </>
+      )}
+
+      {(actType === 'strength' || actType === 'recovery') && (
+        <InputField label="Duration (minutes)" value={elapsedTime} onChangeText={setElapsedTime} placeholder="60" keyboardType="decimal-pad" />
+      )}
+
       {(actType === 'run' || actType === 'cross') && (
         <InputField label="Elevation Gain (ft)" value={vert} onChangeText={setVert} placeholder="0" keyboardType="decimal-pad" />
       )}
       {actType === 'run' && (
         <InputField label="Avg Heart Rate (bpm)" value={hr} onChangeText={setHr} placeholder="0" keyboardType="decimal-pad" />
       )}
+
       <InputField label="Notes" value={notes} onChangeText={setNotes} placeholder="How did it feel?" multiline />
+
+      {/* Nutrition — only for run/cross */}
+      {(actType === 'run' || actType === 'cross') && (
+        <View style={styles.nutritionSection}>
+          <View style={styles.nutritionHeader}>
+            <Text style={styles.label}>Nutrition</Text>
+            <Switch
+              value={showNutrition}
+              onValueChange={(v) => {
+                setShowNutrition(v);
+                if (!v) setNutritionEntries([]);
+              }}
+              trackColor={{ true: accentColor, false: colors.border }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          {showNutrition && (
+            <>
+              {nutritionEntries.map((entry: { nutritionId: string; qty: string }, i: number) => {
+                const item = db.nutrition.find((n) => n.id === entry.nutritionId);
+                return (
+                  <View key={i} style={styles.nutritionRow}>
+                    {/* Item picker — cycle through available items */}
+                    <TouchableOpacity
+                      style={styles.nutritionPicker}
+                      onPress={() => {
+                        const idx = db.nutrition.findIndex((n) => n.id === entry.nutritionId);
+                        const next = db.nutrition[(idx + 1) % db.nutrition.length];
+                        updateNutritionEntry(i, 'nutritionId', next.id);
+                      }}
+                    >
+                      <Text style={styles.nutritionPickerText} numberOfLines={1}>
+                        {item?.name ?? 'Select item'}
+                      </Text>
+                      <Text style={styles.nutritionPickerHint}>tap to change</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.nutritionQty}
+                      value={entry.qty}
+                      onChangeText={(v) => updateNutritionEntry(i, 'qty', v)}
+                      placeholder="Qty"
+                      placeholderTextColor={colors.muted2}
+                      keyboardType="decimal-pad"
+                    />
+                    <TouchableOpacity onPress={() => removeNutritionEntry(i)} style={styles.nutritionRemove}>
+                      <Text style={styles.nutritionRemoveText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+
+              <TouchableOpacity style={[styles.addNutritionBtn, { borderColor: accentColor }]} onPress={addNutritionRow}>
+                <Text style={[styles.addNutritionText, { color: accentColor }]}>+ Add Item</Text>
+              </TouchableOpacity>
+
+              {nutCalc && (
+                <View style={styles.nutritionCalc}>
+                  <NutriStat value={nutCalc.carbsHr} label="g carbs / hr" color={colors.amber} />
+                  <NutriStat value={nutCalc.mlHr} label="mL / hr" color={colors.blue} />
+                  <NutriStat value={nutCalc.sodiumHr} label="mg sodium / hr" color={colors.green} />
+                </View>
+              )}
+              {showNutrition && nutritionEntries.length > 0 && !nutCalc && (
+                <Text style={styles.nutritionHint}>
+                  Enter {useMovingTime ? 'moving' : 'elapsed'} time above to see per-hour values
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+      )}
 
       <TouchableOpacity
         style={[styles.saveBtn, { backgroundColor: accentColor }, saving && styles.btnDisabled]}
@@ -187,6 +354,15 @@ export default function AddWorkoutScreen({ user, db, onSaved }: Props) {
         <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Workout'}</Text>
       </TouchableOpacity>
     </ScrollView>
+  );
+}
+
+function NutriStat({ value, label, color }: { value: string; label: string; color: string }) {
+  return (
+    <View style={styles.nutriStat}>
+      <Text style={[styles.nutriStatVal, { color }]}>{value}</Text>
+      <Text style={styles.nutriStatLbl}>{label}</Text>
+    </View>
   );
 }
 
@@ -260,6 +436,79 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   inputMultiline: { minHeight: 80, textAlignVertical: 'top' },
+
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  switchLabel: { fontSize: 13, color: colors.text, fontWeight: '600', flex: 1 },
+  switchHint: { fontSize: 11, color: colors.muted, marginTop: 4, paddingHorizontal: 2 },
+
+  nutritionSection: { marginTop: 4 },
+  nutritionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  nutritionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+  },
+  nutritionPicker: { flex: 1 },
+  nutritionPickerText: { fontSize: 13, color: colors.text, fontWeight: '600' },
+  nutritionPickerHint: { fontSize: 10, color: colors.muted2, marginTop: 2 },
+  nutritionQty: {
+    width: 52,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 8,
+    color: colors.text,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  nutritionRemove: { padding: 4 },
+  nutritionRemoveText: { color: colors.muted2, fontSize: 14 },
+  addNutritionBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+    borderStyle: 'dashed',
+  },
+  addNutritionText: { fontSize: 13, fontWeight: '600' },
+  nutritionCalc: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 8,
+    marginBottom: 4,
+  },
+  nutriStat: { flex: 1, alignItems: 'center' },
+  nutriStatVal: { fontSize: 18, fontWeight: '800' },
+  nutriStatLbl: { fontSize: 10, color: colors.muted, marginTop: 2, textAlign: 'center' },
+  nutritionHint: { fontSize: 11, color: colors.muted, marginBottom: 8 },
 
   saveBtn: {
     borderRadius: 12,
