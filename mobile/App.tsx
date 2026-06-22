@@ -15,6 +15,7 @@ import DashboardScreen  from './src/screens/DashboardScreen';
 import LogScreen        from './src/screens/LogScreen';
 import AddWorkoutScreen from './src/screens/AddWorkoutScreen';
 import ProfileScreen    from './src/screens/ProfileScreen';
+import ExploreScreen    from './src/screens/ExploreScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -24,6 +25,7 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
     Dashboard: '⚡',
     Log:       '📋',
     Add:       '＋',
+    Explore:   '📊',
     Profile:   '👤',
   };
   return (
@@ -143,8 +145,12 @@ export default function App() {
             )}
           </Tab.Screen>
 
+          <Tab.Screen name="Explore">
+            {() => <ExploreScreen db={db} />}
+          </Tab.Screen>
+
           <Tab.Screen name="Profile">
-            {() => <ProfileScreen user={user} db={db} />}
+            {() => <ProfileScreen user={user} db={db} onSaved={handleDBUpdate} />}
           </Tab.Screen>
         </Tab.Navigator>
       </NavigationContainer>
