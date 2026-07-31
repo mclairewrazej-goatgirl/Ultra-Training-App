@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, TextInput, Alert, ScrollView,
+  Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -272,7 +272,8 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
           <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <Field label="RACE NAME" value={name} onChange={setName} placeholder="e.g. UTMB, Gravel Worlds" />
 
           <Text style={styles.fieldLabel}>RACE TYPE</Text>
@@ -365,6 +366,7 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Race'}</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

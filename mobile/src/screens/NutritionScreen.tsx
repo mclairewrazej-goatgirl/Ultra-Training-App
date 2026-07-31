@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, TextInput, Alert,
+  Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -171,7 +171,8 @@ function NutritionModal({ visible, editingItem, user, db, onSaved, onClose }: {
           <View style={{ width: 60 }} />
         </View>
 
-        <View style={styles.modalContent}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <Field label="ITEM NAME" value={name} onChange={setName} placeholder="e.g. Maurten Gel 100" />
           <Field label="SERVING UNIT" value={servingUnit} onChange={setServingUnit} placeholder="e.g. gel, bottle, scoop, bar" />
 
@@ -193,7 +194,8 @@ function NutritionModal({ visible, editingItem, user, db, onSaved, onClose }: {
           >
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Item'}</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

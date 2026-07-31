@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal,
-  TextInput, Alert,
+  TextInput, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -406,7 +406,8 @@ export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
           <Text style={styles.modalTitle}>Plan Workout</Text>
           <View style={{ width: 60 }} />
         </View>
-        <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <Text style={styles.planDateLabel}>{dateStr}</Text>
 
           <Text style={styles.fieldLabel}>TYPE</Text>
@@ -452,6 +453,7 @@ export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Plan'}</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -582,7 +584,8 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
           <Text style={styles.modalTitle}>{isEditing ? 'Edit Completion' : 'Mark as Done'}</Text>
           <View style={{ width: 60 }} />
         </View>
-        <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <View style={[styles.planSummary, { borderLeftColor: accentColor }]}>
             <Text style={[styles.planSummaryType, { color: accentColor }]}>{plan.type}</Text>
             {plan.desc ? <Text style={styles.planSummaryDesc}>{plan.desc}</Text> : null}
@@ -731,6 +734,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : isEditing ? 'Update' : '✓ Mark as Done'}</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

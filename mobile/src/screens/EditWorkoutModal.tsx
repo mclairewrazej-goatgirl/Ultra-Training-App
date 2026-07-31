@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, Modal,
+  TextInput, Alert, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -202,7 +202,8 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
           <TouchableOpacity onPress={handleDelete}><Text style={styles.deleteBtn}>Delete</Text></TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={[styles.typeBadge, { backgroundColor: accentColor+'22', borderColor: accentColor }]}>
             <Text style={[styles.typeBadgeText, { color: accentColor }]}>
               {actType === 'run' && isRide ? 'Ride'
@@ -380,6 +381,7 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

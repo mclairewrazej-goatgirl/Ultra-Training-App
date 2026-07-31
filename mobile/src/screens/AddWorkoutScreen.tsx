@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, TextInput, Alert,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -168,7 +168,11 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
           </TouchableOpacity>
         </View>
       )}
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
       {/* Activity type */}
       <Text style={styles.label}>TYPE</Text>
@@ -371,6 +375,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Workout'}</Text>
       </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

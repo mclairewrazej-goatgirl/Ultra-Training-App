@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, Switch,
+  TextInput, Alert, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -144,7 +144,8 @@ export default function GoalsScreen({ user, db, onSaved }: Props) {
   const runLabel  = isCycling ? 'Cycling' : 'Running';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
       {/* ── This Week ─────────────────────────────── */}
       <Text style={styles.sectionTitle}>THIS WEEK</Text>
@@ -198,6 +199,7 @@ export default function GoalsScreen({ user, db, onSaved }: Props) {
         <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Goals'}</Text>
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

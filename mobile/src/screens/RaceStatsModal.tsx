@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { colors } from '../theme';
 
 interface Props {
@@ -23,7 +23,8 @@ export default function RaceStatsModal({ visible, raceName, finishTime, onSave, 
           <Text style={styles.title}>Race Stats</Text>
           <View style={{ width: 44 }} />
         </View>
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.raceName}>🏁 {raceName}</Text>
 
           <Text style={styles.label}>FINISH TIME</Text>
@@ -44,6 +45,7 @@ export default function RaceStatsModal({ visible, raceName, finishTime, onSave, 
             <Text style={styles.saveBtnText}>Save</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
