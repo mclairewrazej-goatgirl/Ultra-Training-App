@@ -69,9 +69,10 @@ export default function DashboardScreen({ user, db }: Props) {
     return d >= monday && d <= sunday;
   };
 
-  const weekRuns      = useMemo(() => db.runs.filter(r => inWeek(r.date)),      [db, monday]);
-  const weekCross     = useMemo(() => db.crosses.filter(c => inWeek(c.date)),   [db, monday]);
-  const weekStrength  = useMemo(() => db.strengths.filter(s => inWeek(s.date)), [db, monday]);
+  const weekRuns       = useMemo(() => db.runs.filter(r => inWeek(r.date)),       [db, monday]);
+  const weekCross      = useMemo(() => db.crosses.filter(c => inWeek(c.date)),    [db, monday]);
+  const weekStrength   = useMemo(() => db.strengths.filter(s => inWeek(s.date)),  [db, monday]);
+  const weekRecoveries = useMemo(() => db.recoveries.filter(r => inWeek(r.date)), [db, monday]);
 
   // Running / cycling weekly stats
   const runStats = useMemo(() => {
@@ -93,6 +94,12 @@ export default function DashboardScreen({ user, db }: Props) {
     const strMin   = weekStrength.reduce((s, x) => s + (Number(x.dur) || 0), 0);
     return { dist, vert, totalMins: crossMin + strMin, strengthCount: weekStrength.length };
   }, [weekCross, weekStrength, skiActive]);
+
+  // Recovery (yoga, massage, physio, etc.) — kept separate from Cross-Training
+  const recoveryStats = useMemo(() => {
+    const totalMins = weekRecoveries.reduce((s, r) => s + (Number(r.dur) || 0), 0);
+    return { totalMins, count: weekRecoveries.length };
+  }, [weekRecoveries]);
 
   // Ski stats (only calculated when ski season is active)
   const skiStats = useMemo(() => {
@@ -191,8 +198,15 @@ export default function DashboardScreen({ user, db }: Props) {
         <StatCard label="Strength"        value={`${crossStats.strengthCount} sessions`} color={colors.amber} />
       </View>
 
+      {/* ── Recovery ────────────────────────────────────────── */}
+      <Text style={styles.sectionLabel}>RECOVERY</Text>
+      <View style={styles.grid}>
+        <StatCard label="Recovery Time"    value={fmtHours(recoveryStats.totalMins)} color={colors.green} />
+        <StatCard label="Recovery Sessions" value={`${recoveryStats.count} sessions`} color={colors.green} />
+      </View>
+
       {/* ── Volume History ─────────────────────────────────── */}
-      <VolumeChart db={db} isCycling={isCycling} skiActive={skiActive} />
+      <VolumeChart db={db} isCycling={isCycling} skiActive={skiActive} weekOffset={weekOffset} onChangeWeek={setWeekOffset} />
 
       {/* ── Ski Season ─────────────────────────────────────── */}
       {skiActive && skiStats && (
@@ -276,16 +290,20 @@ function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: 
     : db.crosses.filter(c => inW(c.date));
   const key = metric === 'time' ? 'dur' : metric;
   const sum = (arr: any[]) => arr.reduce((s, x) => s + (Number(x[key]) || 0), 0);
-  return { run: sum(runs), cross: sum(crosses) };
+  // dur is stored in minutes, but "time" goals are entered/stored in hours — convert to match.
+  const divisor = metric === 'time' ? 60 : 1;
+  return { run: sum(runs) / divisor, cross: sum(crosses) / divisor };
 }
 
-function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: boolean; skiActive: boolean }) {
+function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
+  db: TrainingDB; isCycling: boolean; skiActive: boolean;
+  weekOffset: number; onChangeWeek: (n: number) => void;
+}) {
   const [metric,         setMetric]         = useState<Metric>('dist');
-  const [weeksBack,      setWeeksBack]      = useState(0);
   const [showWeekPicker, setShowWeekPicker] = useState(false);
   const [showTooltip,    setShowTooltip]    = useState(false);
 
-  const monday = useMemo(() => getMondayOfWeek(weeksBack), [weeksBack]);
+  const monday = useMemo(() => getMondayOfWeek(weekOffset), [weekOffset]);
   const { run, cross } = useMemo(
     () => getVolumeData(db, monday, metric, skiActive),
     [db, monday, metric, skiActive],
@@ -298,30 +316,45 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
   const runGoal    = goals.run[metric]   as { min: number; max: number };
   const crossGoal  = goals.cross[metric] as { min: number; max: number };
 
+  // Combined goal for the Total bar — sum of whichever of run/cross goals are enabled.
+  const totalGoal: { min: number; max: number } | null = (goals.run.enabled || goals.cross.enabled) ? {
+    min: (goals.run.enabled ? runGoal.min : 0) + (goals.cross.enabled ? crossGoal.min : 0),
+    max: (goals.run.enabled ? runGoal.max : 0) + (goals.cross.enabled ? crossGoal.max : 0),
+  } : null;
+
   const CHART_H = 130;
-  const maxVal  = Math.max(total, runGoal.max || 0, crossGoal.max || 0, 1);
+  const maxVal  = Math.max(total, runGoal.max || 0, crossGoal.max || 0, totalGoal?.max || 0, 1);
   const pct     = (v: number) => Math.min(1, v / maxVal);
 
   const fmtV = (v: number) => {
     if (metric === 'dist') return `${v.toFixed(1)} km`;
-    if (metric === 'time') return fmtHours(v);
+    if (metric === 'time') return fmtHours(Math.round(v * 60));
     return `${Math.round(v)} m`;
   };
 
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const weekLabel = weeksBack === 0
+  const weekLabel = weekOffset === 0
     ? 'Current Week'
     : `${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
-  // Goal band: positions from top of chartArea
-  const bandTop    = runGoal.max > 0 ? CHART_H - Math.round(pct(runGoal.max) * CHART_H) : null;
-  const bandBottom = runGoal.min > 0 ? CHART_H - Math.round(pct(runGoal.min) * CHART_H) : null;
+  // Per-bar goal bands: each bar is compared against its own goal, not a single shared one.
+  const bandFor = (g: { min: number; max: number } | null) => {
+    if (!g || (g.min <= 0 && g.max <= 0)) return null;
+    return {
+      top:    g.max > 0 ? CHART_H - Math.round(pct(g.max) * CHART_H) : null,
+      bottom: g.min > 0 ? CHART_H - Math.round(pct(g.min) * CHART_H) : null,
+    };
+  };
+  const runBand   = bandFor(goals.run.enabled   ? runGoal   : null);
+  const crossBand = bandFor(goals.cross.enabled ? crossGoal : null);
+  const totalBand = bandFor(totalGoal);
 
-  // Y-axis ticks at 0, goal min, and goal max
+  // Y-axis ticks at 0, goal min, and goal max (using the Total goal as the primary reference)
+  const tickGoal = totalGoal ?? runGoal;
   const yTicks: { value: number; label: string }[] = [{ value: 0, label: '0' }];
-  if (runGoal.min > 0) yTicks.push({ value: runGoal.min, label: fmtV(runGoal.min) });
-  if (runGoal.max > 0) yTicks.push({ value: runGoal.max, label: fmtV(runGoal.max) });
+  if (tickGoal.min > 0) yTicks.push({ value: tickGoal.min, label: fmtV(tickGoal.min) });
+  if (tickGoal.max > 0) yTicks.push({ value: tickGoal.max, label: fmtV(tickGoal.max) });
 
   // Build week picker options (last 12 weeks)
   const weekOptions = useMemo(() => (
@@ -379,10 +412,10 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
             {weekOptions.map(opt => (
               <TouchableOpacity
                 key={opt.weeksBack}
-                style={[vcStyles.pickerRow, weeksBack === opt.weeksBack && vcStyles.pickerRowActive]}
-                onPress={() => { setWeeksBack(opt.weeksBack); setShowWeekPicker(false); }}
+                style={[vcStyles.pickerRow, weekOffset === opt.weeksBack && vcStyles.pickerRowActive]}
+                onPress={() => { onChangeWeek(opt.weeksBack); setShowWeekPicker(false); }}
               >
-                <Text style={[vcStyles.pickerRowText, weeksBack === opt.weeksBack && vcStyles.pickerRowTextActive]}>
+                <Text style={[vcStyles.pickerRowText, weekOffset === opt.weeksBack && vcStyles.pickerRowTextActive]}>
                   {opt.label}
                 </Text>
               </TouchableOpacity>
@@ -413,18 +446,11 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
             onPress={() => setShowTooltip(v => !v)}
             style={[vcStyles.chartArea, { height: CHART_H }]}
           >
-            {/* Goal range band (top-positioned, matches bar heights from bottom) */}
-            {bandTop !== null && bandBottom !== null && bandBottom > bandTop && (
-              <View style={[vcStyles.goalBand, { top: bandTop, height: bandBottom - bandTop }]} />
-            )}
-            {bandTop    !== null && <View style={[vcStyles.goalLine, { top: bandTop }]} />}
-            {bandBottom !== null && <View style={[vcStyles.goalLine, { top: bandBottom }]} />}
-
-            {/* Bars — no labels inside, so bars truly align from bottom:0 */}
+            {/* Bars — each with its own goal band, compared against its own scale */}
             <View style={vcStyles.barsRow}>
-              <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  value={fmtV(run)} />
-              <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  value={fmtV(cross)} />
-              <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} value={fmtV(total)} />
+              <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  value={fmtV(run)}   chartH={CHART_H} band={runBand} />
+              <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  value={fmtV(cross)} chartH={CHART_H} band={crossBand} />
+              <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} value={fmtV(total)} chartH={CHART_H} band={totalBand} />
             </View>
 
             {/* Stats tooltip (tap to show/hide) */}
@@ -443,10 +469,16 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
                   <Text style={{ color: colors.green }}>Total: </Text>
                   <Text style={vcStyles.tooltipVal}>{fmtV(total)}</Text>
                 </Text>
-                {(runGoal.min > 0 || runGoal.max > 0) && (
+                {goals.run.enabled && (runGoal.min > 0 || runGoal.max > 0) && (
                   <Text style={vcStyles.tooltipRow}>
-                    <Text style={{ color: colors.muted }}>Goal: </Text>
+                    <Text style={{ color: colors.muted }}>{isCycling ? 'Ride' : 'Run'} Goal: </Text>
                     <Text style={vcStyles.tooltipVal}>{fmtV(runGoal.min)}–{fmtV(runGoal.max)}</Text>
+                  </Text>
+                )}
+                {goals.cross.enabled && (crossGoal.min > 0 || crossGoal.max > 0) && (
+                  <Text style={vcStyles.tooltipRow}>
+                    <Text style={{ color: colors.muted }}>Cross Goal: </Text>
+                    <Text style={vcStyles.tooltipVal}>{fmtV(crossGoal.min)}–{fmtV(crossGoal.max)}</Text>
                   </Text>
                 )}
               </View>
@@ -465,9 +497,17 @@ function VolumeChart({ db, isCycling, skiActive }: { db: TrainingDB; isCycling: 
   );
 }
 
-function ChartBar({ height, color, value }: { height: number; color: string; value: string }) {
+function ChartBar({ height, color, value, chartH, band }: {
+  height: number; color: string; value: string; chartH: number;
+  band: { top: number | null; bottom: number | null } | null;
+}) {
   return (
-    <View style={vcStyles.barGroup}>
+    <View style={[vcStyles.barGroup, { height: chartH }]}>
+      {band && band.top !== null && band.bottom !== null && band.bottom > band.top && (
+        <View style={[vcStyles.goalBand, { top: band.top, height: band.bottom - band.top }]} />
+      )}
+      {band && band.top    !== null && <View style={[vcStyles.goalLine, { top: band.top }]} />}
+      {band && band.bottom !== null && <View style={[vcStyles.goalLine, { top: band.bottom }]} />}
       <Text style={[vcStyles.barValue, { color }]}>{height > 2 ? value : '—'}</Text>
       <View style={[vcStyles.bar, { height: Math.max(height, 2), backgroundColor: color }]} />
     </View>
@@ -646,11 +686,10 @@ const vcStyles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   barsRow: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', alignItems: 'flex-end',
+    flexDirection: 'row',
     justifyContent: 'space-around',
   },
-  barGroup:     { alignItems: 'center', flex: 1 },
+  barGroup:     { alignItems: 'center', justifyContent: 'flex-end', position: 'relative', flex: 1 },
   bar:          { width: 32, borderRadius: 4 },
   barValue:     { fontSize: 9, fontWeight: '700', marginBottom: 3 },
   barLabelsRow: {

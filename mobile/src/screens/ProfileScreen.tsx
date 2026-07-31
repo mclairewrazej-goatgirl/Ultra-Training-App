@@ -8,7 +8,7 @@ import { User } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db as firestoreDB } from '../config/firebase';
 import { colors } from '../theme';
-import { TrainingDB } from '../types';
+import { TrainingDB, RecoveryEntry } from '../types';
 import NutritionScreen  from './NutritionScreen';
 import RacesScreen      from './RacesScreen';
 import GoalsScreen      from './GoalsScreen';
@@ -39,6 +39,37 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
     try {
       await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    }
+  };
+
+  const yogaInStrength = db.strengths.filter(s => s.subtype === 'Yoga').length;
+
+  const handleFixYogaEntries = async () => {
+    const yogaEntries = db.strengths.filter(s => s.subtype === 'Yoga');
+    if (yogaEntries.length === 0) {
+      Alert.alert('No Yoga entries found', 'All Strength entries are already correctly categorized.');
+      return;
+    }
+    const converted: RecoveryEntry[] = yogaEntries.map(s => ({
+      id: s.id,
+      date: s.date,
+      actType: 'recovery',
+      subtype: 'Yoga/Stretch',
+      dur: s.dur,
+      notes: s.notes,
+      stravaId: s.stravaId,
+    }));
+    const newDB: TrainingDB = {
+      ...db,
+      strengths: db.strengths.filter(s => s.subtype !== 'Yoga'),
+      recoveries: [...db.recoveries, ...converted],
+    };
+    try {
+      await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+      onSaved(newDB);
+      Alert.alert('Done', `Moved ${yogaEntries.length} Yoga ${yogaEntries.length === 1 ? 'entry' : 'entries'} from Strength to Recovery.`);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     }
@@ -131,6 +162,19 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
       </View>
+
+      {yogaInStrength > 0 && (
+        <View style={styles.sportSection}>
+          <Text style={styles.sectionTitle}>DATA TOOLS</Text>
+          <TouchableOpacity style={styles.dataToolBtn} onPress={handleFixYogaEntries}>
+            <Ionicons name="leaf-outline" size={18} color={colors.green} style={styles.navIcon} />
+            <Text style={styles.dataToolBtnText}>
+              Move {yogaInStrength} Yoga {yogaInStrength === 1 ? 'entry' : 'entries'} to Recovery
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.sportHint}>Yoga was previously logged as Strength. This moves past entries to Recovery.</Text>
+        </View>
+      )}
 
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign Out</Text>
@@ -262,6 +306,13 @@ const styles = StyleSheet.create({
   sportBtnCycling: { borderColor: colors.blue, backgroundColor: colors.blue+'18' },
   sportBtnText:   { fontSize: 14, fontWeight: '700', color: colors.muted },
   sportHint:      { fontSize: 11, color: colors.muted2, textAlign: 'center' },
+
+  dataToolBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.green, backgroundColor: colors.green + '18',
+    borderRadius: 10, paddingVertical: 11, marginBottom: 8,
+  },
+  dataToolBtnText: { fontSize: 14, fontWeight: '700', color: colors.green },
 
   navCard: {
     backgroundColor: colors.surface, borderRadius: 14,

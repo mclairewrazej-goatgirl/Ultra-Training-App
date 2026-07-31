@@ -86,6 +86,17 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
       add(p.date, { label, color: p.completed ? colors.muted2 : PLAN_PENDING_COLOR, done: p.completed });
     });
     db.races.forEach(r => add(r.date, { label: r.name || 'Race', color: colors.red }));
+    // Registration reminder markers — the 7 days leading up to (and including) reg open date
+    db.races.forEach(r => {
+      if (!r.regOpenDate) return;
+      const open = new Date(r.regOpenDate + 'T12:00:00');
+      for (let i = 7; i >= 0; i--) {
+        const d = new Date(open);
+        d.setDate(open.getDate() - i);
+        const iso = toISO(d.getFullYear(), d.getMonth(), d.getDate());
+        add(iso, { label: `Register: ${r.name || 'Race'}`, color: colors.amber });
+      }
+    });
     // Logged activities below
     db.runs.forEach(r => {
       const dist = Number(r.dist) > 0 ? ` ${r.dist}k` : '';

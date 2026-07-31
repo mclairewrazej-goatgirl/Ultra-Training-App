@@ -62,6 +62,7 @@ export interface RecoveryEntry {
   subtype: string;
   dur: number | string;
   notes: string;
+  stravaId?: string;
 }
 
 export type ActivityEntry = RunEntry | CrossEntry | StrengthEntry | RecoveryEntry;
@@ -108,6 +109,9 @@ export interface Race {
   result: string;
   notes: string;
   stravaActivityId?: string;
+  regOpenDate?: string;
+  regReminderAcknowledged?: boolean;
+  placement?: string;
 }
 
 export interface SeasonalSport {

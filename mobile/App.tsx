@@ -5,11 +5,11 @@ import { ActivityEntry } from './src/types';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { onSnapshot, doc } from 'firebase/firestore';
+import { onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { StatusBar } from 'expo-status-bar';
 
 import { auth, db as firestoreDB } from './src/config/firebase';
-import { TrainingDB, emptyDB } from './src/types';
+import { TrainingDB, Race, emptyDB } from './src/types';
 import { colors } from './src/theme';
 
 import LoginScreen        from './src/screens/LoginScreen';
@@ -20,6 +20,7 @@ import ProfileScreen      from './src/screens/ProfileScreen';
 import EditWorkoutModal   from './src/screens/EditWorkoutModal';
 import CalendarScreen     from './src/screens/CalendarScreen';
 import ExploreScreen      from './src/screens/ExploreScreen';
+import RegistrationReminderModal, { daysUntil } from './src/screens/RegistrationReminderModal';
 
 const Tab = createBottomTabNavigator();
 
@@ -76,6 +77,36 @@ export default function App() {
 
   const [editingEntry, setEditingEntry] = useState<ActivityEntry | null>(null);
 
+  // Registration reminders — surface a popup for the soonest upcoming, unacknowledged race
+  // whose registration opens within the next 7 days.
+  const [regReminderRace, setRegReminderRace] = useState<Race | null>(null);
+
+  useEffect(() => {
+    if (dataLoading || db.races.length === 0) { setRegReminderRace(null); return; }
+    const candidates = db.races
+      .filter(r => r.regOpenDate && !r.regReminderAcknowledged)
+      .filter(r => { const d = daysUntil(r.regOpenDate!); return d >= 0 && d <= 7; })
+      .sort((a, b) => daysUntil(a.regOpenDate!) - daysUntil(b.regOpenDate!));
+    setRegReminderRace(candidates[0] ?? null);
+  }, [db, dataLoading]);
+
+  const handleAcknowledgeReminder = useCallback(async () => {
+    if (!regReminderRace || !user) return;
+    const newDB: TrainingDB = {
+      ...db,
+      races: db.races.map(r => r.id === regReminderRace.id ? { ...r, regReminderAcknowledged: true } : r),
+    };
+    setRegReminderRace(null);
+    try {
+      await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+      setDB(newDB);
+    } catch {
+      // Firestore listener will resync on the next snapshot regardless.
+    }
+  }, [regReminderRace, user, db]);
+
+  const handleDismissReminder = useCallback(() => setRegReminderRace(null), []);
+
   // Waiting for Firebase Auth to initialize
   if (!authReady) {
     return (
@@ -113,6 +144,11 @@ export default function App() {
         db={db}
         onSaved={handleDBUpdate}
         onClose={() => setEditingEntry(null)}
+      />
+      <RegistrationReminderModal
+        race={regReminderRace}
+        onAcknowledge={handleAcknowledgeReminder}
+        onLater={handleDismissReminder}
       />
       <NavigationContainer>
         <Tab.Navigator
