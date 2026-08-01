@@ -86,12 +86,20 @@ export interface PlannedWorkout {
   stravaActivityId?: string;
 }
 
+export type NutritionCategory =
+  | 'Fuel' | 'Real Food' | 'Water' | 'Hydration'
+  | 'Electrolyte' | 'Supplement' | 'Medical' | 'Other';
+
 export interface NutritionItem {
   id: string;
   name: string;
+  category?: NutritionCategory;
+  caloriesPerServing?: number | string;
   carbsPerServing: number | string;
   hydrationPerServing: number | string;
   sodiumPerServing: number | string;
+  caffeinePerServing?: number | string;
+  notes?: string;
   servingUnit: string;
 }
 
