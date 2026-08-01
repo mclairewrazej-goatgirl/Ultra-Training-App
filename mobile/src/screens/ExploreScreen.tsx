@@ -11,6 +11,8 @@ interface Props {
 
 type Metric = 'time' | 'dist' | 'vert';
 type Period = 'week' | 'month' | 'all';
+type TimeType = 'moving' | 'elapsed';
+type Grouping = 'detailed' | 'combined';
 
 function getMondayOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -19,10 +21,27 @@ function getMondayOfWeek(date: Date): Date {
   return d;
 }
 
-function effectiveDur(act: any): number {
-  if (act.useMovingTime && Number(act.movingTime) > 0) return Number(act.movingTime);
-  if (!act.useMovingTime && Number(act.elapsedTime) > 0) return Number(act.elapsedTime);
+// dur is moving time (minutes); elapsed is total clock time including stops.
+// Falls back to dur when elapsed wasn't logged for an activity.
+function effectiveDur(act: any, timeType: TimeType): number {
+  if (timeType === 'elapsed') return Number(act.elapsed) || Number(act.dur) || 0;
   return Number(act.dur) || 0;
+}
+
+// Combined-view groupings — e.g. all bike subtypes roll up into "Biking",
+// all run types except hikes roll up into "Running".
+function runGroupKey(runType: string): string {
+  return (runType || '').toLowerCase() === 'hike' ? 'Hiking' : 'Running';
+}
+function crossGroupKey(subtype: string): string {
+  const s = (subtype || '').toLowerCase();
+  if (s.includes('ski')) return 'Skiing';
+  if (s.includes('climb')) return 'Climbing';
+  if (s.includes('bike')) return 'Biking';
+  if (s.includes('run')) return 'Running';
+  if (s.includes('hike')) return 'Hiking';
+  if (s.includes('swim')) return 'Swimming';
+  return subtype || 'Other';
 }
 
 function fmtDur(mins: number): string {
@@ -74,6 +93,8 @@ interface SubtypeStat {
 export default function ExploreScreen({ db }: Props) {
   const [period, setPeriod] = useState<Period>('week');
   const [metric, setMetric] = useState<Metric>('time');
+  const [timeType, setTimeType] = useState<TimeType>('moving');
+  const [grouping, setGrouping] = useState<Grouping>('detailed');
 
   const runs = useMemo(
     () => db.runs.filter((r) => filterByPeriod(r.date, period)),
@@ -87,30 +108,31 @@ export default function ExploreScreen({ db }: Props) {
   const runBreakdown = useMemo(() => {
     const map: Record<string, SubtypeStat> = {};
     runs.forEach((r) => {
-      const key = r.runType || 'other';
-      if (!map[key]) map[key] = { label: key.charAt(0).toUpperCase() + key.slice(1), mins: 0, dist: 0, vert: 0, count: 0, avgHr: 0, hrCount: 0 };
-      map[key].mins += effectiveDur(r);
+      const key = grouping === 'combined' ? runGroupKey(r.runType) : (r.runType || 'other');
+      const label = grouping === 'combined' ? key : key.charAt(0).toUpperCase() + key.slice(1);
+      if (!map[key]) map[key] = { label, mins: 0, dist: 0, vert: 0, count: 0, avgHr: 0, hrCount: 0 };
+      map[key].mins += effectiveDur(r, timeType);
       map[key].dist += Number(r.dist) || 0;
       map[key].vert += Number(r.vert) || 0;
       map[key].count += 1;
       if (Number(r.hr) > 0) { map[key].avgHr += Number(r.hr); map[key].hrCount += 1; }
     });
     return Object.values(map).sort((a, b) => b.mins - a.mins);
-  }, [runs]);
+  }, [runs, grouping, timeType]);
 
   const crossBreakdown = useMemo(() => {
     const map: Record<string, SubtypeStat> = {};
     crosses.forEach((c) => {
-      const key = c.subtype || 'Other';
+      const key = grouping === 'combined' ? crossGroupKey(c.subtype) : (c.subtype || 'Other');
       if (!map[key]) map[key] = { label: key, mins: 0, dist: 0, vert: 0, count: 0, avgHr: 0, hrCount: 0 };
-      map[key].mins += effectiveDur(c);
+      map[key].mins += effectiveDur(c, timeType);
       map[key].dist += Number(c.dist) || 0;
       map[key].vert += Number(c.vert) || 0;
       map[key].count += 1;
       if (Number((c as any).hr) > 0) { map[key].avgHr += Number((c as any).hr); map[key].hrCount += 1; }
     });
     return Object.values(map).sort((a, b) => b.mins - a.mins);
-  }, [crosses]);
+  }, [crosses, grouping, timeType]);
 
   const runTotals = useMemo(() => ({
     mins: runBreakdown.reduce((s, r) => s + r.mins, 0),
@@ -179,6 +201,38 @@ export default function ExploreScreen({ db }: Props) {
           >
             <Text style={[styles.segText, metric === m && { color: colors.blue }]}>
               {m === 'time' ? 'Time' : m === 'dist' ? 'Distance' : 'Vert'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Moving vs. elapsed — only meaningful while viewing the Time metric */}
+      {metric === 'time' && (
+        <View style={styles.segRow}>
+          {(['moving', 'elapsed'] as TimeType[]).map((t) => (
+            <TouchableOpacity
+              key={t}
+              style={[styles.segBtnSm, timeType === t && { backgroundColor: colors.surface3, borderColor: colors.amber }]}
+              onPress={() => setTimeType(t)}
+            >
+              <Text style={[styles.segTextSm, timeType === t && { color: colors.amber }]}>
+                {t === 'moving' ? 'Moving Time' : 'Elapsed Time'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Detailed subtype breakdown vs. combined groups (e.g. all bike types → "Biking") */}
+      <View style={styles.segRow}>
+        {(['detailed', 'combined'] as Grouping[]).map((g) => (
+          <TouchableOpacity
+            key={g}
+            style={[styles.segBtnSm, grouping === g && { backgroundColor: colors.surface3, borderColor: colors.green }]}
+            onPress={() => setGrouping(g)}
+          >
+            <Text style={[styles.segTextSm, grouping === g && { color: colors.green }]}>
+              {g === 'detailed' ? 'By Type' : 'Combined'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -302,6 +356,13 @@ const styles = StyleSheet.create({
   segBtnActive: { backgroundColor: colors.surface3, borderColor: colors.pink },
   segText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
   segTextActive: { color: colors.pink },
+
+  segBtnSm: {
+    flex: 1, alignItems: 'center', paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  segTextSm: { fontSize: 11, color: colors.muted, fontWeight: '600' },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8 },
   sectionDot: { width: 10, height: 10, borderRadius: 5 },
