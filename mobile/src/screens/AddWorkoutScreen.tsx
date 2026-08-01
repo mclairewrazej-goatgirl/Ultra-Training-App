@@ -5,8 +5,9 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem } from '../types';
+import { TrainingDB, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionLogEntry } from '../types';
 import { colors } from '../theme';
+import NutritionEntryEditor from '../components/NutritionEntryEditor';
 
 type ActType = 'run' | 'cross' | 'strength' | 'recovery';
 
@@ -53,8 +54,8 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
   const [terrain,  setTerrain]  = useState('trail');
   const [bikeType, setBikeType] = useState('Gravel');
   const [rpe,      setRpe]      = useState('5');
-  const [showNutr, setShowNutr] = useState(false);
-  const [nutrQty,  setNutrQty]  = useState<Record<string, number>>({});
+  const [showNutr,    setShowNutr]    = useState(false);
+  const [nutrEntries, setNutrEntries] = useState<NutritionLogEntry[]>([]);
   const [saving,   setSaving]   = useState(false);
 
   const changeActType = (t: ActType) => {
@@ -67,7 +68,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
     );
     setElapsed('');
     setShowNutr(false);
-    setNutrQty({});
+    setNutrEntries([]);
   };
 
   const subtypeList = () => {
@@ -75,14 +76,6 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
     if (actType === 'cross')    return crossTypes;
     if (actType === 'strength') return STRENGTH_SUB;
     return RECOVERY_SUB;
-  };
-
-  const adjustQty = (id: string, delta: number) => {
-    setNutrQty(prev => {
-      const n = Math.max(0, (prev[id] ?? 0) + delta);
-      if (n === 0) { const { [id]: _, ...rest } = prev; return rest; }
-      return { ...prev, [id]: n };
-    });
   };
 
   const handleSave = async () => {
@@ -94,9 +87,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
     const newDB: TrainingDB = { ...db };
 
     if (actType === 'run') {
-      const nutritionEntries = showNutr
-        ? Object.entries(nutrQty).map(([itemId, servings]) => ({ itemId, servings }))
-        : [];
+      const nutritionEntries = showNutr ? nutrEntries.filter(e => e.servings > 0) : [];
       const entry: RunEntry = {
         id: uid(), date, actType: 'run',
         runType: subtype,
@@ -109,9 +100,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       };
       newDB.runs = [...db.runs, entry];
     } else if (actType === 'cross') {
-      const nutritionEntries = showNutr
-        ? Object.entries(nutrQty).map(([itemId, servings]) => ({ itemId, servings }))
-        : [];
+      const nutritionEntries = showNutr ? nutrEntries.filter(e => e.servings > 0) : [];
       const entry: CrossEntry = {
         id: uid(), date, actType: 'cross',
         subtype, dist: Number(dist) || 0, dur: Number(dur) || 0,
@@ -142,7 +131,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         setDist(''); setDur(''); setElapsed(''); setVert(''); setHr(''); setNotes('');
         setDate(todayISO()); setActType('run'); setSubtype('Easy');
         setTerrain('trail'); setBikeType('Gravel'); setRpe('5');
-        setShowNutr(false); setNutrQty({});
+        setShowNutr(false); setNutrEntries([]);
         Alert.alert('Saved!', 'Workout logged successfully');
       }
     } catch (err: any) {
@@ -332,39 +321,18 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
         multiline numberOfLines={3} textAlignVertical="top"
       />
 
-      {/* Add nutrition toggle — runs and cross-training, if library has items */}
-      {(actType === 'run' || actType === 'cross') && db.nutrition.length > 0 && (
-        <TouchableOpacity style={styles.nutrToggle} onPress={() => setShowNutr(v => !v)}>
-          <View style={[styles.checkbox, showNutr && { backgroundColor: colors.pink, borderColor: colors.pink }]}>
-            {showNutr && <Text style={styles.checkmark}>✓</Text>}
-          </View>
-          <Text style={styles.nutrToggleText}>Add nutrition?</Text>
-        </TouchableOpacity>
-      )}
-
-      {showNutr && (actType === 'run' || actType === 'cross') && (
-        <View style={styles.nutrSection}>
-          {(db.nutrition as NutritionItem[]).map(item => {
-            const qty = nutrQty[item.id] ?? 0;
-            return (
-              <View key={item.id} style={styles.nutrRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.nutrName}>{item.name}</Text>
-                  <Text style={styles.nutrUnit}>per {item.servingUnit || 'serving'}</Text>
-                </View>
-                <View style={styles.qtyRow}>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => adjustQty(item.id, -1)}>
-                    <Text style={styles.qtyBtnText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.qtyVal}>{qty}</Text>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => adjustQty(item.id, 1)}>
-                    <Text style={styles.qtyBtnText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+      {/* Nutrition — runs and cross-training, if library has items */}
+      {(actType === 'run' || actType === 'cross') && (
+        <NutritionEntryEditor
+          library={db.nutrition}
+          entries={nutrEntries}
+          onChange={setNutrEntries}
+          durationMins={Number(dur) || 0}
+          elapsedMins={Number(elapsed) || undefined}
+          accentColor={accentColor}
+          enabled={showNutr}
+          onToggleEnabled={() => setShowNutr(v => !v)}
+        />
       )}
 
       <TouchableOpacity
@@ -429,26 +397,6 @@ const styles = StyleSheet.create({
     borderRadius: 10, padding: 12, color: colors.text, fontSize: 15,
   },
   inputMulti: { minHeight: 80, textAlignVertical: 'top' },
-
-  nutrToggle:     { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 10 },
-  checkbox:       { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  checkmark:      { color: '#fff', fontSize: 13, fontWeight: '700' },
-  nutrToggleText: { fontSize: 14, color: colors.text, fontWeight: '600' },
-
-  nutrSection: {
-    marginTop: 10, backgroundColor: colors.surface, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
-  },
-  nutrRow: {
-    flexDirection: 'row', alignItems: 'center', padding: 12,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  nutrName: { fontSize: 13, fontWeight: '600', color: colors.text },
-  nutrUnit: { fontSize: 11, color: colors.muted, marginTop: 1 },
-  qtyRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qtyBtn:   { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { fontSize: 18, color: colors.text, fontWeight: '700', lineHeight: 22 },
-  qtyVal:   { fontSize: 15, color: colors.text, fontWeight: '700', minWidth: 24, textAlign: 'center' },
 
   saveBtn:     { borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 32 },
   saveBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },

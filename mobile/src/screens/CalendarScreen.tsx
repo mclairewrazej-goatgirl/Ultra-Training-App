@@ -6,8 +6,10 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem } from '../types';
+import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem, NutritionLogEntry } from '../types';
 import { colors, actColors } from '../theme';
+import { nutrPerHour } from '../nutrition';
+import NutritionEntryEditor from '../components/NutritionEntryEditor';
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
@@ -15,27 +17,6 @@ const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const PLAN_TYPES = ['Run','Cross-training','Strength','Recovery','Race'];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
-
-function nutrPerHour(
-  entries: { itemId: string; servings: number }[] | undefined,
-  items: NutritionItem[],
-  durMins: number,
-  elapsedMins?: number,
-): { carbs: number; hydration: number; sodium: number } | null {
-  if (!entries || entries.length === 0) return null;
-  const hrs = (elapsedMins || durMins) / 60;
-  if (hrs <= 0) return null;
-  let carbs = 0, hydration = 0, sodium = 0;
-  for (const ne of entries) {
-    const item = items.find(n => n.id === ne.itemId);
-    if (!item) continue;
-    carbs     += (Number(item.carbsPerServing)     || 0) * ne.servings;
-    hydration += (Number(item.hydrationPerServing)  || 0) * ne.servings;
-    sodium    += (Number(item.sodiumPerServing)     || 0) * ne.servings;
-  }
-  if (!carbs && !hydration && !sodium) return null;
-  return { carbs: Math.round(carbs / hrs), hydration: Math.round(hydration / hrs), sodium: Math.round(sodium / hrs) };
-}
 
 function toISO(year: number, month: number, day: number) {
   return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
@@ -490,8 +471,8 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
   const [actualVert, setActualVert] = useState(String(plan.actualVert || ''));
   const [actualHr,   setActualHr]   = useState(String(plan.actualHr   || ''));
   const [compNotes,  setCompNotes]  = useState(plan.completionNotes   || '');
-  const [showNutr,   setShowNutr]   = useState(false);
-  const [nutrQty,    setNutrQty]    = useState<Record<string, number>>({});
+  const [showNutr,    setShowNutr]    = useState(false);
+  const [nutrEntries, setNutrEntries] = useState<NutritionLogEntry[]>([]);
   const [saving, setSaving] = useState(false);
 
   const accentColor = planTypeColor(plan.type);
@@ -507,9 +488,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
     const elapsed = Number(actualElapsed) || undefined;
     const vert    = Number(actualVert)    || 0;
     const hr      = Number(actualHr)      || 0;
-    const nutritionEntries = showNutr
-      ? Object.entries(nutrQty).filter(([, v]) => v > 0).map(([itemId, servings]) => ({ itemId, servings }))
-      : [];
+    const nutritionEntries = showNutr ? nutrEntries.filter(e => e.servings > 0) : [];
 
     let newRuns       = [...db.runs];
     let newCrosses    = [...db.crosses];
@@ -697,34 +676,18 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
             multiline numberOfLines={3} placeholder="How did it go?" placeholderTextColor={colors.muted2}
             textAlignVertical="top" />
 
-          {/* Nutrition toggle */}
-          {(actType === 'Run' || actType === 'Cross') && db.nutrition.length > 0 && (
-            <TouchableOpacity style={styles.nutrToggle} onPress={() => setShowNutr(v => !v)}>
-              <View style={[styles.checkbox, showNutr && { backgroundColor: accentColor, borderColor: accentColor }]}>
-                {showNutr && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <Text style={styles.nutrToggleText}>Add nutrition?</Text>
-            </TouchableOpacity>
-          )}
-
-          {showNutr && (actType === 'Run' || actType === 'Cross') && (
-            <View style={styles.nutrSection}>
-              {(db.nutrition as any[]).map((item: any) => {
-                const qty = nutrQty[item.id] ?? 0;
-                return (
-                  <View key={item.id} style={styles.nutrRow}>
-                    <Text style={styles.nutrName}>{item.name}</Text>
-                    <View style={styles.nutrQtyRow}>
-                      <TouchableOpacity onPress={() => setNutrQty(q => ({ ...q, [item.id]: Math.max(0, (q[item.id] ?? 0) - 0.5) }))}
-                        style={styles.nutrBtn}><Text style={styles.nutrBtnText}>−</Text></TouchableOpacity>
-                      <Text style={styles.nutrQty}>{qty > 0 ? qty : '—'}</Text>
-                      <TouchableOpacity onPress={() => setNutrQty(q => ({ ...q, [item.id]: (q[item.id] ?? 0) + 0.5 }))}
-                        style={styles.nutrBtn}><Text style={styles.nutrBtnText}>+</Text></TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+          {/* Nutrition */}
+          {(actType === 'Run' || actType === 'Cross') && (
+            <NutritionEntryEditor
+              library={db.nutrition}
+              entries={nutrEntries}
+              onChange={setNutrEntries}
+              durationMins={Number(actualDur) || 0}
+              elapsedMins={Number(actualElapsed) || undefined}
+              accentColor={accentColor}
+              enabled={showNutr}
+              onToggleEnabled={() => setShowNutr(v => !v)}
+            />
           )}
 
           <TouchableOpacity
@@ -869,25 +832,4 @@ const styles = StyleSheet.create({
   sectionHeading:    { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 8, marginBottom: 4 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-
-  nutrToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
-  checkbox: {
-    width: 20, height: 20, borderWidth: 2, borderColor: colors.border,
-    borderRadius: 4, alignItems: 'center', justifyContent: 'center',
-  },
-  checkmark: { fontSize: 12, color: '#fff', fontWeight: '700' },
-  nutrToggleText: { fontSize: 14, color: colors.text },
-  nutrSection: { marginTop: 12 },
-  nutrRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: colors.border,
-  },
-  nutrName: { fontSize: 14, color: colors.text, flex: 1 },
-  nutrQtyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  nutrBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center',
-  },
-  nutrBtnText: { fontSize: 18, color: colors.text, lineHeight: 22 },
-  nutrQty: { fontSize: 15, color: colors.text, minWidth: 30, textAlign: 'center' },
 });
