@@ -1,4 +1,20 @@
-import { NutritionItem } from './types';
+import { NutritionItem, NutritionCategory } from './types';
+import { colors } from './theme';
+
+export const NUTRITION_CATEGORIES: NutritionCategory[] = [
+  'Fuel', 'Real Food', 'Water', 'Hydration', 'Electrolyte', 'Supplement', 'Medical', 'Other',
+];
+
+export const CATEGORY_COLORS: Record<NutritionCategory, string> = {
+  Fuel: colors.amber,
+  'Real Food': colors.green,
+  Water: colors.blue2,
+  Hydration: colors.blue,
+  Electrolyte: colors.teal,
+  Supplement: colors.purple,
+  Medical: colors.red,
+  Other: colors.muted,
+};
 
 export function nutrPerHour(
   entries: { itemId: string; servings: number }[] | undefined,
