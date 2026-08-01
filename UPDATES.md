@@ -1,3 +1,7 @@
+**Updates to make 2026-08-01**
+
+-add field so you can add race website link in race tab 
+
 **Updates to make 2026-07-30**
 
 -have a way to add notifications on when to register for upcoming races that pop up in the calendar 
@@ -11,3 +15,5 @@
 - need to add keyboard avoiding feature so field isn't covered when typing
 - want to make it so that when you save nutrition changes it shows the carbs/sodium and water per hour when you open the activity instead of just the list allowing you to adjust nutrition
 - I want to be able to edit activities from the Recent Activity list on the dashboard as well as under the Logged activities for a day on the calendar screen
+
+
