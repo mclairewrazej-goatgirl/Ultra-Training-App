@@ -10,6 +10,7 @@ import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, 
 import { colors, actColors } from '../theme';
 import { nutrPerHour } from '../nutrition';
 import NutritionEntryEditor from '../components/NutritionEntryEditor';
+import ActivityDetailModal from './ActivityDetailModal';
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
@@ -39,15 +40,17 @@ interface Props {
   user: User;
   db: TrainingDB;
   onSaved: (updated: TrainingDB) => void;
+  onEditEntry: (entry: ActivityEntry) => void;
 }
 
-export default function CalendarScreen({ user, db, onSaved }: Props) {
+export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props) {
   const today = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDate,   setSelectedDate]   = useState<string>(todayISO());
   const [planModalDate,  setPlanModalDate]  = useState<string | null>(null);
   const [completingPlan, setCompletingPlan] = useState<PlannedWorkout | null>(null);
+  const [viewingEntry,   setViewingEntry]   = useState<ActivityEntry | null>(null);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y=>y-1); } else setMonth(m=>m-1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y=>y+1); } else setMonth(m=>m+1); };
@@ -133,6 +136,28 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try { await saveDB({ ...db, plans: db.plans.filter(p => p.id !== planId) }); }
         catch (err: any) { Alert.alert('Error', err.message); }
+      }},
+    ]);
+  };
+
+  const handleDeleteEntry = () => {
+    if (!viewingEntry) return;
+    const id = viewingEntry.id;
+    Alert.alert('Delete workout', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await saveDB({
+            ...db,
+            runs:       db.runs.filter(r => r.id !== id),
+            crosses:    db.crosses.filter(r => r.id !== id),
+            strengths:  db.strengths.filter(r => r.id !== id),
+            recoveries: db.recoveries.filter(r => r.id !== id),
+          });
+          setViewingEntry(null);
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        }
       }},
     ]);
   };
@@ -278,7 +303,12 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
             Number((act as any).elapsed) || undefined,
           );
           return (
-            <View key={act.id} style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}>
+            <TouchableOpacity
+              key={act.id}
+              style={[styles.actRow, { borderLeftColor: actColors[act.actType] }]}
+              onPress={() => setViewingEntry(act)}
+              activeOpacity={0.7}
+            >
               <Text style={[styles.actType, { color: actColors[act.actType] }]}>
                 {act.actType === 'run'
                   ? (() => {
@@ -313,10 +343,22 @@ export default function CalendarScreen({ user, db, onSaved }: Props) {
                   )}
                 </View>
               )}
-            </View>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
+
+      <ActivityDetailModal
+        visible={!!viewingEntry}
+        entry={viewingEntry}
+        nutrition={db.nutrition}
+        onEdit={() => {
+          if (viewingEntry) onEditEntry(viewingEntry);
+          setViewingEntry(null);
+        }}
+        onDelete={handleDeleteEntry}
+        onClose={() => setViewingEntry(null)}
+      />
 
       {planModalDate && (
         <PlanWorkoutModal
