@@ -60,6 +60,7 @@ const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const [showHeaderPicker, setShowHeaderPicker] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
   const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
   const isCycling = db.primarySport === 'cycling';
@@ -200,7 +201,10 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
           <TouchableOpacity onPress={() => setWeekOffset(w => w + 1)} style={styles.weekNavBtn}>
             <Text style={styles.weekNavArrow}>‹</Text>
           </TouchableOpacity>
-          <Text style={styles.subGreeting}>{weekRangeLabel}</Text>
+          <TouchableOpacity style={styles.weekLabelBtn} onPress={() => setShowHeaderPicker(true)}>
+            <Text style={styles.subGreeting}>{weekRangeLabel}</Text>
+            <Text style={styles.weekLabelCaret}>▾</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setWeekOffset(w => Math.max(0, w - 1))}
             style={styles.weekNavBtn}
@@ -210,6 +214,13 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
           </TouchableOpacity>
         </View>
       </View>
+
+      <WeekPickerModal
+        visible={showHeaderPicker}
+        weekOffset={weekOffset}
+        onSelect={(n) => { setWeekOffset(n); setShowHeaderPicker(false); }}
+        onClose={() => setShowHeaderPicker(false)}
+      />
 
       {/* ── Running / Cycling ──────────────────────────────── */}
       <Text style={styles.sectionLabel}>{isCycling ? 'CYCLING' : 'RUNNING'}</Text>
@@ -341,6 +352,77 @@ function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: 
   return { run: sum(runs) / divisor, cross: sum(crosses) / divisor };
 }
 
+// "Nice" round numbers (à la D3's axis ticks) so the Y axis reads e.g. 0 / 25 / 50 / 75
+// instead of whatever the raw weekly total or goal happens to be.
+function niceNum(range: number, round: boolean): number {
+  if (range <= 0) return 1;
+  const exponent = Math.floor(Math.log10(range));
+  const fraction = range / Math.pow(10, exponent);
+  let niceFraction: number;
+  if (round) {
+    if (fraction < 1.5) niceFraction = 1;
+    else if (fraction < 3) niceFraction = 2;
+    else if (fraction < 7) niceFraction = 5;
+    else niceFraction = 10;
+  } else {
+    if (fraction <= 1) niceFraction = 1;
+    else if (fraction <= 2) niceFraction = 2;
+    else if (fraction <= 5) niceFraction = 5;
+    else niceFraction = 10;
+  }
+  return niceFraction * Math.pow(10, exponent);
+}
+
+// Evenly spaced ticks from 0 up to (at least) maxValue — scales to whichever is
+// larger of the week's actual totals or the configured goal range.
+function niceTicks(maxValue: number, tickCount = 4): number[] {
+  if (maxValue <= 0) return [0, 1];
+  const step = niceNum(maxValue / (tickCount - 1), true);
+  const niceMax = Math.ceil(maxValue / step) * step;
+  const ticks: number[] = [];
+  for (let v = 0; v <= niceMax + step / 1000; v += step) ticks.push(Math.round(v * 1000) / 1000);
+  return ticks;
+}
+
+function buildWeekOptions(count = 12) {
+  return Array.from({ length: count }, (_, i) => {
+    const mon = getMondayOfWeek(i);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const label = i === 0
+      ? 'Current Week'
+      : `${mon.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sun.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    return { weeksBack: i, label };
+  });
+}
+
+// Shared week-select dropdown — used by the header date range and the Volume History chart.
+function WeekPickerModal({ visible, weekOffset, onSelect, onClose }: {
+  visible: boolean; weekOffset: number; onSelect: (n: number) => void; onClose: () => void;
+}) {
+  const weekOptions = useMemo(() => buildWeekOptions(12), []);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={vcStyles.pickerOverlay} activeOpacity={1} onPress={onClose}>
+        <View style={vcStyles.pickerSheet}>
+          <Text style={vcStyles.pickerTitle}>Select Week</Text>
+          {weekOptions.map(opt => (
+            <TouchableOpacity
+              key={opt.weeksBack}
+              style={[vcStyles.pickerRow, weekOffset === opt.weeksBack && vcStyles.pickerRowActive]}
+              onPress={() => onSelect(opt.weeksBack)}
+            >
+              <Text style={[vcStyles.pickerRowText, weekOffset === opt.weeksBack && vcStyles.pickerRowTextActive]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
   db: TrainingDB; isCycling: boolean; skiActive: boolean;
   weekOffset: number; onChangeWeek: (n: number) => void;
@@ -369,14 +451,31 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
   } : null;
 
   const CHART_H = 130;
-  const maxVal  = Math.max(total, runGoal.max || 0, crossGoal.max || 0, totalGoal?.max || 0, 1);
-  const pct     = (v: number) => Math.min(1, v / maxVal);
 
   const fmtV = (v: number) => {
     if (metric === 'dist') return `${v.toFixed(1)} km`;
     if (metric === 'time') return fmtHours(Math.round(v * 60));
     return `${Math.round(v)} m`;
   };
+  const fmtAxisLabel = (v: number) => {
+    if (v === 0) return '0';
+    if (metric === 'dist') return `${Number.isInteger(v) ? v : v.toFixed(1)} km`;
+    if (metric === 'time') {
+      const totalMin = Math.round(v * 60);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+    return `${Math.round(v)} m`;
+  };
+
+  // Regular, evenly-spaced axis ticks that scale to whichever is larger: this
+  // week's totals or the configured goal range — rather than sticking at raw values.
+  const rawMax    = Math.max(total, runGoal.max || 0, crossGoal.max || 0, totalGoal?.max || 0, 1);
+  const axisTicks = niceTicks(rawMax, 4);
+  const maxVal    = axisTicks[axisTicks.length - 1];
+  const pct       = (v: number) => Math.min(1, v / maxVal);
+  const yTicks    = axisTicks.map(v => ({ value: v, label: fmtAxisLabel(v) }));
 
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
@@ -396,24 +495,19 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
   const crossBand = bandFor(goals.cross.enabled ? crossGoal : null);
   const totalBand = bandFor(totalGoal);
 
-  // Y-axis ticks at 0, goal min, and goal max (using the Total goal as the primary reference)
-  const tickGoal = totalGoal ?? runGoal;
-  const yTicks: { value: number; label: string }[] = [{ value: 0, label: '0' }];
-  if (tickGoal.min > 0) yTicks.push({ value: tickGoal.min, label: fmtV(tickGoal.min) });
-  if (tickGoal.max > 0) yTicks.push({ value: tickGoal.max, label: fmtV(tickGoal.max) });
-
-  // Build week picker options (last 12 weeks)
-  const weekOptions = useMemo(() => (
-    Array.from({ length: 12 }, (_, i) => {
-      const mon = getMondayOfWeek(i);
-      const sun = new Date(mon);
-      sun.setDate(mon.getDate() + 6);
-      const label = i === 0
-        ? 'Current Week'
-        : `${mon.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sun.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-      return { weeksBack: i, label };
-    })
-  ), []);
+  // Legend entries — only shown for goals that are actually enabled/set for this metric,
+  // so the dashed range lines drawn on each bar can be identified without an overlay
+  // that blocks the bar itself.
+  const legendItems: { label: string; color: string }[] = [];
+  if (goals.run.enabled && (runGoal.min > 0 || runGoal.max > 0)) {
+    legendItems.push({ label: `${isCycling ? 'Ride' : 'Run'} Goal Range`, color: colors.pink });
+  }
+  if (goals.cross.enabled && (crossGoal.min > 0 || crossGoal.max > 0)) {
+    legendItems.push({ label: 'Cross Goal Range', color: colors.blue });
+  }
+  if (totalGoal && (totalGoal.min > 0 || totalGoal.max > 0)) {
+    legendItems.push({ label: 'Total Goal Range', color: colors.green });
+  }
 
   return (
     <View style={vcStyles.card}>
@@ -442,33 +536,12 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
       </TouchableOpacity>
 
       {/* Week picker modal */}
-      <Modal
+      <WeekPickerModal
         visible={showWeekPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowWeekPicker(false)}
-      >
-        <TouchableOpacity
-          style={vcStyles.pickerOverlay}
-          activeOpacity={1}
-          onPress={() => setShowWeekPicker(false)}
-        >
-          <View style={vcStyles.pickerSheet}>
-            <Text style={vcStyles.pickerTitle}>Select Week</Text>
-            {weekOptions.map(opt => (
-              <TouchableOpacity
-                key={opt.weeksBack}
-                style={[vcStyles.pickerRow, weekOffset === opt.weeksBack && vcStyles.pickerRowActive]}
-                onPress={() => { onChangeWeek(opt.weeksBack); setShowWeekPicker(false); }}
-              >
-                <Text style={[vcStyles.pickerRowText, weekOffset === opt.weeksBack && vcStyles.pickerRowTextActive]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        weekOffset={weekOffset}
+        onSelect={(n) => { onChangeWeek(n); setShowWeekPicker(false); }}
+        onClose={() => setShowWeekPicker(false)}
+      />
 
       {/* Chart: Y-axis + bars */}
       <View style={vcStyles.chartWrapper}>
@@ -537,6 +610,18 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
             <Text style={vcStyles.barLabel}>Cross</Text>
             <Text style={vcStyles.barLabel}>Total</Text>
           </View>
+
+          {/* Goal range legend — explains the dashed lines instead of shading over the bars */}
+          {legendItems.length > 0 && (
+            <View style={vcStyles.legendRow}>
+              {legendItems.map(item => (
+                <View key={item.label} style={vcStyles.legendItem}>
+                  <View style={[vcStyles.legendSwatch, { borderColor: item.color }]} />
+                  <Text style={vcStyles.legendText}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </View>
     </View>
@@ -549,11 +634,8 @@ function ChartBar({ height, color, value, chartH, band }: {
 }) {
   return (
     <View style={[vcStyles.barGroup, { height: chartH }]}>
-      {band && band.top !== null && band.bottom !== null && band.bottom > band.top && (
-        <View style={[vcStyles.goalBand, { top: band.top, height: band.bottom - band.top }]} />
-      )}
-      {band && band.top    !== null && <View style={[vcStyles.goalLine, { top: band.top }]} />}
-      {band && band.bottom !== null && <View style={[vcStyles.goalLine, { top: band.bottom }]} />}
+      {band && band.top    !== null && <View style={[vcStyles.goalLine, { top: band.top, borderColor: color }]} />}
+      {band && band.bottom !== null && <View style={[vcStyles.goalLine, { top: band.bottom, borderColor: color }]} />}
       <Text style={[vcStyles.barValue, { color }]}>{height > 2 ? value : '—'}</Text>
       <View style={[vcStyles.bar, { height: Math.max(height, 2), backgroundColor: color }]} />
     </View>
@@ -605,6 +687,8 @@ const styles = StyleSheet.create({
   weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   weekNavBtn: { padding: 4 },
   weekNavArrow: { fontSize: 20, color: colors.muted, fontWeight: '300', lineHeight: 22 },
+  weekLabelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  weekLabelCaret: { fontSize: 11, color: colors.muted },
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: colors.muted,
     letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginTop: 4,
@@ -722,14 +806,13 @@ const vcStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  goalBand: {
-    position: 'absolute', left: 0, right: 0,
-    backgroundColor: '#7c4dff18',
-  },
+  // Dashed range markers drawn on each bar (colored per-bar at call site) — no shaded
+  // overlay box, so the bar's own fill and value stay fully visible underneath.
   goalLine: {
     position: 'absolute', left: 0, right: 0,
-    borderTopWidth: 1, borderColor: colors.pink + '60',
+    borderTopWidth: 2,
     borderStyle: 'dashed',
+    opacity: 0.7,
   },
   barsRow: {
     flexDirection: 'row',
@@ -743,6 +826,14 @@ const vcStyles = StyleSheet.create({
     paddingTop: 5,
   },
   barLabel: { fontSize: 9, color: colors.muted, flex: 1, textAlign: 'center' },
+
+  legendRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 12,
+    paddingHorizontal: 4, paddingTop: 10,
+  },
+  legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendSwatch: { width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed' },
+  legendText:   { fontSize: 10, color: colors.muted, fontWeight: '600' },
 
   tooltip: {
     position: 'absolute', top: 4, left: 4,

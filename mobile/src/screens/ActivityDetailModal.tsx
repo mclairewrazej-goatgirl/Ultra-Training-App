@@ -24,6 +24,14 @@ function fmtDur(mins: number | string) {
   const m = Math.round(n % 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
+function fmtHr(n: number | string) {
+  const v = Number(n);
+  return v > 0 ? `${Math.round(v)} bpm` : null;
+}
+function fmtRpe(n: number | string) {
+  const v = Number(n);
+  return v > 0 ? `${v} / 10` : null;
+}
 function actTitle(act: ActivityEntry): string {
   if (act.actType === 'run') {
     const rt: string = (act as any).runType ?? '';
@@ -49,10 +57,12 @@ export default function ActivityDetailModal({ visible, entry, nutrition, onEdit,
   if (!entry) return null;
 
   const accentColor = actColors[entry.actType] ?? colors.muted;
-  const dist  = 'dist' in entry ? fmtDist((entry as any).dist) : null;
-  const dur   = 'dur'  in entry ? fmtDur((entry as any).dur)   : null;
-  const vert  = 'vert' in entry && Number((entry as any).vert) > 0 ? `${Math.round(Number((entry as any).vert))} m` : null;
-  const hr    = 'hr'   in entry && Number((entry as any).hr)   > 0 ? String((entry as any).hr) : null;
+  const dist        = 'dist' in entry ? fmtDist((entry as any).dist) : null;
+  const movingTime  = 'dur'  in entry ? fmtDur((entry as any).dur)   : null;
+  const elapsedTime = 'elapsed' in entry ? fmtDur((entry as any).elapsed) : null;
+  const vert        = 'vert' in entry && Number((entry as any).vert) > 0 ? `${Math.round(Number((entry as any).vert))} m` : null;
+  const hr          = 'hr'  in entry ? fmtHr((entry as any).hr) : null;
+  const rpe         = 'rpe' in entry ? fmtRpe((entry as any).rpe) : null;
   const notes = (entry as any).notes || null;
   const workoutDetails = entry.actType === 'run' ? (entry as RunEntry).workoutDetails || null : null;
   const badge2 = secondaryBadge(entry);
@@ -96,11 +106,13 @@ export default function ActivityDetailModal({ visible, entry, nutrition, onEdit,
             </TouchableOpacity>
           </View>
 
-          {(dur || vert || hr) && (
+          {(movingTime || elapsedTime || vert || hr || rpe) && (
             <View style={styles.statGrid}>
-              {dur && <StatBox label="Time" value={dur} />}
+              {movingTime && <StatBox label="Moving Time" value={movingTime} />}
+              {elapsedTime && <StatBox label="Elapsed Time" value={elapsedTime} />}
               {vert && <StatBox label="Elevation Gain" value={vert} />}
-              {hr && <StatBox label="Avg HR (bpm)" value={hr} />}
+              {hr && <StatBox label="Avg Heart Rate" value={hr} />}
+              {rpe && <StatBox label="RPE" value={rpe} />}
             </View>
           )}
 
@@ -176,7 +188,9 @@ function StatBox({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, paddingBottom: 12 },
+  // flexGrow + centering lets short entries sit centered in the available space
+  // instead of clinging to the top of the screen; longer entries still scroll normally.
+  content: { padding: 24, paddingBottom: 24, flexGrow: 1, justifyContent: 'center' },
 
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   bigDist: { fontSize: 34, fontWeight: '800' },
@@ -189,9 +203,10 @@ const styles = StyleSheet.create({
   badgeMutedText: { fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase' },
   closeX: { fontSize: 22, color: colors.muted, fontWeight: '300' },
 
-  statGrid: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20 },
   statBox: {
-    flex: 1, backgroundColor: colors.surface2, borderRadius: 12, padding: 14,
+    minWidth: '30%', flexGrow: 1,
+    backgroundColor: colors.surface2, borderRadius: 12, padding: 14,
     borderWidth: 1, borderColor: colors.border,
   },
   statVal: { fontSize: 18, fontWeight: '800', color: colors.text },
