@@ -1,16 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert,
 } from 'react-native';
 import { User } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db as firestoreDB } from '../config/firebase';
 import { colors, actColors } from '../theme';
 import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry } from '../types';
 import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
 import { normalizeGoal } from './GoalsScreen';
+import ActivityDetailModal from './ActivityDetailModal';
 
 interface Props {
   user: User;
   db: TrainingDB;
+  onSaved: (db: TrainingDB) => void;
+  onEditEntry: (entry: ActivityEntry) => void;
 }
 
 function getWeekRange(weeksBack = 0) {
@@ -53,8 +58,9 @@ function actLabel(act: ActivityEntry) {
 
 const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-export default function DashboardScreen({ user, db }: Props) {
+export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
   const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
   const isCycling = db.primarySport === 'cycling';
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -159,7 +165,32 @@ export default function DashboardScreen({ user, db }: Props) {
   const firstName = user.displayName?.split(' ')[0] ?? 'Athlete';
   const recentActivities = allActivities.slice(0, 6);
 
+  const handleDeleteEntry = () => {
+    if (!viewingEntry) return;
+    const id = viewingEntry.id;
+    Alert.alert('Delete workout', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const newDB: TrainingDB = {
+          ...db,
+          runs:       db.runs.filter(r => r.id !== id),
+          crosses:    db.crosses.filter(r => r.id !== id),
+          strengths:  db.strengths.filter(r => r.id !== id),
+          recoveries: db.recoveries.filter(r => r.id !== id),
+        };
+        try {
+          await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+          onSaved(newDB);
+          setViewingEntry(null);
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        }
+      }},
+    ]);
+  };
+
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
       {/* ── Header ─────────────────────────────────────────── */}
@@ -254,9 +285,24 @@ export default function DashboardScreen({ user, db }: Props) {
           <Text style={styles.emptySubText}>Tap "+ Log" to record your first workout.</Text>
         </View>
       ) : (
-        recentActivities.map(act => <ActivityRow key={act.id} act={act} />)
+        recentActivities.map(act => (
+          <ActivityRow key={act.id} act={act} onPress={() => setViewingEntry(act)} />
+        ))
       )}
     </ScrollView>
+
+    <ActivityDetailModal
+      visible={!!viewingEntry}
+      entry={viewingEntry}
+      nutrition={db.nutrition}
+      onEdit={() => {
+        if (viewingEntry) onEditEntry(viewingEntry);
+        setViewingEntry(null);
+      }}
+      onDelete={handleDeleteEntry}
+      onClose={() => setViewingEntry(null)}
+    />
+    </>
   );
 }
 
@@ -525,7 +571,7 @@ function StatCard({ label, value, color }: { label: string; value: string; color
   );
 }
 
-function ActivityRow({ act }: { act: ActivityEntry }) {
+function ActivityRow({ act, onPress }: { act: ActivityEntry; onPress: () => void }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
   const dist = 'dist' in act && Number((act as any).dist) > 0
     ? `${Number((act as any).dist).toFixed(1)} km` : '';
@@ -536,13 +582,13 @@ function ActivityRow({ act }: { act: ActivityEntry }) {
   });
 
   return (
-    <View style={styles.actRow}>
+    <TouchableOpacity style={styles.actRow} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.actDot, { backgroundColor: dotColor }]} />
       <View style={styles.actInfo}>
         <Text style={styles.actLabel}>{actLabel(act)}</Text>
         <Text style={styles.actMeta}>{dateStr}{meta ? '  ·  ' + meta : ''}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

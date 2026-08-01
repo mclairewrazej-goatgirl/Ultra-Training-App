@@ -175,6 +175,8 @@ export default function App() {
               <DashboardScreen
                 user={user}
                 db={db}
+                onSaved={handleDBUpdate}
+                onEditEntry={setEditingEntry}
               />
             )}
           </Tab.Screen>
@@ -205,7 +207,14 @@ export default function App() {
           </Tab.Screen>
 
           <Tab.Screen name="Calendar">
-            {() => <CalendarScreen user={user} db={db} onSaved={handleDBUpdate} />}
+            {() => (
+              <CalendarScreen
+                user={user}
+                db={db}
+                onSaved={handleDBUpdate}
+                onEditEntry={setEditingEntry}
+              />
+            )}
           </Tab.Screen>
 
           <Tab.Screen name="Profile">
