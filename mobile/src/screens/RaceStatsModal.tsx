@@ -23,7 +23,7 @@ export default function RaceStatsModal({ visible, raceName, finishTime, onSave, 
           <Text style={styles.title}>Race Stats</Text>
           <View style={{ width: 44 }} />
         </View>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.raceName}>🏁 {raceName}</Text>
 
