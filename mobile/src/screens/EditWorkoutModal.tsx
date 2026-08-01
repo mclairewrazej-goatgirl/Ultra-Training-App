@@ -185,7 +185,7 @@ export default function EditWorkoutModal({ visible, entry, user, db, onSaved, on
           <TouchableOpacity onPress={handleDelete}><Text style={styles.deleteBtn}>Delete</Text></TouchableOpacity>
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={[styles.typeBadge, { backgroundColor: accentColor+'22', borderColor: accentColor }]}>
             <Text style={[styles.typeBadgeText, { color: accentColor }]}>

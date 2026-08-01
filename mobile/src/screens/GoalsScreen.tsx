@@ -144,7 +144,7 @@ export default function GoalsScreen({ user, db, onSaved }: Props) {
   const runLabel  = isCycling ? 'Cycling' : 'Running';
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
       {/* ── This Week ─────────────────────────────── */}

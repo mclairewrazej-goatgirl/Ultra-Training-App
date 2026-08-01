@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { db as firestoreDB } from '../config/firebase';
 import { TrainingDB, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionLogEntry } from '../types';
 import { colors } from '../theme';
@@ -147,19 +148,22 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
     : colors.green;
 
   return (
+    <SafeAreaProvider>
     <View style={styles.container}>
       {onClose && (
-        <View style={styles.modalHeader}>
-          <View style={{ width: 44 }} />
-          <Text style={styles.modalTitle}>Log an Activity</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        <SafeAreaView edges={['top']} style={styles.modalHeaderSafe}>
+          <View style={styles.modalHeader}>
+            <View style={{ width: 44 }} />
+            <Text style={styles.modalTitle}>Log an Activity</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       )}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
@@ -345,6 +349,7 @@ export default function AddWorkoutScreen({ user, db, onSaved, initialType, onClo
       </ScrollView>
       </KeyboardAvoidingView>
     </View>
+    </SafeAreaProvider>
   );
 }
 
@@ -353,6 +358,7 @@ const styles = StyleSheet.create({
   content:   { padding: 20, paddingBottom: 60 },
   heading:   { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 20 },
 
+  modalHeaderSafe: { backgroundColor: colors.surface },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, backgroundColor: colors.surface,

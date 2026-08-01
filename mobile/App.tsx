@@ -15,7 +15,6 @@ import { colors } from './src/theme';
 import LoginScreen        from './src/screens/LoginScreen';
 import DashboardScreen    from './src/screens/DashboardScreen';
 import LogScreen          from './src/screens/LogScreen';
-import AddWorkoutScreen   from './src/screens/AddWorkoutScreen';
 import ProfileScreen      from './src/screens/ProfileScreen';
 import EditWorkoutModal   from './src/screens/EditWorkoutModal';
 import CalendarScreen     from './src/screens/CalendarScreen';
@@ -27,7 +26,6 @@ const Tab = createBottomTabNavigator();
 const TAB_ICONS: Record<string, [string, string]> = {
   Dashboard:      ['grid',         'grid-outline'        ],
   'Activity Log': ['pulse',        'pulse-outline'       ],
-  Add:            ['add-circle',   'add-circle-outline'  ],
   Explore:        ['stats-chart',  'stats-chart-outline' ],
   Calendar:       ['calendar',     'calendar-outline'    ],
   Profile:        ['person',       'person-outline'      ],
@@ -35,7 +33,7 @@ const TAB_ICONS: Record<string, [string, string]> = {
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   const [active, inactive] = TAB_ICONS[label] ?? ['ellipse', 'ellipse-outline'];
-  const color = label === 'Add' ? colors.pink : focused ? colors.pink : colors.muted;
+  const color = focused ? colors.pink : colors.muted;
   return <Ionicons name={(focused ? active : inactive) as any} size={focused ? 24 : 22} color={color} />;
 }
 
@@ -156,7 +154,6 @@ export default function App() {
             tabBarIcon: ({ focused }) => (
               <TabIcon label={route.name} focused={focused} />
             ),
-            tabBarLabel: route.name === 'Add' ? '' : route.name,
             tabBarStyle: {
               backgroundColor: colors.surface,
               borderTopColor: colors.border,
@@ -188,16 +185,6 @@ export default function App() {
                 db={db}
                 onSaved={handleDBUpdate}
                 onEditEntry={setEditingEntry}
-              />
-            )}
-          </Tab.Screen>
-
-          <Tab.Screen name="Add" options={{ title: 'Log an Activity' }}>
-            {() => (
-              <AddWorkoutScreen
-                user={user}
-                db={db}
-                onSaved={handleDBUpdate}
               />
             )}
           </Tab.Screen>

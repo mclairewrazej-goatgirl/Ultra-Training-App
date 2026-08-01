@@ -13,7 +13,6 @@ import ActivityDetailModal from './ActivityDetailModal';
 import { PlanWorkoutModal } from './CalendarScreen';
 
 type FilterType = 'all' | 'run' | 'cross' | 'strength' | 'recovery';
-type AddType = 'run' | 'cross' | 'strength' | 'recovery';
 
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'all',      label: 'All' },
@@ -23,11 +22,9 @@ const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'recovery', label: 'Recovery' },
 ];
 
-const ACTION_BTNS: { label: string; type: AddType | 'plan'; color: string }[] = [
-  { label: '+ Log Run',           type: 'run',      color: colors.pink   },
-  { label: 'Cross Train',         type: 'cross',    color: colors.blue   },
-  { label: 'Strength / Recovery', type: 'strength', color: colors.amber  },
-  { label: 'Plan Workout',        type: 'plan',     color: '#7c4dff'     },
+const ACTION_BTNS: { label: string; type: 'log' | 'plan'; color: string }[] = [
+  { label: '+ Log Activity', type: 'log',  color: colors.pink },
+  { label: 'Plan Workout',   type: 'plan', color: '#7c4dff'   },
 ];
 
 function fmtDist(d: number | string) {
@@ -67,7 +64,7 @@ interface Props {
 
 export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
   const [filter,   setFilter]   = useState<FilterType>('all');
-  const [addType,  setAddType]  = useState<AddType | null>(null);
+  const [showAdd,  setShowAdd]  = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
 
@@ -86,9 +83,9 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
     return allActivities.filter((a) => a.actType === filter);
   }, [allActivities, filter]);
 
-  const handleAction = (type: AddType | 'plan') => {
+  const handleAction = (type: 'log' | 'plan') => {
     if (type === 'plan') setShowPlan(true);
-    else setAddType(type);
+    else setShowAdd(true);
   };
 
   const handleDeleteEntry = () => {
@@ -172,19 +169,17 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
 
       {/* Add Workout Modal */}
       <Modal
-        visible={addType !== null}
+        visible={showAdd}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setAddType(null)}
+        onRequestClose={() => setShowAdd(false)}
       >
-        {addType !== null && (
+        {showAdd && (
           <AddWorkoutScreen
-            key={addType}
             user={user}
             db={db}
             onSaved={onSaved}
-            initialType={addType}
-            onClose={() => setAddType(null)}
+            onClose={() => setShowAdd(false)}
           />
         )}
       </Modal>

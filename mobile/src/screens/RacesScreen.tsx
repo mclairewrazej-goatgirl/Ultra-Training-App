@@ -272,7 +272,7 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
           <View style={{ width: 60 }} />
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <Field label="RACE NAME" value={name} onChange={setName} placeholder="e.g. UTMB, Gravel Worlds" />
 

@@ -429,7 +429,7 @@ export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
           <Text style={styles.modalTitle}>Plan Workout</Text>
           <View style={{ width: 60 }} />
         </View>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <Text style={styles.planDateLabel}>{dateStr}</Text>
 
@@ -605,7 +605,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
           <Text style={styles.modalTitle}>{isEditing ? 'Edit Completion' : 'Mark as Done'}</Text>
           <View style={{ width: 60 }} />
         </View>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <View style={[styles.planSummary, { borderLeftColor: accentColor }]}>
             <Text style={[styles.planSummaryType, { color: accentColor }]}>{plan.type}</Text>
