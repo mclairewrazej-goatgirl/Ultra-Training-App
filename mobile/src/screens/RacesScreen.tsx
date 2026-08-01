@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, TextInput, Alert, ScrollView,
+  Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -130,7 +130,7 @@ export default function RacesScreen({ user, db, onSaved }: Props) {
                 ) : (
                   <View style={styles.resultBadge}>
                     <Text style={styles.resultTime}>{race.result}</Text>
-                    {race.goal ? <Text style={styles.goalTime}>goal {race.goal}</Text> : null}
+                    {race.placement ? <Text style={styles.goalTime}>{race.placement}</Text> : race.goal ? <Text style={styles.goalTime}>goal {race.goal}</Text> : null}
                   </View>
                 )}
               </View>
@@ -187,11 +187,13 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
   const [bikeType,     setBikeType]     = useState('Gravel');
   const [skimoCat,     setSkimoCat]     = useState('Individual');
   const [date,         setDate]         = useState('');
+  const [regOpenDate,  setRegOpenDate]  = useState('');
   const [dist,         setDist]         = useState('');
   const [loc,          setLoc]          = useState('');
   const [goal,         setGoal]         = useState('');
   const [vert,         setVert]         = useState('');
   const [result,       setResult]       = useState('');
+  const [placement,    setPlacement]    = useState('');
   const [notes,        setNotes]        = useState('');
   const [saving,       setSaving]       = useState(false);
 
@@ -202,23 +204,30 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
       setBikeType(editingRace.bikeType || 'Gravel');
       setSkimoCat(editingRace.skimoCategory || 'Individual');
       setDate(editingRace.date);
+      setRegOpenDate(editingRace.regOpenDate || '');
       setDist(String(editingRace.dist || ''));
       setLoc(editingRace.loc || '');
       setGoal(editingRace.goal || '');
       setVert(String(editingRace.vert || ''));
       setResult(editingRace.result || '');
+      setPlacement(editingRace.placement || '');
       setNotes(editingRace.notes || '');
     } else {
       setName(''); setRaceType('run'); setBikeType('Gravel'); setSkimoCat('Individual');
       setDate(new Date().toISOString().slice(0, 10));
-      setDist(''); setLoc(''); setGoal(''); setVert(''); setResult(''); setNotes('');
+      setRegOpenDate('');
+      setDist(''); setLoc(''); setGoal(''); setVert(''); setResult(''); setPlacement(''); setNotes('');
     }
   }, [editingRace, visible]);
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Race name required'); return; }
     if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) { Alert.alert('Invalid date', 'Use YYYY-MM-DD'); return; }
+    if (regOpenDate.trim() && !regOpenDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Invalid registration date', 'Use YYYY-MM-DD'); return;
+    }
     setSaving(true);
+    const regOpenChanged = editingRace ? editingRace.regOpenDate !== regOpenDate.trim() : false;
     const race: Race = {
       id: editingRace?.id ?? uid(),
       name: name.trim(),
@@ -226,11 +235,15 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
       bikeType:      raceType === 'bike'  ? bikeType  : undefined,
       skimoCategory: raceType === 'skimo' ? skimoCat  : undefined,
       date,
+      regOpenDate: regOpenDate.trim() || undefined,
+      // Re-arm the reminder if the registration date was changed after being acknowledged.
+      regReminderAcknowledged: regOpenChanged ? false : editingRace?.regReminderAcknowledged,
       dist: Number(dist) || 0,
       loc: loc.trim(),
       goal: goal.trim(),
       vert: Number(vert) || 0,
       result: result.trim(),
+      placement: placement.trim(),
       notes: notes.trim(),
     };
     const newDB = {
@@ -259,7 +272,8 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
           <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <Field label="RACE NAME" value={name} onChange={setName} placeholder="e.g. UTMB, Gravel Worlds" />
 
           <Text style={styles.fieldLabel}>RACE TYPE</Text>
@@ -312,6 +326,12 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
           )}
 
           <Field label="DATE (YYYY-MM-DD)" value={date} onChange={setDate} placeholder="2026-07-20" />
+          <Field
+            label="REGISTRATION OPENS (YYYY-MM-DD)"
+            value={regOpenDate}
+            onChange={setRegOpenDate}
+            placeholder="Optional — get a reminder 7 days before"
+          />
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -335,6 +355,8 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
             </View>
           </View>
 
+          <Field label="OVERALL PLACEMENT" value={placement} onChange={setPlacement} placeholder="e.g. 14th overall" />
+
           <Field label="NOTES" value={notes} onChange={setNotes} placeholder="Notes, conditions, strategy…" multiline />
 
           <TouchableOpacity
@@ -344,6 +366,7 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Race'}</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

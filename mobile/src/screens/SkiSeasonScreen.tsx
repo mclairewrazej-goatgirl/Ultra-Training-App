@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert,
+  TextInput, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -109,7 +109,8 @@ export default function SkiSeasonScreen({ user, db, onSaved }: Props) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
       {/* ── This-week stats (only when enabled + in season) ── */}
       {enabled && inSeason && (
@@ -200,6 +201,7 @@ export default function SkiSeasonScreen({ user, db, onSaved }: Props) {
         <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Settings'}</Text>
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

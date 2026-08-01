@@ -1,11 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert,
 } from 'react-native';
 import { User } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db as firestoreDB } from '../config/firebase';
 import { colors, actColors } from '../theme';
 import { TrainingDB, ActivityEntry, NutritionItem } from '../types';
+import { nutrPerHour } from '../nutrition';
 import AddWorkoutScreen from './AddWorkoutScreen';
+import ActivityDetailModal from './ActivityDetailModal';
 import { PlanWorkoutModal } from './CalendarScreen';
 
 type FilterType = 'all' | 'run' | 'cross' | 'strength' | 'recovery';
@@ -54,27 +58,6 @@ function actTitle(act: ActivityEntry): string {
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
-function nutrPerHour(
-  entries: { itemId: string; servings: number }[] | undefined,
-  items: NutritionItem[],
-  durMins: number,
-  elapsedMins?: number,
-): { carbs: number; hydration: number; sodium: number } | null {
-  if (!entries || entries.length === 0) return null;
-  const hrs = (elapsedMins || durMins) / 60;
-  if (hrs <= 0) return null;
-  let carbs = 0, hydration = 0, sodium = 0;
-  for (const ne of entries) {
-    const item = items.find(n => n.id === ne.itemId);
-    if (!item) continue;
-    carbs     += (Number(item.carbsPerServing)     || 0) * ne.servings;
-    hydration += (Number(item.hydrationPerServing)  || 0) * ne.servings;
-    sodium    += (Number(item.sodiumPerServing)     || 0) * ne.servings;
-  }
-  if (!carbs && !hydration && !sodium) return null;
-  return { carbs: Math.round(carbs / hrs), hydration: Math.round(hydration / hrs), sodium: Math.round(sodium / hrs) };
-}
-
 interface Props {
   user: User;
   db: TrainingDB;
@@ -86,6 +69,7 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
   const [filter,   setFilter]   = useState<FilterType>('all');
   const [addType,  setAddType]  = useState<AddType | null>(null);
   const [showPlan, setShowPlan] = useState(false);
+  const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
 
   const allActivities: ActivityEntry[] = useMemo(() => {
     const all: ActivityEntry[] = [
@@ -105,6 +89,30 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
   const handleAction = (type: AddType | 'plan') => {
     if (type === 'plan') setShowPlan(true);
     else setAddType(type);
+  };
+
+  const handleDeleteEntry = () => {
+    if (!viewingEntry) return;
+    const id = viewingEntry.id;
+    Alert.alert('Delete workout', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const newDB: TrainingDB = {
+          ...db,
+          runs:       db.runs.filter(r => r.id !== id),
+          crosses:    db.crosses.filter(r => r.id !== id),
+          strengths:  db.strengths.filter(r => r.id !== id),
+          recoveries: db.recoveries.filter(r => r.id !== id),
+        };
+        try {
+          await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+          onSaved(newDB);
+          setViewingEntry(null);
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        }
+      }},
+    ]);
   };
 
   return (
@@ -146,7 +154,20 @@ export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
             <Text style={styles.emptyText}>No activities to show.</Text>
           </View>
         }
-        renderItem={({ item }) => <LogItem act={item} onPress={() => onEditEntry(item)} nutrition={db.nutrition} />}
+        renderItem={({ item }) => <LogItem act={item} onPress={() => setViewingEntry(item)} nutrition={db.nutrition} />}
+      />
+
+      {/* Activity Detail (view) Modal */}
+      <ActivityDetailModal
+        visible={!!viewingEntry}
+        entry={viewingEntry}
+        nutrition={db.nutrition}
+        onEdit={() => {
+          if (viewingEntry) onEditEntry(viewingEntry);
+          setViewingEntry(null);
+        }}
+        onDelete={handleDeleteEntry}
+        onClose={() => setViewingEntry(null)}
       />
 
       {/* Add Workout Modal */}

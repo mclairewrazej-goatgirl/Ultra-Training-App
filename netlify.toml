@@ -5,3 +5,11 @@
 
 [functions]
   directory = "netlify/functions"
+
+[build.environment]
+  # The mobile/ app is a separate, non-deployed React Native project. Its
+  # google-services.json and app.json contain Firebase/OAuth client keys that
+  # are not secrets themselves, but they trip Netlify's build secrets scanner
+  # since the publish directory is the repo root. Exclude mobile/ from the
+  # scan rather than silence it entirely.
+  SECRETS_SCAN_OMIT_PATHS = "mobile/**"

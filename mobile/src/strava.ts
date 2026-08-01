@@ -13,9 +13,10 @@ const APP_SCHEME_PREFIX = 'ultra-training://strava';
 
 const RUN_TYPES   = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const RIDE_TYPES  = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Velomobile']);
-const STR_TYPES   = new Set(['RockClimbing', 'WeightTraining', 'Crossfit', 'Yoga']);
+const STR_TYPES   = new Set(['RockClimbing', 'WeightTraining', 'Crossfit']);
 const SKI_TYPES   = new Set(['NordicSki', 'BackcountrySki', 'AlpineSki']);
 const HIKE_TYPES  = new Set(['Hike', 'Walk']);
+const RECOVERY_TYPES = new Set(['Yoga']);
 
 // ── OAuth ─────────────────────────────────────────────────────────────────────
 
@@ -160,8 +161,11 @@ export function mapToEntry(act: StravaActivity, primarySport: string): ActivityE
     const subtype = type === 'GravelRide' ? 'Gravel Bike' : type === 'MountainBikeRide' ? 'Mountain Bike' : 'Road Bike';
     return { id: uid(), date, actType: 'cross', subtype, dist, dur, elapsed, vert, rpe: 0, notes, stravaId } as CrossEntry;
   }
+  if (RECOVERY_TYPES.has(type)) {
+    return { id: uid(), date, actType: 'recovery', subtype: 'Yoga/Stretch', dur, notes, stravaId } as RecoveryEntry;
+  }
   if (STR_TYPES.has(type)) {
-    const subtype = type === 'Yoga' ? 'Yoga' : type === 'RockClimbing' ? 'Indoor Climbing' : 'Gym Strength';
+    const subtype = type === 'RockClimbing' ? 'Indoor Climbing' : 'Gym Strength';
     return { id: uid(), date, actType: 'strength', subtype, dur, notes, stravaId } as StrengthEntry;
   }
   if (SKI_TYPES.has(type)) {

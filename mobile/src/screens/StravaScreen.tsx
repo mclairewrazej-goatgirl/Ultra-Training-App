@@ -14,6 +14,8 @@ import {
   buildSyncQueue, addEntryToDB, formatRaceResult, mToKm, secToMin,
   StravaActivity, RaceMatch, PlanMatch, SyncRange,
 } from '../strava';
+import ConfettiCelebration from './ConfettiCelebration';
+import RaceStatsModal from './RaceStatsModal';
 
 const STRAVA_ORANGE = '#FC4C02';
 
@@ -51,7 +53,8 @@ function actTypeColor(act: StravaActivity) {
   if (['Run', 'TrailRun', 'VirtualRun', 'Hike', 'Walk'].includes(t)) return colors.pink;
   if (['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide'].includes(t)) return colors.blue;
   if (['NordicSki', 'BackcountrySki', 'AlpineSki'].includes(t)) return '#38bdf8';
-  if (['WeightTraining', 'Crossfit', 'Yoga', 'RockClimbing'].includes(t)) return colors.amber;
+  if (t === 'Yoga') return colors.green;
+  if (['WeightTraining', 'Crossfit', 'RockClimbing'].includes(t)) return colors.amber;
   return colors.muted;
 }
 
@@ -74,6 +77,10 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
   const [syncMsg,   setSyncMsg]   = useState('');
   const [raceQueue, setRaceQueue] = useState<RaceMatch[]>([]);
   const [planQueue, setPlanQueue] = useState<PlanMatch[]>([]);
+
+  // Post-confirmation celebration + final-stats prompt
+  const [celebratingItem, setCelebratingItem] = useState<RaceMatch | null>(null);
+  const [statsItem,       setStatsItem]       = useState<RaceMatch | null>(null);
 
   const workDBRef   = useRef<TrainingDB | null>(null);
   const newCountRef = useRef(0);
@@ -232,6 +239,30 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
       };
     }
     workDBRef.current = addEntryToDB(w, item.entry);
+
+    if (recordResult) {
+      // Hold the queue here — celebration + stats modal advance it once done.
+      setCelebratingItem(item);
+    } else {
+      setRaceQueue(q => q.slice(1));
+    }
+  }
+
+  function handleCelebrationDone() {
+    if (celebratingItem) setStatsItem(celebratingItem);
+    setCelebratingItem(null);
+  }
+
+  function handleSaveRaceStats(placement: string) {
+    if (statsItem && workDBRef.current && placement) {
+      workDBRef.current = {
+        ...workDBRef.current,
+        races: workDBRef.current.races.map((r: Race) =>
+          r.id === statsItem.race.id ? { ...r, placement } : r
+        ),
+      };
+    }
+    setStatsItem(null);
     setRaceQueue(q => q.slice(1));
   }
 
@@ -440,7 +471,7 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
       </Modal>
 
       {/* ── Race match modal ────────────────────────────────────── */}
-      <Modal visible={!!currentRace} animationType="slide" presentationStyle="pageSheet"
+      <Modal visible={!!currentRace && !celebratingItem && !statsItem} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => handleRaceDecision(false)}>
         {currentRace && (
           <View style={styles.matchWrap}>
@@ -504,6 +535,20 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
           </View>
         )}
       </Modal>
+
+      {/* ── Race celebration + final stats ──────────────────────── */}
+      <ConfettiCelebration
+        visible={!!celebratingItem}
+        message={`Congrats on your race! 🎉${celebratingItem ? `\n${celebratingItem.race.name}` : ''}`}
+        onDone={handleCelebrationDone}
+      />
+      <RaceStatsModal
+        visible={!!statsItem}
+        raceName={statsItem?.race.name ?? ''}
+        finishTime={statsItem ? formatRaceResult(statsItem.activity.moving_time) : ''}
+        onSave={handleSaveRaceStats}
+        onSkip={() => handleSaveRaceStats('')}
+      />
 
     </ScrollView>
   );
