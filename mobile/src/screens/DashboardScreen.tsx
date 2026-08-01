@@ -4,15 +4,273 @@ import {
 } from 'react-native';
 import { User } from 'firebase/auth';
 import { colors, actColors } from '../theme';
-import { TrainingDB, ActivityEntry, WeeklyGoal, defaultWeeklyGoal } from '../types';
+import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry } from '../types';
+import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
+import { normalizeGoal } from './GoalsScreen';
 
 interface Props {
   user: User;
   db: TrainingDB;
-  onNavigateToAdd: () => void;
 }
 
+function getWeekRange(weeksBack = 0) {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7) - weeksBack * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { monday, sunday };
+}
+
+function fmtDist(n: number) {
+  return n > 0 ? `${n.toFixed(1)} km` : '—';
+}
+function fmtHours(mins: number) {
+  if (!mins) return '—';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtVert(m: number) {
+  return m > 0 ? `${Math.round(m)} m` : '—';
+}
+
+function actLabel(act: ActivityEntry) {
+  if (act.actType === 'run') {
+    const r = act as RunEntry;
+    if (!r.runType) return 'Run';
+    const cap = r.runType.charAt(0).toUpperCase() + r.runType.slice(1);
+    return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
+  }
+  if (act.actType === 'cross') return (act as CrossEntry).subtype || 'Cross-Training';
+  if (act.actType === 'strength') return (act as StrengthEntry).subtype || 'Strength';
+  if (act.actType === 'recovery') return 'Recovery';
+  return 'Workout';
+}
+
+const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+export default function DashboardScreen({ user, db }: Props) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
+  const isCycling = db.primarySport === 'cycling';
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  const allActivities: ActivityEntry[] = useMemo(() => (
+    [...db.runs, ...db.crosses, ...db.strengths, ...db.recoveries]
+      .sort((a, b) => b.date.localeCompare(a.date))
+  ), [db]);
+
+  const inWeek = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d >= monday && d <= sunday;
+  };
+
+  const weekRuns       = useMemo(() => db.runs.filter(r => inWeek(r.date)),       [db, monday]);
+  const weekCross      = useMemo(() => db.crosses.filter(c => inWeek(c.date)),    [db, monday]);
+  const weekStrength   = useMemo(() => db.strengths.filter(s => inWeek(s.date)),  [db, monday]);
+  const weekRecoveries = useMemo(() => db.recoveries.filter(r => inWeek(r.date)), [db, monday]);
+
+  // Running / cycling weekly stats
+  const runStats = useMemo(() => {
+    const dist     = weekRuns.reduce((s, r) => s + (Number(r.dist) || 0), 0);
+    const vert     = weekRuns.reduce((s, r) => s + (Number(r.vert) || 0), 0);
+    const mins     = weekRuns.reduce((s, r) => s + (Number(r.dur)  || 0), 0);
+    const longest  = weekRuns.reduce((max, r) => Math.max(max, Number(r.dist) || 0), 0);
+    return { dist, vert, mins, longest };
+  }, [weekRuns]);
+
+  const skiActive = isInSkiSeason(db.seasonalSport);
+
+  // Cross-training weekly stats (exclude ski if ski season active, matching web app)
+  const crossStats = useMemo(() => {
+    const nonSkiCross = skiActive ? weekCross.filter(c => !isSkiSubtype(c.subtype)) : weekCross;
+    const dist     = nonSkiCross.reduce((s, c) => s + (Number(c.dist) || 0), 0);
+    const vert     = nonSkiCross.reduce((s, c) => s + (Number(c.vert) || 0), 0);
+    const crossMin = nonSkiCross.reduce((s, c) => s + (Number(c.dur)  || 0), 0);
+    const strMin   = weekStrength.reduce((s, x) => s + (Number(x.dur) || 0), 0);
+    return { dist, vert, totalMins: crossMin + strMin, strengthCount: weekStrength.length };
+  }, [weekCross, weekStrength, skiActive]);
+
+  // Recovery (yoga, massage, physio, etc.) — kept separate from Cross-Training
+  const recoveryStats = useMemo(() => {
+    const totalMins = weekRecoveries.reduce((s, r) => s + (Number(r.dur) || 0), 0);
+    return { totalMins, count: weekRecoveries.length };
+  }, [weekRecoveries]);
+
+  // Ski stats (only calculated when ski season is active)
+  const skiStats = useMemo(() => {
+    if (!skiActive) return null;
+    const ss  = db.seasonalSport;
+    const weekSki = weekCross.filter(c => isSkiSubtype(c.subtype));
+    const [sm, sd] = ss.startMD.split('-').map(Number);
+    const [em, ed] = ss.endMD.split('-').map(Number);
+    const startN = sm * 100 + sd;
+    const endN   = em * 100 + ed;
+    const inRange = (d: string) => {
+      const dt  = new Date(d + 'T12:00:00');
+      const cur = (dt.getMonth() + 1) * 100 + dt.getDate();
+      return startN <= endN ? cur >= startN && cur <= endN : cur >= startN || cur <= endN;
+    };
+    const seasonSki = db.crosses.filter(c => isSkiSubtype(c.subtype) && inRange(c.date));
+    return {
+      days:       weekSki.length,
+      weekVert:   weekSki.reduce((s, c) => s + (Number(c.vert) || 0), 0),
+      weekMins:   weekSki.reduce((s, c) => s + (Number(c.dur)  || 0), 0),
+      seasonVert: seasonSki.reduce((s, c) => s + (Number(c.vert) || 0), 0),
+    };
+  }, [skiActive, weekCross, db.crosses, db.seasonalSport]);
+
+  // Activity dot map for mini calendar (by weekday index 0=Mon)
+  const weekDotMap = useMemo(() => {
+    const map: Record<number, string[]> = {};
+    const addDot = (dateStr: string, color: string) => {
+      const d = new Date(dateStr + 'T12:00:00');
+      if (d < monday || d > sunday) return;
+      const idx = (d.getDay() + 6) % 7; // 0=Mon
+      if (!map[idx]) map[idx] = [];
+      if (!map[idx].includes(color)) map[idx].push(color);
+    };
+    db.runs.forEach(r       => addDot(r.date, colors.pink));
+    db.crosses.forEach(c    => addDot(c.date, colors.blue));
+    db.strengths.forEach(s  => addDot(s.date, colors.amber));
+    db.recoveries.forEach(r => addDot(r.date, colors.green));
+    return map;
+  }, [db, monday, sunday]);
+
+  // Week day labels + ISO dates
+  const weekDays = useMemo(() => (
+    Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return { iso: d.toISOString().slice(0, 10), num: d.getDate() };
+    })
+  ), [monday]);
+
+  const weekRangeLabel = (() => {
+    const start = monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const end   = sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `${start} – ${end}`;
+  })();
+
+  const firstName = user.displayName?.split(' ')[0] ?? 'Athlete';
+  const recentActivities = allActivities.slice(0, 6);
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+
+      {/* ── Header ─────────────────────────────────────────── */}
+      <View style={styles.header}>
+        <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
+        <View style={styles.weekNavRow}>
+          <TouchableOpacity onPress={() => setWeekOffset(w => w + 1)} style={styles.weekNavBtn}>
+            <Text style={styles.weekNavArrow}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.subGreeting}>{weekRangeLabel}</Text>
+          <TouchableOpacity
+            onPress={() => setWeekOffset(w => Math.max(0, w - 1))}
+            style={styles.weekNavBtn}
+            disabled={weekOffset === 0}
+          >
+            <Text style={[styles.weekNavArrow, weekOffset === 0 && { opacity: 0.2 }]}>›</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Running / Cycling ──────────────────────────────── */}
+      <Text style={styles.sectionLabel}>{isCycling ? 'CYCLING' : 'RUNNING'}</Text>
+      <View style={styles.grid}>
+        <StatCard label="Weekly Distance" value={fmtDist(runStats.dist)}    color={colors.pink}  />
+        <StatCard label="Weekly Vert"     value={fmtVert(runStats.vert)}    color={colors.blue}  />
+        <StatCard label="Time on Feet"    value={fmtHours(runStats.mins)}   color={colors.purple} />
+        <StatCard label={isCycling ? 'Longest Ride' : 'Longest Run'} value={fmtDist(runStats.longest)} color={colors.amber} />
+      </View>
+
+      {/* ── Cross-Training ─────────────────────────────────── */}
+      <Text style={styles.sectionLabel}>CROSS-TRAINING</Text>
+      <View style={styles.grid}>
+        <StatCard label="Total Hours"     value={fmtHours(crossStats.totalMins)}       color={colors.pink}  />
+        <StatCard label="Total Distance"  value={fmtDist(crossStats.dist)}             color={colors.blue}  />
+        <StatCard label="Total Vert"      value={fmtVert(crossStats.vert)}             color={colors.green} />
+        <StatCard label="Strength"        value={`${crossStats.strengthCount} sessions`} color={colors.amber} />
+      </View>
+
+      {/* ── Recovery ────────────────────────────────────────── */}
+      <Text style={styles.sectionLabel}>RECOVERY</Text>
+      <View style={styles.grid}>
+        <StatCard label="Recovery Time"    value={fmtHours(recoveryStats.totalMins)} color={colors.green} />
+        <StatCard label="Recovery Sessions" value={`${recoveryStats.count} sessions`} color={colors.green} />
+      </View>
+
+      {/* ── Volume History ─────────────────────────────────── */}
+      <VolumeChart db={db} isCycling={isCycling} skiActive={skiActive} weekOffset={weekOffset} onChangeWeek={setWeekOffset} />
+
+      {/* ── Ski Season ─────────────────────────────────────── */}
+      {skiActive && skiStats && (
+        <>
+          <Text style={styles.sectionLabel}>SKI SEASON</Text>
+          <View style={styles.grid}>
+            <StatCard label="Days on Snow"  value={String(skiStats.days)}                       color={colors.blue}   />
+            <StatCard label="Weekly Vert"   value={fmtVert(skiStats.weekVert)}                  color={colors.purple} />
+            <StatCard label="Hours on Snow" value={fmtHours(skiStats.weekMins)}                 color={colors.pink}   />
+            <StatCard label="Season Vert"   value={`${skiStats.seasonVert.toLocaleString()} m`} color={colors.green}  />
+          </View>
+        </>
+      )}
+
+      {/* ── This Week mini-calendar ────────────────────────── */}
+      <Text style={styles.sectionLabel}>{weekOffset === 0 ? 'THIS WEEK' : 'THAT WEEK'}</Text>
+      <View style={styles.miniCal}>
+        {weekDays.map((day, i) => {
+          const isToday = day.iso === todayISO;
+          const dots    = weekDotMap[i] ?? [];
+          return (
+            <View key={day.iso} style={[styles.miniDay, isToday && styles.miniDayToday]}>
+              <Text style={[styles.miniDayName, isToday && styles.miniDayNameToday]}>
+                {WEEK_DAYS[i]}
+              </Text>
+              <Text style={[styles.miniDayNum, isToday && styles.miniDayNumToday]}>
+                {day.num}
+              </Text>
+              <View style={styles.miniDots}>
+                {dots.slice(0, 2).map((c, di) => (
+                  <View key={di} style={[styles.miniDot, { backgroundColor: c }]} />
+                ))}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* ── Recent Activities ──────────────────────────────── */}
+      <Text style={styles.sectionLabel}>RECENT ACTIVITY</Text>
+
+      {recentActivities.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>No activities yet.</Text>
+          <Text style={styles.emptySubText}>Tap "+ Log" to record your first workout.</Text>
+        </View>
+      ) : (
+        recentActivities.map(act => <ActivityRow key={act.id} act={act} />)
+      )}
+    </ScrollView>
+  );
+}
+
+// ─── Volume History Chart ─────────────────────────────────────────────────────
+
 type Metric = 'dist' | 'time' | 'vert';
+
+function getMondayOfWeek(weeksBack: number): Date {
+  const now = new Date();
+  const d = new Date(now);
+  d.setDate(now.getDate() - ((now.getDay() + 6) % 7) - weeksBack * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 function localDateKey(d: Date): string {
   const y = d.getFullYear();
@@ -21,452 +279,242 @@ function localDateKey(d: Date): string {
   return `${y}-${mo}-${day}`;
 }
 
-function getMondayOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setDate(d.getDate() - ((day + 6) % 7));
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function getGoalForWeek(db: TrainingDB, key: string): WeeklyGoal {
-  const raw = db.weeklyGoals?.[key] ?? db.goals;
-  if (!raw || typeof raw !== 'object') return defaultWeeklyGoal;
-  const r = raw as any;
-  return {
-    run: {
-      enabled: r.run?.enabled ?? true,
-      metrics: {
-        time: r.run?.metrics?.time ?? true,
-        dist: r.run?.metrics?.dist ?? false,
-        vert: r.run?.metrics?.vert ?? false,
-      },
-      time: { min: Number(r.run?.time?.min) || 0, max: Number(r.run?.time?.max) || 0 },
-      dist: { min: Number(r.run?.dist?.min) || 0, max: Number(r.run?.dist?.max) || 0 },
-      vert: { min: Number(r.run?.vert?.min) || 0, max: Number(r.run?.vert?.max) || 0 },
-    },
-    cross: {
-      enabled: r.cross?.enabled ?? false,
-      metrics: {
-        time: r.cross?.metrics?.time ?? true,
-        dist: r.cross?.metrics?.dist ?? false,
-        vert: r.cross?.metrics?.vert ?? false,
-      },
-      time: { min: Number(r.cross?.time?.min) || 0, max: Number(r.cross?.time?.max) || 0 },
-      dist: { min: Number(r.cross?.dist?.min) || 0, max: Number(r.cross?.dist?.max) || 0 },
-      vert: { min: Number(r.cross?.vert?.min) || 0, max: Number(r.cross?.vert?.max) || 0 },
-    },
-  };
-}
-
-function effectiveDur(act: any): number {
-  if (act.useMovingTime && Number(act.movingTime) > 0) return Number(act.movingTime);
-  if (!act.useMovingTime && Number(act.elapsedTime) > 0) return Number(act.elapsedTime);
-  return Number(act.dur) || 0;
-}
-
-function fmtDist(d: number | string) {
-  const n = Number(d);
-  return n > 0 ? `${n.toFixed(1)} mi` : '';
-}
-
-function fmtDur(d: number | string) {
-  const mins = Number(d);
-  if (!mins) return '';
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function fmtMetricVal(v: number, metric: Metric): string {
-  if (metric === 'dist') return `${v.toFixed(1)} mi`;
-  if (metric === 'time') return v >= 1 ? `${v.toFixed(1)}h` : `${Math.round(v * 60)}m`;
-  return `${Math.round(v)} ft`;
-}
-
-function fmtAxisTick(v: number, metric: Metric): string {
-  if (metric === 'dist') return v.toFixed(0);
-  if (metric === 'time') return v.toFixed(1);
-  return String(Math.round(v));
-}
-
-function actLabel(act: ActivityEntry) {
-  if (act.actType === 'run') {
-    const r = act as import('../types').RunEntry;
-    return r.runType ? r.runType.charAt(0).toUpperCase() + r.runType.slice(1) + ' Run' : 'Run';
-  }
-  if (act.actType === 'cross') {
-    const c = act as import('../types').CrossEntry;
-    return c.subtype || 'Cross-Training';
-  }
-  if (act.actType === 'strength') return 'Strength';
-  if (act.actType === 'recovery') return 'Recovery';
-  return 'Workout';
-}
-
-function weekRangeLabel(monday: Date): string {
+function getVolumeData(db: TrainingDB, monday: Date, metric: Metric, skiActive: boolean) {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return `${fmt(monday)} – ${fmt(sunday)}`;
+  sunday.setHours(23, 59, 59, 999);
+  const inW = (d: string) => { const dt = new Date(d + 'T12:00:00'); return dt >= monday && dt <= sunday; };
+  const runs   = db.runs.filter(r => inW(r.date));
+  const crosses = skiActive
+    ? db.crosses.filter(c => inW(c.date) && !isSkiSubtype(c.subtype))
+    : db.crosses.filter(c => inW(c.date));
+  const key = metric === 'time' ? 'dur' : metric;
+  const sum = (arr: any[]) => arr.reduce((s, x) => s + (Number(x[key]) || 0), 0);
+  // dur is stored in minutes, but "time" goals are entered/stored in hours — convert to match.
+  const divisor = metric === 'time' ? 60 : 1;
+  return { run: sum(runs) / divisor, cross: sum(crosses) / divisor };
 }
 
-const CHART_H = 140;
-const WEEK_HISTORY = 12;
-const Y_AXIS_W = 38;
+function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
+  db: TrainingDB; isCycling: boolean; skiActive: boolean;
+  weekOffset: number; onChangeWeek: (n: number) => void;
+}) {
+  const [metric,         setMetric]         = useState<Metric>('dist');
+  const [showWeekPicker, setShowWeekPicker] = useState(false);
+  const [showTooltip,    setShowTooltip]    = useState(false);
 
-export default function DashboardScreen({ user, db, onNavigateToAdd }: Props) {
-  const [metric, setMetric] = useState<Metric>('dist');
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [weekDropdownOpen, setWeekDropdownOpen] = useState(false);
-
-  const currentMonday = useMemo(() => getMondayOfWeek(new Date()), []);
-
-  const viewedMonday = useMemo(() => {
-    const d = new Date(currentMonday);
-    d.setDate(d.getDate() + weekOffset * 7);
-    return d;
-  }, [currentMonday, weekOffset]);
-
-  const viewedSunday = useMemo(() => {
-    const s = new Date(viewedMonday);
-    s.setDate(viewedMonday.getDate() + 6);
-    s.setHours(23, 59, 59, 999);
-    return s;
-  }, [viewedMonday]);
-
-  const viewedWeekKey = useMemo(() => localDateKey(viewedMonday), [viewedMonday]);
-
-  const weekOptions = useMemo(() =>
-    Array.from({ length: WEEK_HISTORY }, (_, i) => {
-      const mon = new Date(currentMonday);
-      mon.setDate(mon.getDate() - i * 7);
-      return { offset: -i, label: weekRangeLabel(mon), isCurrent: i === 0 };
-    }),
-    [currentMonday],
+  const monday = useMemo(() => getMondayOfWeek(weekOffset), [weekOffset]);
+  const { run, cross } = useMemo(
+    () => getVolumeData(db, monday, metric, skiActive),
+    [db, monday, metric, skiActive],
   );
+  const total = run + cross;
 
-  const allActivities: ActivityEntry[] = useMemo(() => [
-    ...db.runs, ...db.crosses, ...db.strengths, ...db.recoveries,
-  ].sort((a, b) => b.date.localeCompare(a.date)), [db]);
+  // Look up per-week goal first, fall back to default
+  const mondayKey = localDateKey(monday);
+  const goals      = normalizeGoal((db.weeklyGoals as any)?.[mondayKey] ?? db.goals);
+  const runGoal    = goals.run[metric]   as { min: number; max: number };
+  const crossGoal  = goals.cross[metric] as { min: number; max: number };
 
-  // Stat cards always show the current (this) week
-  const thisWeekSunday = useMemo(() => {
-    const s = new Date(currentMonday);
-    s.setDate(currentMonday.getDate() + 6);
-    s.setHours(23, 59, 59, 999);
-    return s;
-  }, [currentMonday]);
+  // Combined goal for the Total bar — sum of whichever of run/cross goals are enabled.
+  const totalGoal: { min: number; max: number } | null = (goals.run.enabled || goals.cross.enabled) ? {
+    min: (goals.run.enabled ? runGoal.min : 0) + (goals.cross.enabled ? crossGoal.min : 0),
+    max: (goals.run.enabled ? runGoal.max : 0) + (goals.cross.enabled ? crossGoal.max : 0),
+  } : null;
 
-  const thisWeekActivities = useMemo(() =>
-    allActivities.filter((a) => {
-      const d = new Date(a.date + 'T12:00:00');
-      return d >= currentMonday && d <= thisWeekSunday;
-    }),
-    [allActivities, currentMonday, thisWeekSunday],
-  );
+  const CHART_H = 130;
+  const maxVal  = Math.max(total, runGoal.max || 0, crossGoal.max || 0, totalGoal?.max || 0, 1);
+  const pct     = (v: number) => Math.min(1, v / maxVal);
 
-  const weeklyStats = useMemo(() => {
-    let dist = 0, mins = 0, count = 0;
-    thisWeekActivities.forEach((a) => {
-      count++;
-      if ('dist' in a) dist += Number((a as any).dist) || 0;
-      mins += effectiveDur(a);
-    });
-    return { dist, mins, count };
-  }, [thisWeekActivities]);
+  const fmtV = (v: number) => {
+    if (metric === 'dist') return `${v.toFixed(1)} km`;
+    if (metric === 'time') return fmtHours(Math.round(v * 60));
+    return `${Math.round(v)} m`;
+  };
 
-  // Chart uses the viewed week
-  const viewedActivities = useMemo(() =>
-    allActivities.filter((a) => {
-      const d = new Date(a.date + 'T12:00:00');
-      return d >= viewedMonday && d <= viewedSunday;
-    }),
-    [allActivities, viewedMonday, viewedSunday],
-  );
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const weekLabel = weekOffset === 0
+    ? 'Current Week'
+    : `${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
-  const goal = useMemo(() => getGoalForWeek(db, viewedWeekKey), [db, viewedWeekKey]);
+  // Per-bar goal bands: each bar is compared against its own goal, not a single shared one.
+  const bandFor = (g: { min: number; max: number } | null) => {
+    if (!g || (g.min <= 0 && g.max <= 0)) return null;
+    return {
+      top:    g.max > 0 ? CHART_H - Math.round(pct(g.max) * CHART_H) : null,
+      bottom: g.min > 0 ? CHART_H - Math.round(pct(g.min) * CHART_H) : null,
+    };
+  };
+  const runBand   = bandFor(goals.run.enabled   ? runGoal   : null);
+  const crossBand = bandFor(goals.cross.enabled ? crossGoal : null);
+  const totalBand = bandFor(totalGoal);
 
-  const chartData = useMemo(() => {
-    let runDist = 0, runMins = 0, runVert = 0;
-    let crossDist = 0, crossMins = 0, crossVert = 0;
+  // Y-axis ticks at 0, goal min, and goal max (using the Total goal as the primary reference)
+  const tickGoal = totalGoal ?? runGoal;
+  const yTicks: { value: number; label: string }[] = [{ value: 0, label: '0' }];
+  if (tickGoal.min > 0) yTicks.push({ value: tickGoal.min, label: fmtV(tickGoal.min) });
+  if (tickGoal.max > 0) yTicks.push({ value: tickGoal.max, label: fmtV(tickGoal.max) });
 
-    viewedActivities.forEach((a) => {
-      if (a.actType === 'run') {
-        runDist  += Number((a as any).dist) || 0;
-        runMins  += effectiveDur(a);
-        runVert  += Number((a as any).vert) || 0;
-      } else if (a.actType === 'cross') {
-        crossDist += Number((a as any).dist) || 0;
-        crossMins += effectiveDur(a);
-        crossVert += Number((a as any).vert) || 0;
-      }
-    });
-
-    let runVal: number, crossVal: number;
-    if (metric === 'dist')      { runVal = runDist;       crossVal = crossDist; }
-    else if (metric === 'time') { runVal = runMins / 60;  crossVal = crossMins / 60; }
-    else                        { runVal = runVert;        crossVal = crossVert; }
-    const totalVal = runVal + crossVal;
-
-    let runGoalMin = 0, runGoalMax = 0, crossGoalMin = 0, crossGoalMax = 0;
-    if (goal.run.enabled) {
-      if (metric === 'dist' && goal.run.metrics.dist) {
-        runGoalMin = goal.run.dist.min; runGoalMax = goal.run.dist.max;
-      } else if (metric === 'time' && goal.run.metrics.time) {
-        runGoalMin = goal.run.time.min / 60; runGoalMax = goal.run.time.max / 60;
-      } else if (metric === 'vert' && goal.run.metrics.vert) {
-        runGoalMin = goal.run.vert.min; runGoalMax = goal.run.vert.max;
-      }
-    }
-    if (goal.cross.enabled) {
-      if (metric === 'dist' && goal.cross.metrics.dist) {
-        crossGoalMin = goal.cross.dist.min; crossGoalMax = goal.cross.dist.max;
-      } else if (metric === 'time' && goal.cross.metrics.time) {
-        crossGoalMin = goal.cross.time.min / 60; crossGoalMax = goal.cross.time.max / 60;
-      } else if (metric === 'vert' && goal.cross.metrics.vert) {
-        crossGoalMin = goal.cross.vert.min; crossGoalMax = goal.cross.vert.max;
-      }
-    }
-
-    const step = metric === 'dist' ? 5 : metric === 'time' ? 0.5 : 100;
-    const minAxis = metric === 'dist' ? 10 : metric === 'time' ? 1 : 100;
-    const maxVal = Math.max(runVal, crossVal, totalVal, runGoalMax, crossGoalMax, step * 0.1);
-    const axisMax = Math.max(minAxis, Math.ceil((maxVal * 1.15) / step) * step);
-
-    return { runVal, crossVal, totalVal, runGoalMin, runGoalMax, crossGoalMin, crossGoalMax, axisMax };
-  }, [viewedActivities, goal, metric]);
-
-  const { runVal, crossVal, totalVal, runGoalMin, runGoalMax, crossGoalMin, crossGoalMax, axisMax } = chartData;
-
-  function barH(val: number): number {
-    return Math.max((val / axisMax) * CHART_H, val > 0 ? 3 : 0);
-  }
-
-  // Y-axis ticks: evenly-spaced base ticks + goal range boundary values
-  const yTicks = useMemo(() => {
-    const base = [0, axisMax * 0.25, axisMax * 0.5, axisMax * 0.75, axisMax];
-    const goalVals = [runGoalMin, runGoalMax, crossGoalMin, crossGoalMax].filter(v => v > 0 && v <= axisMax);
-    const threshold = axisMax * 0.03;
-    return [...base, ...goalVals]
-      .filter((v, i, arr) => arr.findIndex(w => Math.abs(w - v) < threshold) === i)
-      .sort((a, b) => a - b);
-  }, [axisMax, runGoalMin, runGoalMax, crossGoalMin, crossGoalMax]);
-
-  function isGoalTick(v: number): boolean {
-    const thr = axisMax * 0.02;
-    return (runGoalMin > 0 && Math.abs(v - runGoalMin) < thr) ||
-           (runGoalMax > 0 && Math.abs(v - runGoalMax) < thr) ||
-           (crossGoalMin > 0 && Math.abs(v - crossGoalMin) < thr) ||
-           (crossGoalMax > 0 && Math.abs(v - crossGoalMax) < thr);
-  }
-
-  const metricUnit = metric === 'dist' ? 'mi' : metric === 'time' ? 'h' : 'ft';
-  const recentActivities = allActivities.slice(0, 7);
-  const firstName = user.displayName?.split(' ')[0] ?? 'Athlete';
+  // Build week picker options (last 12 weeks)
+  const weekOptions = useMemo(() => (
+    Array.from({ length: 12 }, (_, i) => {
+      const mon = getMondayOfWeek(i);
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      const label = i === 0
+        ? 'Current Week'
+        : `${mon.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sun.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+      return { weeksBack: i, label };
+    })
+  ), []);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hey, {firstName}</Text>
-          <Text style={styles.subGreeting}>Here's your week so far</Text>
+    <View style={vcStyles.card}>
+      {/* Header row */}
+      <View style={vcStyles.headerRow}>
+        <Text style={styles.sectionLabel}>VOLUME HISTORY</Text>
+        <View style={vcStyles.chips}>
+          {(['dist','time','vert'] as Metric[]).map(m => (
+            <TouchableOpacity
+              key={m}
+              style={[vcStyles.chip, metric === m && vcStyles.chipActive]}
+              onPress={() => setMetric(m)}
+            >
+              <Text style={[vcStyles.chipText, metric === m && vcStyles.chipTextActive]}>
+                {m === 'dist' ? 'Dist' : m === 'time' ? 'Time' : 'Vert'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={onNavigateToAdd}>
-          <Text style={styles.addBtnText}>+ Log</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* This-week stat cards */}
-      <View style={styles.statsRow}>
-        <StatCard label="Workouts" value={String(weeklyStats.count)} color={colors.pink} />
-        <StatCard label="Distance" value={fmtDist(weeklyStats.dist) || '—'} color={colors.blue} />
-        <StatCard label="Time" value={fmtDur(weeklyStats.mins) || '—'} color={colors.green} />
-      </View>
+      {/* Week navigation — tap to open dropdown */}
+      <TouchableOpacity style={vcStyles.weekNav} onPress={() => setShowWeekPicker(true)}>
+        <Text style={vcStyles.weekLabel}>{weekLabel}</Text>
+        <Text style={vcStyles.weekDropIcon}>▾</Text>
+      </TouchableOpacity>
 
-      {/* Volume History card */}
-      <View style={styles.chartCard}>
-
-        {/* Header row: title + metric toggle */}
-        <View style={styles.chartHeaderRow}>
-          <Text style={styles.chartTitle}>Volume History</Text>
-          <View style={styles.metricRow}>
-            {(['dist', 'time', 'vert'] as Metric[]).map(m => (
+      {/* Week picker modal */}
+      <Modal
+        visible={showWeekPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWeekPicker(false)}
+      >
+        <TouchableOpacity
+          style={vcStyles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowWeekPicker(false)}
+        >
+          <View style={vcStyles.pickerSheet}>
+            <Text style={vcStyles.pickerTitle}>Select Week</Text>
+            {weekOptions.map(opt => (
               <TouchableOpacity
-                key={m}
-                style={[styles.metricBtn, metric === m && styles.metricBtnActive]}
-                onPress={() => setMetric(m)}
+                key={opt.weeksBack}
+                style={[vcStyles.pickerRow, weekOffset === opt.weeksBack && vcStyles.pickerRowActive]}
+                onPress={() => { onChangeWeek(opt.weeksBack); setShowWeekPicker(false); }}
               >
-                <Text style={[styles.metricBtnText, metric === m && styles.metricBtnTextActive]}>
-                  {m === 'dist' ? 'Dist' : m === 'time' ? 'Time' : 'Vert'}
+                <Text style={[vcStyles.pickerRowText, weekOffset === opt.weeksBack && vcStyles.pickerRowTextActive]}>
+                  {opt.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
-
-        {/* Week dropdown trigger */}
-        <TouchableOpacity style={styles.weekTrigger} onPress={() => setWeekDropdownOpen(true)}>
-          <Text style={styles.weekTriggerText}>{weekRangeLabel(viewedMonday)}</Text>
-          <Text style={styles.weekTriggerArrow}>{'▾'}</Text>
-        </TouchableOpacity>
-
-        {/* Chart */}
-        <View style={styles.chartArea}>
-
-          {/* Y-axis: absolutely-positioned labels aligned to chart scale */}
-          <View style={{ width: Y_AXIS_W, height: CHART_H }}>
-            {yTicks.map((v, i) => {
-              const bottom = Math.max(0, (v / axisMax) * CHART_H - 5);
-              const goal = isGoalTick(v);
-              return (
-                <Text
-                  key={i}
-                  style={[styles.yLabel, { bottom }, goal && styles.yLabelGoal]}
-                >
-                  {fmtAxisTick(v, metric)}
-                </Text>
-              );
-            })}
-          </View>
-
-          {/* Chart body */}
-          <View style={[styles.chartBody, { height: CHART_H }]}>
-
-            {/* Goal bands */}
-            {runGoalMax > 0 && (
-              <View style={[styles.goalBand, {
-                bottom: (runGoalMin / axisMax) * CHART_H,
-                height: Math.max(2, ((runGoalMax - runGoalMin) / axisMax) * CHART_H),
-                backgroundColor: 'rgba(233,30,140,0.13)',
-                borderTopColor: colors.pink,
-                borderBottomColor: colors.pink,
-              }]} />
-            )}
-            {crossGoalMax > 0 && (
-              <View style={[styles.goalBand, {
-                bottom: (crossGoalMin / axisMax) * CHART_H,
-                height: Math.max(2, ((crossGoalMax - crossGoalMin) / axisMax) * CHART_H),
-                backgroundColor: 'rgba(0,180,216,0.13)',
-                borderTopColor: colors.blue,
-                borderBottomColor: colors.blue,
-              }]} />
-            )}
-
-            {/* Grid lines (one per y-tick) */}
-            {yTicks.map((v, i) => (
-              <View key={i} style={[styles.gridLine, { bottom: (v / axisMax) * CHART_H }]} />
-            ))}
-
-            {/* Bars — absolutely positioned, full height, bars grow from bottom */}
-            <View style={styles.barsGroup}>
-              <BarCol value={runVal} height={barH(runVal)} color={colors.pink} metric={metric} />
-              <BarCol value={crossVal} height={barH(crossVal)} color={colors.blue} metric={metric} />
-              <BarCol value={totalVal} height={barH(totalVal)} color={colors.green} metric={metric} />
-            </View>
-          </View>
-        </View>
-
-        {/* X-axis labels aligned under the bars (offset by y-axis width) */}
-        <View style={[styles.xAxisRow, { paddingLeft: Y_AXIS_W }]}>
-          <Text style={styles.xAxisLabel}>Run</Text>
-          <Text style={styles.xAxisLabel}>Cross</Text>
-          <Text style={styles.xAxisLabel}>Total</Text>
-        </View>
-
-        {/* Legend */}
-        <View style={styles.legend}>
-          <LegendDot color={colors.pink} label="Run" />
-          <LegendDot color={colors.blue} label="Cross" />
-          <LegendDot color={colors.green} label="Total" />
-          {runGoalMax > 0 && (
-            <LegendDash color={colors.pink}
-              label={`Run goal: ${runGoalMin > 0 ? `${fmtAxisTick(runGoalMin, metric)}–` : ''}${fmtAxisTick(runGoalMax, metric)} ${metricUnit}`}
-            />
-          )}
-          {crossGoalMax > 0 && (
-            <LegendDash color={colors.blue}
-              label={`Cross goal: ${crossGoalMin > 0 ? `${fmtAxisTick(crossGoalMin, metric)}–` : ''}${fmtAxisTick(crossGoalMax, metric)} ${metricUnit}`}
-            />
-          )}
-        </View>
-      </View>
-
-      {/* Recent Activities */}
-      <Text style={styles.sectionTitle}>Recent Activities</Text>
-      {recentActivities.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No activities yet.</Text>
-          <Text style={styles.emptySubText}>Tap "+ Log" to record your first workout.</Text>
-        </View>
-      ) : (
-        recentActivities.map((act) => <ActivityRow key={act.id} act={act} />)
-      )}
-
-      {/* Week picker modal */}
-      <Modal visible={weekDropdownOpen} transparent animationType="fade"
-        onRequestClose={() => setWeekDropdownOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1}
-          onPress={() => setWeekDropdownOpen(false)}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Select Week</Text>
-            <ScrollView bounces={false}>
-              {weekOptions.map(opt => {
-                const selected = opt.offset === weekOffset;
-                return (
-                  <TouchableOpacity
-                    key={opt.offset}
-                    style={[styles.weekOpt, selected && styles.weekOptSelected]}
-                    onPress={() => { setWeekOffset(opt.offset); setWeekDropdownOpen(false); }}
-                  >
-                    <Text style={[styles.weekOptText, selected && styles.weekOptTextSelected]}>
-                      {opt.label}{opt.isCurrent ? '  — This Week' : ''}
-                    </Text>
-                    {selected && <Text style={{ color: colors.pink, fontSize: 14 }}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
         </TouchableOpacity>
       </Modal>
-    </ScrollView>
+
+      {/* Chart: Y-axis + bars */}
+      <View style={vcStyles.chartWrapper}>
+        {/* Y-axis with goal value ticks */}
+        <View style={[vcStyles.yAxis, { height: CHART_H }]}>
+          {yTicks.map(tick => (
+            <Text
+              key={tick.value}
+              style={[vcStyles.yLabel, { bottom: Math.max(0, Math.round(pct(tick.value) * CHART_H) - 5) }]}
+              numberOfLines={1}
+            >
+              {tick.label}
+            </Text>
+          ))}
+        </View>
+
+        {/* Chart area — tap to toggle tooltip */}
+        <View style={vcStyles.chartColumn}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setShowTooltip(v => !v)}
+            style={[vcStyles.chartArea, { height: CHART_H }]}
+          >
+            {/* Bars — each with its own goal band, compared against its own scale */}
+            <View style={vcStyles.barsRow}>
+              <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  value={fmtV(run)}   chartH={CHART_H} band={runBand} />
+              <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  value={fmtV(cross)} chartH={CHART_H} band={crossBand} />
+              <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} value={fmtV(total)} chartH={CHART_H} band={totalBand} />
+            </View>
+
+            {/* Stats tooltip (tap to show/hide) */}
+            {showTooltip && (
+              <View style={vcStyles.tooltip}>
+                <Text style={vcStyles.tooltipTitle}>{weekLabel}</Text>
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.pink }}>{isCycling ? 'Ride' : 'Run'}: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(run)}</Text>
+                </Text>
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.blue }}>Cross: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(cross)}</Text>
+                </Text>
+                <Text style={vcStyles.tooltipRow}>
+                  <Text style={{ color: colors.green }}>Total: </Text>
+                  <Text style={vcStyles.tooltipVal}>{fmtV(total)}</Text>
+                </Text>
+                {goals.run.enabled && (runGoal.min > 0 || runGoal.max > 0) && (
+                  <Text style={vcStyles.tooltipRow}>
+                    <Text style={{ color: colors.muted }}>{isCycling ? 'Ride' : 'Run'} Goal: </Text>
+                    <Text style={vcStyles.tooltipVal}>{fmtV(runGoal.min)}–{fmtV(runGoal.max)}</Text>
+                  </Text>
+                )}
+                {goals.cross.enabled && (crossGoal.min > 0 || crossGoal.max > 0) && (
+                  <Text style={vcStyles.tooltipRow}>
+                    <Text style={{ color: colors.muted }}>Cross Goal: </Text>
+                    <Text style={vcStyles.tooltipVal}>{fmtV(crossGoal.min)}–{fmtV(crossGoal.max)}</Text>
+                  </Text>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Bar labels below chart area so bars align from exact bottom */}
+          <View style={vcStyles.barLabelsRow}>
+            <Text style={vcStyles.barLabel}>{isCycling ? 'Ride' : 'Run'}</Text>
+            <Text style={vcStyles.barLabel}>Cross</Text>
+            <Text style={vcStyles.barLabel}>Total</Text>
+          </View>
+        </View>
+      </View>
+    </View>
   );
 }
 
-// Sub-components
-
-function BarCol({ value, height, color, metric }: { value: number; height: number; color: string; metric: Metric }) {
+function ChartBar({ height, color, value, chartH, band }: {
+  height: number; color: string; value: string; chartH: number;
+  band: { top: number | null; bottom: number | null } | null;
+}) {
   return (
-    <View style={styles.barCol}>
-      {value > 0 && (
-        <Text style={[styles.barValLabel, { color }]} numberOfLines={1}>
-          {fmtMetricVal(value, metric)}
-        </Text>
+    <View style={[vcStyles.barGroup, { height: chartH }]}>
+      {band && band.top !== null && band.bottom !== null && band.bottom > band.top && (
+        <View style={[vcStyles.goalBand, { top: band.top, height: band.bottom - band.top }]} />
       )}
-      <View style={[styles.bar, { height, backgroundColor: color }]} />
+      {band && band.top    !== null && <View style={[vcStyles.goalLine, { top: band.top }]} />}
+      {band && band.bottom !== null && <View style={[vcStyles.goalLine, { top: band.bottom }]} />}
+      <Text style={[vcStyles.barValue, { color }]}>{height > 2 ? value : '—'}</Text>
+      <View style={[vcStyles.bar, { height: Math.max(height, 2), backgroundColor: color }]} />
     </View>
   );
 }
 
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legendItem}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendText}>{label}</Text>
-    </View>
-  );
-}
-
-function LegendDash({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legendItem}>
-      <View style={[styles.legendDash, { borderColor: color }]} />
-      <Text style={styles.legendText}>{label}</Text>
-    </View>
-  );
-}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -479,19 +527,20 @@ function StatCard({ label, value, color }: { label: string; value: string; color
 
 function ActivityRow({ act }: { act: ActivityEntry }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
-  const dist = 'dist' in act ? fmtDist((act as any).dist) : '';
-  const mins = effectiveDur(act);
-  const dur = mins > 0 ? fmtDur(mins) : '';
-  const meta = [dist, dur].filter(Boolean).join(' · ');
+  const dist = 'dist' in act && Number((act as any).dist) > 0
+    ? `${Number((act as any).dist).toFixed(1)} km` : '';
+  const dur = 'dur' in act ? fmtHours(Number((act as any).dur)) : '';
+  const meta = [dist, dur === '—' ? '' : dur].filter(Boolean).join(' · ');
   const dateStr = new Date(act.date + 'T12:00:00').toLocaleDateString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric',
   });
+
   return (
     <View style={styles.actRow}>
       <View style={[styles.actDot, { backgroundColor: dotColor }]} />
       <View style={styles.actInfo}>
         <Text style={styles.actLabel}>{actLabel(act)}</Text>
-        <Text style={styles.actMeta}>{dateStr}{meta ? ' · ' + meta : ''}</Text>
+        <Text style={styles.actMeta}>{dateStr}{meta ? '  ·  ' + meta : ''}</Text>
       </View>
     </View>
   );
@@ -499,123 +548,164 @@ function ActivityRow({ act }: { act: ActivityEntry }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, paddingBottom: 40 },
+  content:   { padding: 16, paddingBottom: 40 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
-  greeting: { fontSize: 22, fontWeight: '800', color: colors.text },
-  subGreeting: { fontSize: 14, color: colors.muted, marginTop: 2 },
-  addBtn: { backgroundColor: colors.pink, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  header: {
+    marginBottom: 20,
+  },
+  greeting:    { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 4 },
+  subGreeting: { fontSize: 13, color: colors.muted },
 
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  weekNavBtn: { padding: 4 },
+  weekNavArrow: { fontSize: 20, color: colors.muted, fontWeight: '300', lineHeight: 22 },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.muted,
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginTop: 4,
+  },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   statCard: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14,
-    borderTopWidth: 3, borderWidth: 1, borderColor: colors.border,
+    width: '47.5%',
+    backgroundColor: colors.surface, borderRadius: 12,
+    padding: 12, borderTopWidth: 3, borderWidth: 1, borderColor: colors.border,
   },
-  statValue: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  statLabel: { fontSize: 11, color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  statValue: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  statLabel: { fontSize: 10, color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  chartCard: {
-    backgroundColor: colors.surface, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: colors.border, marginBottom: 24,
+  miniCal: {
+    flexDirection: 'row', backgroundColor: colors.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+    marginBottom: 16, overflow: 'hidden',
   },
-  chartHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  chartTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
-  metricRow: { flexDirection: 'row', gap: 4 },
-  metricBtn: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface2,
+  miniDay: {
+    flex: 1, alignItems: 'center', paddingVertical: 10,
+    borderRightWidth: 0.5, borderRightColor: colors.border,
   },
-  metricBtnActive: { backgroundColor: colors.surface3, borderColor: colors.pink },
-  metricBtnText: { fontSize: 11, color: colors.muted, fontWeight: '600' },
-  metricBtnTextActive: { color: colors.pink },
+  miniDayToday:     { backgroundColor: colors.pink + '18' },
+  miniDayName:      { fontSize: 10, color: colors.muted, fontWeight: '600', marginBottom: 4 },
+  miniDayNameToday: { color: colors.pink },
+  miniDayNum:       { fontSize: 13, fontWeight: '600', color: colors.text },
+  miniDayNumToday:  { color: colors.pink, fontWeight: '800' },
+  miniDots:         { flexDirection: 'row', gap: 2, marginTop: 4, height: 8, alignItems: 'center' },
+  miniDot:          { width: 4, height: 4, borderRadius: 2 },
 
-  weekTrigger: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 6, marginBottom: 10,
-  },
-  weekTriggerText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  weekTriggerArrow: { fontSize: 12, color: colors.muted },
-
-  chartArea: { flexDirection: 'row', alignItems: 'flex-end' },
-
-  yLabel: {
-    position: 'absolute', right: 4,
-    fontSize: 8, color: colors.muted2, lineHeight: 10,
-  },
-  yLabelGoal: { color: colors.muted, fontWeight: '700' },
-
-  chartBody: {
-    flex: 1, position: 'relative',
-    borderLeftWidth: 1, borderBottomWidth: 1, borderColor: colors.border2,
-  },
-  goalBand: {
-    position: 'absolute', left: 0, right: 0,
-    borderTopWidth: 1, borderBottomWidth: 1, borderStyle: 'dashed',
-  },
-  gridLine: {
-    position: 'absolute', left: 0, right: 0,
-    height: 1, backgroundColor: colors.border, opacity: 0.4,
-  },
-
-  barsGroup: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: CHART_H,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-evenly',
-    paddingHorizontal: 6,
-  },
-  barCol: {
-    flex: 1,
-    height: CHART_H,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  barValLabel: { fontSize: 8, fontWeight: '700', marginBottom: 2, lineHeight: 10 },
-  bar: { width: 26, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
-
-  xAxisRow: { flexDirection: 'row', marginTop: 4 },
-  xAxisLabel: { flex: 1, textAlign: 'center', fontSize: 10, color: colors.muted },
-
-  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendDash: { width: 12, height: 0, borderTopWidth: 1.5, borderStyle: 'dashed' },
-  legendText: { fontSize: 10, color: colors.muted },
-
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 12 },
   emptyCard: {
-    backgroundColor: colors.surface, borderRadius: 12, padding: 24,
-    alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface, borderRadius: 12,
+    padding: 24, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
   },
-  emptyText: { fontSize: 15, color: colors.text, fontWeight: '600', marginBottom: 4 },
+  emptyText:    { fontSize: 15, color: colors.text, fontWeight: '600', marginBottom: 4 },
   emptySubText: { fontSize: 13, color: colors.muted },
 
   actRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
-    borderRadius: 12, padding: 14, marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface, borderRadius: 12,
+    padding: 14, marginBottom: 8,
     borderWidth: 1, borderColor: colors.border, gap: 12,
   },
-  actDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  actDot:  { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
   actInfo: { flex: 1 },
   actLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
-  actMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  actMeta:  { fontSize: 12, color: colors.muted, marginTop: 2 },
+});
 
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center', alignItems: 'center',
+const vcStyles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border,
+    marginBottom: 16, overflow: 'hidden',
   },
-  modalSheet: {
+  headerRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4,
+  },
+  chips:          { flexDirection: 'row', gap: 4 },
+  chip:           { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
+  chipActive:     { backgroundColor: colors.pink, borderColor: colors.pink },
+  chipText:       { fontSize: 10, fontWeight: '700', color: colors.muted },
+  chipTextActive: { color: '#fff' },
+
+  weekNav: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 12, paddingVertical: 8, gap: 6,
+  },
+  weekLabel:    { fontSize: 12, fontWeight: '600', color: colors.text },
+  weekDropIcon: { fontSize: 12, color: colors.muted },
+
+  pickerOverlay: {
+    flex: 1, backgroundColor: '#000000aa',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  pickerSheet: {
     backgroundColor: colors.surface, borderRadius: 16,
-    padding: 16, width: '85%', maxHeight: '70%',
+    borderWidth: 1, borderColor: colors.border,
+    width: '100%', maxWidth: 360, padding: 8,
   },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 12, textAlign: 'center' },
-  weekOpt: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 11, paddingHorizontal: 8, borderRadius: 8, marginBottom: 2,
+  pickerTitle: {
+    fontSize: 13, fontWeight: '700', color: colors.muted,
+    textTransform: 'uppercase', letterSpacing: 1,
+    paddingHorizontal: 12, paddingVertical: 8,
   },
-  weekOptSelected: { backgroundColor: colors.surface3 },
-  weekOptText: { fontSize: 14, color: colors.text },
-  weekOptTextSelected: { color: colors.pink, fontWeight: '600' },
+  pickerRow: {
+    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10,
+  },
+  pickerRowActive:    { backgroundColor: colors.pink + '22' },
+  pickerRowText:      { fontSize: 14, color: colors.text },
+  pickerRowTextActive: { color: colors.pink, fontWeight: '700' },
+
+  chartWrapper: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  yAxis: {
+    width: 44,
+    position: 'relative',
+  },
+  yLabel: {
+    position: 'absolute',
+    right: 6,
+    fontSize: 8,
+    fontWeight: '600',
+    color: colors.muted,
+    lineHeight: 10,
+  },
+  chartColumn: { flex: 1 },
+  chartArea: {
+    position: 'relative',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  goalBand: {
+    position: 'absolute', left: 0, right: 0,
+    backgroundColor: '#7c4dff18',
+  },
+  goalLine: {
+    position: 'absolute', left: 0, right: 0,
+    borderTopWidth: 1, borderColor: colors.pink + '60',
+    borderStyle: 'dashed',
+  },
+  barsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  barGroup:     { alignItems: 'center', justifyContent: 'flex-end', position: 'relative', flex: 1 },
+  bar:          { width: 32, borderRadius: 4 },
+  barValue:     { fontSize: 9, fontWeight: '700', marginBottom: 3 },
+  barLabelsRow: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    paddingTop: 5,
+  },
+  barLabel: { fontSize: 9, color: colors.muted, flex: 1, textAlign: 'center' },
+
+  tooltip: {
+    position: 'absolute', top: 4, left: 4,
+    backgroundColor: colors.surface2,
+    borderWidth: 1, borderColor: colors.border2,
+    borderRadius: 8, padding: 8,
+    zIndex: 10,
+  },
+  tooltipTitle: { fontSize: 10, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  tooltipRow:   { fontSize: 10, color: colors.muted, marginBottom: 1 },
+  tooltipVal:   { color: colors.text, fontWeight: '700' },
 });

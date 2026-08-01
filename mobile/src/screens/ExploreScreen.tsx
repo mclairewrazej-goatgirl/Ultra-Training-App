@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { colors } from '../theme';
-import { TrainingDB, RunEntry, CrossEntry } from '../types';
+import { TrainingDB } from '../types';
 
 interface Props {
   db: TrainingDB;
@@ -33,11 +33,11 @@ function fmtDur(mins: number): string {
 }
 
 function fmtDist(d: number): string {
-  return d > 0 ? `${d.toFixed(1)} mi` : '—';
+  return d > 0 ? `${d.toFixed(1)} km` : '—';
 }
 
 function fmtVert(v: number): string {
-  return v > 0 ? `${Math.round(v)} ft` : '—';
+  return v > 0 ? `${Math.round(v)} m` : '—';
 }
 
 function pct(part: number, total: number): string {
@@ -84,7 +84,6 @@ export default function ExploreScreen({ db }: Props) {
     [db.crosses, period],
   );
 
-  // --- Running breakdown by runType ---
   const runBreakdown = useMemo(() => {
     const map: Record<string, SubtypeStat> = {};
     runs.forEach((r) => {
@@ -99,7 +98,6 @@ export default function ExploreScreen({ db }: Props) {
     return Object.values(map).sort((a, b) => b.mins - a.mins);
   }, [runs]);
 
-  // --- Cross-training breakdown by subtype ---
   const crossBreakdown = useMemo(() => {
     const map: Record<string, SubtypeStat> = {};
     crosses.forEach((c) => {
@@ -114,7 +112,6 @@ export default function ExploreScreen({ db }: Props) {
     return Object.values(map).sort((a, b) => b.mins - a.mins);
   }, [crosses]);
 
-  // Totals
   const runTotals = useMemo(() => ({
     mins: runBreakdown.reduce((s, r) => s + r.mins, 0),
     dist: runBreakdown.reduce((s, r) => s + r.dist, 0),
@@ -159,7 +156,6 @@ export default function ExploreScreen({ db }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.heading}>Explore Stats</Text>
 
-      {/* Period selector */}
       <View style={styles.segRow}>
         {(['week', 'month', 'all'] as Period[]).map((p) => (
           <TouchableOpacity
@@ -174,7 +170,6 @@ export default function ExploreScreen({ db }: Props) {
         ))}
       </View>
 
-      {/* Metric selector */}
       <View style={styles.segRow}>
         {(['time', 'dist', 'vert'] as Metric[]).map((m) => (
           <TouchableOpacity
@@ -189,7 +184,6 @@ export default function ExploreScreen({ db }: Props) {
         ))}
       </View>
 
-      {/* Running section */}
       <SectionHeader
         label="Running"
         color={colors.pink}
@@ -212,7 +206,6 @@ export default function ExploreScreen({ db }: Props) {
         ))
       )}
 
-      {/* Cross-training section */}
       <SectionHeader
         label="Cross-Training"
         color={colors.blue}
@@ -274,7 +267,6 @@ function SubtypeRow({
           <Text style={styles.subtypeLabel}>{stat.label}</Text>
           <Text style={[styles.subtypeValue, { color }]}>{fmtMetric(metricVal)}</Text>
         </View>
-        {/* Proportion bar */}
         <View style={styles.propBarTrack}>
           <View style={[styles.propBarFill, { width: `${Math.round(proportion * 100)}%` as any, backgroundColor: color }]} />
         </View>
@@ -301,81 +293,37 @@ const styles = StyleSheet.create({
 
   heading: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 16 },
 
-  segRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
-  },
+  segRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   segBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
+    flex: 1, alignItems: 'center', paddingVertical: 8,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  segBtnActive: {
-    backgroundColor: colors.surface3,
-    borderColor: colors.pink,
-  },
+  segBtnActive: { backgroundColor: colors.surface3, borderColor: colors.pink },
   segText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
   segTextActive: { color: colors.pink },
 
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 20,
-    marginBottom: 8,
-  },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8 },
   sectionDot: { width: 10, height: 10, borderRadius: 5 },
   sectionLabel: { fontSize: 15, fontWeight: '700' },
   sectionMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
 
   subtypeRow: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface, borderRadius: 12, padding: 12,
+    marginBottom: 8, borderWidth: 1, borderColor: colors.border,
   },
   subtypeInfo: {},
-  subtypeTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
+  subtypeTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   subtypeLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
   subtypeValue: { fontSize: 14, fontWeight: '700' },
-  propBarTrack: {
-    height: 6,
-    backgroundColor: colors.surface2,
-    borderRadius: 999,
-    overflow: 'hidden',
-    marginBottom: 6,
-  },
-  propBarFill: {
-    height: '100%',
-    borderRadius: 999,
-    opacity: 0.8,
-  },
-  subtypeMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  propBarTrack: { height: 6, backgroundColor: colors.surface2, borderRadius: 999, overflow: 'hidden', marginBottom: 6 },
+  propBarFill: { height: '100%', borderRadius: 999, opacity: 0.8 },
+  subtypeMeta: { flexDirection: 'row', justifyContent: 'space-between' },
   metaText: { fontSize: 11, color: colors.muted },
 
   emptyNote: {
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: colors.surface, borderRadius: 10, padding: 16,
+    borderWidth: 1, borderColor: colors.border, alignItems: 'center', marginBottom: 8,
   },
   emptyNoteText: { fontSize: 13, color: colors.muted },
 });

@@ -15,6 +15,7 @@ export const colors = {
   green:    '#00c896',
   amber:    '#ffab40',
   red:      '#ff5252',
+  purple:   '#7c4dff',
 };
 
 export const actColors: Record<string, string> = {

@@ -1,15 +1,14 @@
-export interface NutritionItem {
-  id: string;
-  name: string;
-  carbsPerServing: number;
-  hydrationPerServing: number;
-  sodiumPerServing: number;
-  servingUnit: string;
+export interface StravaTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  athleteId: number;
+  athleteName: string;
 }
 
-export interface NutritionEntry {
-  nutritionId: string;
-  qty: number;
+export interface NutritionLogEntry {
+  itemId: string;
+  servings: number;
 }
 
 export interface RunEntry {
@@ -21,14 +20,13 @@ export interface RunEntry {
   bikeType?: string;
   dist: number | string;
   dur: number | string;
-  movingTime?: number | string;
-  elapsedTime?: number | string;
-  useMovingTime?: boolean;
+  elapsed?: number | string;
   vert: number | string;
   hr: number | string;
   notes: string;
   workoutDetails?: string;
-  nutritionEntries?: NutritionEntry[];
+  nutritionEntries?: NutritionLogEntry[];
+  stravaId?: string;
 }
 
 export interface CrossEntry {
@@ -39,14 +37,12 @@ export interface CrossEntry {
   subtype: string;
   dist: number | string;
   dur: number | string;
-  movingTime?: number | string;
-  elapsedTime?: number | string;
-  useMovingTime?: boolean;
+  elapsed?: number | string;
   vert: number | string;
   rpe: number | string;
-  hr?: number | string;
   notes: string;
-  nutritionEntries?: NutritionEntry[];
+  stravaId?: string;
+  nutritionEntries?: NutritionLogEntry[];
 }
 
 export interface StrengthEntry {
@@ -56,6 +52,7 @@ export interface StrengthEntry {
   subtype: string;
   dur: number | string;
   notes: string;
+  stravaId?: string;
 }
 
 export interface RecoveryEntry {
@@ -65,64 +62,82 @@ export interface RecoveryEntry {
   subtype: string;
   dur: number | string;
   notes: string;
+  stravaId?: string;
 }
 
 export type ActivityEntry = RunEntry | CrossEntry | StrengthEntry | RecoveryEntry;
 
-export interface GoalRange {
-  min: number;
-  max: number;
+export interface PlannedWorkout {
+  id: string;
+  date: string;
+  type: string;
+  desc: string;
+  dist: number | string;
+  dur: number | string;
+  notes: string;
+  planned: true;
+  completed?: boolean;
+  completedEntryId?: string;
+  actualDist?: number | string;
+  actualDur?: number | string;
+  actualVert?: number | string;
+  actualHr?: number | string;
+  completionNotes?: string;
+  stravaActivityId?: string;
 }
 
-export interface WeeklyGoal {
-  run: {
-    enabled: boolean;
-    metrics: { time: boolean; dist: boolean; vert: boolean };
-    time: GoalRange;
-    dist: GoalRange;
-    vert: GoalRange;
-  };
-  cross: {
-    enabled: boolean;
-    metrics: { time: boolean; dist: boolean; vert: boolean };
-    time: GoalRange;
-    dist: GoalRange;
-    vert: GoalRange;
-  };
+export interface NutritionItem {
+  id: string;
+  name: string;
+  carbsPerServing: number | string;
+  hydrationPerServing: number | string;
+  sodiumPerServing: number | string;
+  servingUnit: string;
 }
 
-export const defaultWeeklyGoal: WeeklyGoal = {
-  run: {
-    enabled: true,
-    metrics: { time: true, dist: false, vert: false },
-    time: { min: 0, max: 0 },
-    dist: { min: 0, max: 0 },
-    vert: { min: 0, max: 0 },
-  },
-  cross: {
-    enabled: false,
-    metrics: { time: true, dist: false, vert: false },
-    time: { min: 0, max: 0 },
-    dist: { min: 0, max: 0 },
-    vert: { min: 0, max: 0 },
-  },
-};
+export interface Race {
+  id: string;
+  date: string;
+  name: string;
+  raceType: 'run' | 'bike' | 'skimo';
+  bikeType?: string;
+  skimoCategory?: string;
+  dist: number | string;
+  loc: string;
+  goal: string;
+  vert: number | string;
+  result: string;
+  notes: string;
+  stravaActivityId?: string;
+  regOpenDate?: string;
+  regReminderAcknowledged?: boolean;
+  placement?: string;
+}
+
+export interface SeasonalSport {
+  enabled: boolean;
+  startMD: string; // MM-DD  e.g. "11-01"
+  endMD: string;   // MM-DD  e.g. "04-30"
+}
 
 export interface TrainingDB {
   runs: RunEntry[];
   crosses: CrossEntry[];
   strengths: StrengthEntry[];
   recoveries: RecoveryEntry[];
-  races: unknown[];
-  plans: unknown[];
+  races: Race[];
+  plans: PlannedWorkout[];
   nutrition: NutritionItem[];
   trainingPlans: unknown[];
-  goals: WeeklyGoal | Record<string, unknown>;
-  weeklyGoals: Record<string, WeeklyGoal | Record<string, unknown>>;
+  goals: Record<string, unknown>;
+  weeklyGoals: Record<string, unknown>;
   goalCelebrations: Record<string, unknown>;
   logName: string;
   theme: string;
   primarySport: string;
+  seasonalSport: SeasonalSport;
+  stravaTokens?: StravaTokens;
+  stravaProcessedIds?: string[];
 }
 
 export const emptyDB: TrainingDB = {
@@ -140,4 +155,6 @@ export const emptyDB: TrainingDB = {
   logName: '',
   theme: 'dark',
   primarySport: '',
+  seasonalSport: { enabled: false, startMD: '11-01', endMD: '04-30' },
+  stravaProcessedIds: [],
 };

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "528346991243",
+    "project_id": "mwrazej-training",
+    "storage_bucket": "mwrazej-training.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:528346991243:android:d0569a436db33a75f4e28e",
+        "android_client_info": {
+          "package_name": "com.mwrazej.ultratraining"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjjG9LhGftORgz9Nxv4Fs6OxJZLOpBNeg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "528346991243-c1knpb5h3f92qunvqievqrdat0c5hp28.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

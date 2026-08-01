@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, persistentLocalCache } from 'firebase/firestore';
 
 // Same Firebase project as the web app — data is shared across both platforms.
 const firebaseConfig = {
@@ -14,5 +14,14 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
+// Enable offline persistence — writes queue locally and sync when reconnected.
+// Falls back to getFirestore if initializeFirestore has already been called (e.g. hot reload).
+export const db = (() => {
+  try {
+    return initializeFirestore(app, { localCache: persistentLocalCache() });
+  } catch {
+    return getFirestore(app);
+  }
+})();
+
 export const auth = getAuth(app);
-export const db = getFirestore(app);

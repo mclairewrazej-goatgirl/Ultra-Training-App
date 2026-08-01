@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Image, Alert,
-  ScrollView, TextInput, Switch,
+  View, Text, StyleSheet, TouchableOpacity, Image, Alert, Modal, ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
 import { User } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db as firestoreDB } from '../config/firebase';
 import { colors } from '../theme';
-import { TrainingDB, WeeklyGoal, defaultWeeklyGoal } from '../types';
+import { TrainingDB, RecoveryEntry } from '../types';
+import NutritionScreen  from './NutritionScreen';
+import RacesScreen      from './RacesScreen';
+import GoalsScreen      from './GoalsScreen';
+import SkiSeasonScreen  from './SkiSeasonScreen';
+import StravaScreen     from './StravaScreen';
 
 interface Props {
   user: User;
@@ -16,139 +21,71 @@ interface Props {
   onSaved: (updated: TrainingDB) => void;
 }
 
-function getMondayKey(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((day + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  const y = monday.getFullYear();
-  const mo = String(monday.getMonth() + 1).padStart(2, '0');
-  const d = String(monday.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${d}`;
-}
-
-function getGoalForWeek(db: TrainingDB, key: string): WeeklyGoal {
-  const raw = db.weeklyGoals?.[key] ?? db.goals;
-  if (!raw || typeof raw !== 'object') return defaultWeeklyGoal;
-  const r = raw as any;
-  return {
-    run: {
-      enabled: r.run?.enabled ?? true,
-      metrics: {
-        time: r.run?.metrics?.time ?? true,
-        dist: r.run?.metrics?.dist ?? false,
-        vert: r.run?.metrics?.vert ?? false,
-      },
-      time: { min: Number(r.run?.time?.min) || 0, max: Number(r.run?.time?.max) || 0 },
-      dist: { min: Number(r.run?.dist?.min) || 0, max: Number(r.run?.dist?.max) || 0 },
-      vert: { min: Number(r.run?.vert?.min) || 0, max: Number(r.run?.vert?.max) || 0 },
-    },
-    cross: {
-      enabled: r.cross?.enabled ?? false,
-      metrics: {
-        time: r.cross?.metrics?.time ?? true,
-        dist: r.cross?.metrics?.dist ?? false,
-        vert: r.cross?.metrics?.vert ?? false,
-      },
-      time: { min: Number(r.cross?.time?.min) || 0, max: Number(r.cross?.time?.max) || 0 },
-      dist: { min: Number(r.cross?.dist?.min) || 0, max: Number(r.cross?.dist?.max) || 0 },
-      vert: { min: Number(r.cross?.vert?.min) || 0, max: Number(r.cross?.vert?.max) || 0 },
-    },
-  };
-}
-
 export default function ProfileScreen({ user, db, onSaved }: Props) {
-  const weekKey = getMondayKey();
+  const [showNutrition, setShowNutrition] = useState(false);
+  const [showRaces,     setShowRaces]     = useState(false);
+  const [showGoals,     setShowGoals]     = useState(false);
+  const [showSki,       setShowSki]       = useState(false);
+  const [showStrava,    setShowStrava]    = useState(false);
+
+  const stravaConnected = !!(db.stravaTokens?.accessToken);
+
+  const isCycling = db.primarySport === 'cycling';
   const totalWorkouts = db.runs.length + db.crosses.length + db.strengths.length + db.recoveries.length;
 
-  const [saving, setSaving] = useState(false);
-
-  // Goal fields
-  const initial = getGoalForWeek(db, weekKey);
-  const [runEnabled, setRunEnabled] = useState(initial.run.enabled);
-  const [runTrackTime, setRunTrackTime] = useState(initial.run.metrics.time);
-  const [runTimeMin, setRunTimeMin] = useState(String(initial.run.time.min || ''));
-  const [runTimeMax, setRunTimeMax] = useState(String(initial.run.time.max || ''));
-  const [runTrackDist, setRunTrackDist] = useState(initial.run.metrics.dist);
-  const [runDistMin, setRunDistMin] = useState(String(initial.run.dist.min || ''));
-  const [runDistMax, setRunDistMax] = useState(String(initial.run.dist.max || ''));
-  const [crossEnabled, setCrossEnabled] = useState(initial.cross.enabled);
-  const [crossTrackTime, setCrossTrackTime] = useState(initial.cross.metrics.time);
-  const [crossTimeMin, setCrossTimeMin] = useState(String(initial.cross.time.min || ''));
-  const [crossTimeMax, setCrossTimeMax] = useState(String(initial.cross.time.max || ''));
-  const [crossTrackDist, setCrossTrackDist] = useState(initial.cross.metrics.dist);
-  const [crossDistMin, setCrossDistMin] = useState(String(initial.cross.dist.min || ''));
-  const [crossDistMax, setCrossDistMax] = useState(String(initial.cross.dist.max || ''));
-
-  // Re-sync when db.weeklyGoals changes for this week
-  useEffect(() => {
-    const g = getGoalForWeek(db, weekKey);
-    setRunEnabled(g.run.enabled);
-    setRunTrackTime(g.run.metrics.time);
-    setRunTimeMin(String(g.run.time.min || ''));
-    setRunTimeMax(String(g.run.time.max || ''));
-    setRunTrackDist(g.run.metrics.dist);
-    setRunDistMin(String(g.run.dist.min || ''));
-    setRunDistMax(String(g.run.dist.max || ''));
-    setCrossEnabled(g.cross.enabled);
-    setCrossTrackTime(g.cross.metrics.time);
-    setCrossTimeMin(String(g.cross.time.min || ''));
-    setCrossTimeMax(String(g.cross.time.max || ''));
-    setCrossTrackDist(g.cross.metrics.dist);
-    setCrossDistMin(String(g.cross.dist.min || ''));
-    setCrossDistMax(String(g.cross.dist.max || ''));
-  }, [db.weeklyGoals, weekKey]);
-
-  const handleSaveGoals = async () => {
-    setSaving(true);
-    const goal: WeeklyGoal = {
-      run: {
-        enabled: runEnabled,
-        metrics: { time: runTrackTime, dist: runTrackDist, vert: false },
-        time: { min: Number(runTimeMin) || 0, max: Number(runTimeMax) || 0 },
-        dist: { min: Number(runDistMin) || 0, max: Number(runDistMax) || 0 },
-        vert: { min: 0, max: 0 },
-      },
-      cross: {
-        enabled: crossEnabled,
-        metrics: { time: crossTrackTime, dist: crossTrackDist, vert: false },
-        time: { min: Number(crossTimeMin) || 0, max: Number(crossTimeMax) || 0 },
-        dist: { min: Number(crossDistMin) || 0, max: Number(crossDistMax) || 0 },
-        vert: { min: 0, max: 0 },
-      },
-    };
-    const newDB: TrainingDB = {
-      ...db,
-      weeklyGoals: { ...db.weeklyGoals, [weekKey]: goal },
-      goals: goal,
-    };
+  const setPrimarySport = async (sport: string) => {
+    if (db.primarySport === sport) return;
+    const newDB = { ...db, primarySport: sport };
     try {
-      const docRef = doc(firestoreDB, 'users', user.uid, 'db', 'data');
-      await setDoc(docRef, JSON.parse(JSON.stringify(newDB)));
+      await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
-      Alert.alert('Saved', `Goals saved for week of ${weekKey}`);
     } catch (err: any) {
       Alert.alert('Error', err.message);
-    } finally {
-      setSaving(false);
+    }
+  };
+
+  const yogaInStrength = db.strengths.filter(s => s.subtype === 'Yoga').length;
+
+  const handleFixYogaEntries = async () => {
+    const yogaEntries = db.strengths.filter(s => s.subtype === 'Yoga');
+    if (yogaEntries.length === 0) {
+      Alert.alert('No Yoga entries found', 'All Strength entries are already correctly categorized.');
+      return;
+    }
+    const converted: RecoveryEntry[] = yogaEntries.map(s => ({
+      id: s.id,
+      date: s.date,
+      actType: 'recovery',
+      subtype: 'Yoga/Stretch',
+      dur: s.dur,
+      notes: s.notes,
+      stravaId: s.stravaId,
+    }));
+    const newDB: TrainingDB = {
+      ...db,
+      strengths: db.strengths.filter(s => s.subtype !== 'Yoga'),
+      recoveries: [...db.recoveries, ...converted],
+    };
+    try {
+      await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+      onSaved(newDB);
+      Alert.alert('Done', `Moved ${yogaEntries.length} Yoga ${yogaEntries.length === 1 ? 'entry' : 'entries'} from Strength to Recovery.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
     }
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+    Alert.alert('Sign out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: () => signOut(auth).catch((err) => Alert.alert('Error', err.message)),
-      },
+      { text: 'Sign out', style: 'destructive',
+        onPress: () => signOut(auth).catch(err => Alert.alert('Error', err.message)) },
     ]);
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Avatar + Name */}
+      {/* Avatar */}
       <View style={styles.profileCard}>
         {user.photoURL ? (
           <Image source={{ uri: user.photoURL }} style={styles.avatar} />
@@ -166,197 +103,157 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
 
       {/* Stats */}
       <View style={styles.statsRow}>
-        <StatBox label="Runs" value={db.runs.length} color={colors.pink} />
-        <StatBox label="Cross" value={db.crosses.length} color={colors.blue} />
+        <StatBox label={isCycling ? 'Rides' : 'Runs'} value={db.runs.length}      color={colors.pink}  />
+        <StatBox label="Cross"    value={db.crosses.length}   color={colors.blue}  />
         <StatBox label="Strength" value={db.strengths.length} color={colors.amber} />
-        <StatBox label="Recovery" value={db.recoveries.length} color={colors.green} />
+        <StatBox label="Races"    value={db.races.length}     color={colors.red}   />
       </View>
-      <Text style={styles.totalText}>{totalWorkouts} total workouts logged</Text>
+      <Text style={styles.totalText}>{totalWorkouts} workouts · {db.races.length} races</Text>
 
-      {/* Weekly Goals */}
-      <Text style={styles.sectionTitle}>Weekly Goals</Text>
-      <Text style={styles.weekLabel}>Week of {weekKey}</Text>
-
-      {/* Running goals */}
-      <View style={styles.goalCard}>
-        <View style={styles.goalCardHeader}>
-          <Text style={[styles.goalCardTitle, { color: colors.pink }]}>Running</Text>
-          <Switch
-            value={runEnabled}
-            onValueChange={setRunEnabled}
-            trackColor={{ true: colors.pink, false: colors.border }}
-            thumbColor="#fff"
-          />
+      {/* Primary Sport */}
+      <View style={styles.sportSection}>
+        <Text style={styles.sectionTitle}>PRIMARY SPORT</Text>
+        <View style={styles.sportRow}>
+          <TouchableOpacity
+            style={[styles.sportBtn, !isCycling && styles.sportBtnRunning]}
+            onPress={() => setPrimarySport('running')}
+          >
+            <Text style={[styles.sportBtnText, !isCycling && { color: colors.pink }]}>Running</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sportBtn, isCycling && styles.sportBtnCycling]}
+            onPress={() => setPrimarySport('cycling')}
+          >
+            <Text style={[styles.sportBtnText, isCycling && { color: colors.blue }]}>Cycling</Text>
+          </TouchableOpacity>
         </View>
-        {runEnabled && (
-          <View style={styles.goalFields}>
-            <View style={styles.metricRow}>
-              <View style={styles.metricToggle}>
-                <TouchableOpacity
-                  style={[styles.metricBtn, runTrackTime && { backgroundColor: colors.pink }]}
-                  onPress={() => setRunTrackTime(!runTrackTime)}
-                >
-                  <Text style={[styles.metricBtnText, runTrackTime && { color: '#fff' }]}>Time (hrs)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.metricBtn, runTrackDist && { backgroundColor: colors.pink }]}
-                  onPress={() => setRunTrackDist(!runTrackDist)}
-                >
-                  <Text style={[styles.metricBtnText, runTrackDist && { color: '#fff' }]}>Distance (mi)</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            {runTrackTime && (
-              <View style={styles.rangeRow}>
-                <Text style={styles.rangeLabel}>Time range (hrs)</Text>
-                <View style={styles.rangeInputs}>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={runTimeMin}
-                    onChangeText={setRunTimeMin}
-                    placeholder="Min"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                  <Text style={styles.rangeSep}>–</Text>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={runTimeMax}
-                    onChangeText={setRunTimeMax}
-                    placeholder="Max"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
-            )}
-            {runTrackDist && (
-              <View style={styles.rangeRow}>
-                <Text style={styles.rangeLabel}>Distance range (mi)</Text>
-                <View style={styles.rangeInputs}>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={runDistMin}
-                    onChangeText={setRunDistMin}
-                    placeholder="Min"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                  <Text style={styles.rangeSep}>–</Text>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={runDistMax}
-                    onChangeText={setRunDistMax}
-                    placeholder="Max"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
-            )}
-          </View>
-        )}
+        <Text style={styles.sportHint}>Changes activity types and labels throughout the app.</Text>
       </View>
 
-      {/* Cross-training goals */}
-      <View style={styles.goalCard}>
-        <View style={styles.goalCardHeader}>
-          <Text style={[styles.goalCardTitle, { color: colors.blue }]}>Cross-Training</Text>
-          <Switch
-            value={crossEnabled}
-            onValueChange={setCrossEnabled}
-            trackColor={{ true: colors.blue, false: colors.border }}
-            thumbColor="#fff"
-          />
+      {/* Navigation rows */}
+      <View style={styles.navCard}>
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowGoals(true)}>
+          <Ionicons name="trophy-outline" size={20} color={colors.muted} style={styles.navIcon} />
+          <Text style={styles.navLabel}>My Goals</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.navDivider} />
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowNutrition(true)}>
+          <Ionicons name="nutrition-outline" size={20} color={colors.muted} style={styles.navIcon} />
+          <Text style={styles.navLabel}>My Nutrition</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.navDivider} />
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowRaces(true)}>
+          <Ionicons name="flag-outline" size={20} color={colors.muted} style={styles.navIcon} />
+          <Text style={styles.navLabel}>My Races</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.navDivider} />
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowSki(true)}>
+          <Ionicons name="triangle-outline" size={20} color={colors.muted} style={styles.navIcon} />
+          <Text style={styles.navLabel}>Ski Season</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.navDivider} />
+        <TouchableOpacity style={styles.navRow} onPress={() => setShowStrava(true)}>
+          <Ionicons name="bicycle-outline" size={20} color={stravaConnected ? '#FC4C02' : colors.muted} style={styles.navIcon} />
+          <Text style={[styles.navLabel, stravaConnected && { color: '#FC4C02' }]}>Strava</Text>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {yogaInStrength > 0 && (
+        <View style={styles.sportSection}>
+          <Text style={styles.sectionTitle}>DATA TOOLS</Text>
+          <TouchableOpacity style={styles.dataToolBtn} onPress={handleFixYogaEntries}>
+            <Ionicons name="leaf-outline" size={18} color={colors.green} style={styles.navIcon} />
+            <Text style={styles.dataToolBtnText}>
+              Move {yogaInStrength} Yoga {yogaInStrength === 1 ? 'entry' : 'entries'} to Recovery
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.sportHint}>Yoga was previously logged as Strength. This moves past entries to Recovery.</Text>
         </View>
-        {crossEnabled && (
-          <View style={styles.goalFields}>
-            <View style={styles.metricRow}>
-              <View style={styles.metricToggle}>
-                <TouchableOpacity
-                  style={[styles.metricBtn, crossTrackTime && { backgroundColor: colors.blue }]}
-                  onPress={() => setCrossTrackTime(!crossTrackTime)}
-                >
-                  <Text style={[styles.metricBtnText, crossTrackTime && { color: '#fff' }]}>Time (hrs)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.metricBtn, crossTrackDist && { backgroundColor: colors.blue }]}
-                  onPress={() => setCrossTrackDist(!crossTrackDist)}
-                >
-                  <Text style={[styles.metricBtnText, crossTrackDist && { color: '#fff' }]}>Distance (mi)</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            {crossTrackTime && (
-              <View style={styles.rangeRow}>
-                <Text style={styles.rangeLabel}>Time range (hrs)</Text>
-                <View style={styles.rangeInputs}>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={crossTimeMin}
-                    onChangeText={setCrossTimeMin}
-                    placeholder="Min"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                  <Text style={styles.rangeSep}>–</Text>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={crossTimeMax}
-                    onChangeText={setCrossTimeMax}
-                    placeholder="Max"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
-            )}
-            {crossTrackDist && (
-              <View style={styles.rangeRow}>
-                <Text style={styles.rangeLabel}>Distance range (mi)</Text>
-                <View style={styles.rangeInputs}>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={crossDistMin}
-                    onChangeText={setCrossDistMin}
-                    placeholder="Min"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                  <Text style={styles.rangeSep}>–</Text>
-                  <TextInput
-                    style={styles.rangeInput}
-                    value={crossDistMax}
-                    onChangeText={setCrossDistMax}
-                    placeholder="Max"
-                    placeholderTextColor={colors.muted2}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
+      )}
 
-      <TouchableOpacity
-        style={[styles.saveBtn, saving && styles.btnDisabled]}
-        onPress={handleSaveGoals}
-        disabled={saving}
-      >
-        <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Goals'}</Text>
-      </TouchableOpacity>
-
-      {/* Info */}
-      <View style={styles.infoCard}>
-        <InfoRow label="Primary sport" value={db.primarySport || 'Not set'} />
-        <InfoRow label="Data synced with" value="Ultra Training web app" />
-      </View>
-
-      {/* Sign out */}
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
+
+      {/* Ski Season modal */}
+      <Modal visible={showSki} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowSki(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowSki(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>Ski Season</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <SkiSeasonScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
+
+      {/* My Goals modal */}
+      <Modal visible={showGoals} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowGoals(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowGoals(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>My Goals</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <GoalsScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
+
+      {/* My Nutrition modal */}
+      <Modal visible={showNutrition} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowNutrition(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowNutrition(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>My Nutrition</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <NutritionScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
+
+      {/* My Races modal */}
+      <Modal visible={showRaces} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowRaces(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowRaces(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>My Races</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <RacesScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
+
+      {/* Strava modal */}
+      <Modal visible={showStrava} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => setShowStrava(false)}>
+        <View style={styles.modalShell}>
+          <View style={styles.modalTopBar}>
+            <TouchableOpacity onPress={() => setShowStrava(false)}>
+              <Text style={styles.backBtn}>‹ Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTopTitle}>Strava</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <StravaScreen user={user} db={db} onSaved={onSaved} />
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -370,134 +267,75 @@ function StatBox({ label, value, color }: { label: string; value: number; color:
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, paddingBottom: 60 },
+  content:   { padding: 20, paddingBottom: 40 },
 
   profileCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+    alignItems: 'center', backgroundColor: colors.surface,
+    borderRadius: 16, padding: 24, marginBottom: 16,
+    borderWidth: 1, borderColor: colors.border,
   },
   avatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 12 },
   avatarPlaceholder: {
     width: 80, height: 80, borderRadius: 40,
-    backgroundColor: colors.pink,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12,
+    backgroundColor: colors.pink, alignItems: 'center', justifyContent: 'center', marginBottom: 12,
   },
   avatarInitial: { fontSize: 32, fontWeight: '800', color: '#fff' },
-  name: { fontSize: 20, fontWeight: '800', color: colors.text },
-  email: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  name:    { fontSize: 20, fontWeight: '800', color: colors.text },
+  email:   { fontSize: 13, color: colors.muted, marginTop: 2 },
   logName: { fontSize: 13, color: colors.pink, marginTop: 6, fontStyle: 'italic' },
 
-  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  statBox: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statNum: { fontSize: 20, fontWeight: '800' },
-  statLabel: { fontSize: 10, color: colors.muted, marginTop: 2, textTransform: 'uppercase' },
+  statsRow:  { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  statBox:   { flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  statNum:   { fontSize: 18, fontWeight: '800' },
+  statLabel: { fontSize: 9, color: colors.muted, marginTop: 2, textTransform: 'uppercase' },
+  totalText: { fontSize: 11, color: colors.muted, textAlign: 'center', marginBottom: 16 },
 
-  totalText: { fontSize: 12, color: colors.muted, textAlign: 'center', marginBottom: 20 },
+  sectionTitle: {
+    fontSize: 11, color: colors.muted, fontWeight: '700',
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10,
+  },
+  sportSection: {
+    backgroundColor: colors.surface, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: colors.border, marginBottom: 14,
+  },
+  sportRow:       { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  sportBtn:       { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center', borderWidth: 2, borderColor: colors.border, backgroundColor: colors.surface2 },
+  sportBtnRunning: { borderColor: colors.pink, backgroundColor: colors.pink+'18' },
+  sportBtnCycling: { borderColor: colors.blue, backgroundColor: colors.blue+'18' },
+  sportBtnText:   { fontSize: 14, fontWeight: '700', color: colors.muted },
+  sportHint:      { fontSize: 11, color: colors.muted2, textAlign: 'center' },
 
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  weekLabel: { fontSize: 12, color: colors.muted, marginBottom: 12 },
+  dataToolBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.green, backgroundColor: colors.green + '18',
+    borderRadius: 10, paddingVertical: 11, marginBottom: 8,
+  },
+  dataToolBtnText: { fontSize: 14, fontWeight: '700', color: colors.green },
 
-  goalCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    marginBottom: 10,
+  navCard: {
+    backgroundColor: colors.surface, borderRadius: 14,
+    borderWidth: 1, borderColor: colors.border, marginBottom: 14,
   },
-  goalCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  goalCardTitle: { fontSize: 14, fontWeight: '700' },
-  goalFields: { marginTop: 12 },
-  metricRow: { marginBottom: 10 },
-  metricToggle: { flexDirection: 'row', gap: 8 },
-  metricBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border2,
-    backgroundColor: colors.surface2,
-  },
-  metricBtnText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
-  rangeRow: { marginBottom: 10 },
-  rangeLabel: { fontSize: 11, color: colors.muted, marginBottom: 6, textTransform: 'uppercase', fontWeight: '600' },
-  rangeInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rangeInput: {
-    flex: 1,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
-    color: colors.text,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  rangeSep: { color: colors.muted, fontSize: 16 },
-
-  saveBtn: {
-    backgroundColor: colors.pink,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  btnDisabled: { opacity: 0.6 },
-
-  infoCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 24,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  infoLabel: { fontSize: 13, color: colors.muted },
-  infoValue: { fontSize: 13, color: colors.text, fontWeight: '600' },
+  navRow:    { flexDirection: 'row', alignItems: 'center', padding: 16 },
+  navDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: 16 },
+  navIcon:   { marginRight: 12 },
+  navLabel:  { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+  navArrow:  { fontSize: 22, color: colors.muted, fontWeight: '300' },
 
   signOutBtn: {
-    borderWidth: 1,
-    borderColor: colors.red,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
+    borderWidth: 1, borderColor: colors.red, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
   },
   signOutText: { color: colors.red, fontWeight: '700', fontSize: 15 },
+
+  modalShell:    { flex: 1, backgroundColor: colors.bg },
+  modalTopBar: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  backBtn:       { fontSize: 16, color: colors.pink, fontWeight: '600', width: 60 },
+  modalTopTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
 });

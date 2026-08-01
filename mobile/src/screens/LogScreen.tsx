@@ -1,11 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert,
 } from 'react-native';
+import { User } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db as firestoreDB } from '../config/firebase';
 import { colors, actColors } from '../theme';
-import { TrainingDB, ActivityEntry } from '../types';
+import { TrainingDB, ActivityEntry, NutritionItem } from '../types';
+import { nutrPerHour } from '../nutrition';
+import AddWorkoutScreen from './AddWorkoutScreen';
+import ActivityDetailModal from './ActivityDetailModal';
+import { PlanWorkoutModal } from './CalendarScreen';
 
 type FilterType = 'all' | 'run' | 'cross' | 'strength' | 'recovery';
+type AddType = 'run' | 'cross' | 'strength' | 'recovery';
 
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'all',      label: 'All' },
@@ -15,9 +23,16 @@ const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'recovery', label: 'Recovery' },
 ];
 
+const ACTION_BTNS: { label: string; type: AddType | 'plan'; color: string }[] = [
+  { label: '+ Log Run',           type: 'run',      color: colors.pink   },
+  { label: 'Cross Train',         type: 'cross',    color: colors.blue   },
+  { label: 'Strength / Recovery', type: 'strength', color: colors.amber  },
+  { label: 'Plan Workout',        type: 'plan',     color: '#7c4dff'     },
+];
+
 function fmtDist(d: number | string) {
   const n = Number(d);
-  return n > 0 ? `${n.toFixed(1)} mi` : null;
+  return n > 0 ? `${n.toFixed(1)} km` : null;
 }
 
 function fmtDur(d: number | string) {
@@ -30,8 +45,10 @@ function fmtDur(d: number | string) {
 
 function actTitle(act: ActivityEntry): string {
   if (act.actType === 'run') {
-    const rt = (act as any).runType ?? '';
-    return rt ? rt.charAt(0).toUpperCase() + rt.slice(1) + ' Run' : 'Run';
+    const rt: string = (act as any).runType ?? '';
+    if (!rt) return 'Run';
+    const cap = rt.charAt(0).toUpperCase() + rt.slice(1);
+    return (cap.endsWith('Run') || cap === 'Hike') ? cap : cap + ' Run';
   }
   if (act.actType === 'cross') return (act as any).subtype || 'Cross-Training';
   if (act.actType === 'strength') return (act as any).subtype || 'Strength';
@@ -39,12 +56,20 @@ function actTitle(act: ActivityEntry): string {
   return 'Workout';
 }
 
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+
 interface Props {
+  user: User;
   db: TrainingDB;
+  onSaved: (db: TrainingDB) => void;
+  onEditEntry: (entry: ActivityEntry) => void;
 }
 
-export default function LogScreen({ db }: Props) {
-  const [filter, setFilter] = useState<FilterType>('all');
+export default function LogScreen({ user, db, onSaved, onEditEntry }: Props) {
+  const [filter,   setFilter]   = useState<FilterType>('all');
+  const [addType,  setAddType]  = useState<AddType | null>(null);
+  const [showPlan, setShowPlan] = useState(false);
+  const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
 
   const allActivities: ActivityEntry[] = useMemo(() => {
     const all: ActivityEntry[] = [
@@ -61,8 +86,50 @@ export default function LogScreen({ db }: Props) {
     return allActivities.filter((a) => a.actType === filter);
   }, [allActivities, filter]);
 
+  const handleAction = (type: AddType | 'plan') => {
+    if (type === 'plan') setShowPlan(true);
+    else setAddType(type);
+  };
+
+  const handleDeleteEntry = () => {
+    if (!viewingEntry) return;
+    const id = viewingEntry.id;
+    Alert.alert('Delete workout', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const newDB: TrainingDB = {
+          ...db,
+          runs:       db.runs.filter(r => r.id !== id),
+          crosses:    db.crosses.filter(r => r.id !== id),
+          strengths:  db.strengths.filter(r => r.id !== id),
+          recoveries: db.recoveries.filter(r => r.id !== id),
+        };
+        try {
+          await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+          onSaved(newDB);
+          setViewingEntry(null);
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        }
+      }},
+    ]);
+  };
+
   return (
     <View style={styles.container}>
+      {/* Action buttons */}
+      <View style={styles.actionGrid}>
+        {ACTION_BTNS.map(btn => (
+          <TouchableOpacity
+            key={btn.label}
+            style={[styles.actionBtn, { borderColor: btn.color, backgroundColor: btn.color + '22' }]}
+            onPress={() => handleAction(btn.type)}
+          >
+            <Text style={[styles.actionBtnText, { color: btn.color }]}>{btn.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Filter bar */}
       <View style={styles.filterBar}>
         {FILTERS.map((f) => (
@@ -87,26 +154,74 @@ export default function LogScreen({ db }: Props) {
             <Text style={styles.emptyText}>No activities to show.</Text>
           </View>
         }
-        renderItem={({ item }) => <LogItem act={item} />}
+        renderItem={({ item }) => <LogItem act={item} onPress={() => setViewingEntry(item)} nutrition={db.nutrition} />}
       />
+
+      {/* Activity Detail (view) Modal */}
+      <ActivityDetailModal
+        visible={!!viewingEntry}
+        entry={viewingEntry}
+        nutrition={db.nutrition}
+        onEdit={() => {
+          if (viewingEntry) onEditEntry(viewingEntry);
+          setViewingEntry(null);
+        }}
+        onDelete={handleDeleteEntry}
+        onClose={() => setViewingEntry(null)}
+      />
+
+      {/* Add Workout Modal */}
+      <Modal
+        visible={addType !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAddType(null)}
+      >
+        {addType !== null && (
+          <AddWorkoutScreen
+            key={addType}
+            user={user}
+            db={db}
+            onSaved={onSaved}
+            initialType={addType}
+            onClose={() => setAddType(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Plan Workout Modal */}
+      {showPlan && (
+        <PlanWorkoutModal
+          date={todayISO()}
+          user={user}
+          db={db}
+          onSaved={onSaved}
+          onClose={() => setShowPlan(false)}
+        />
+      )}
     </View>
   );
 }
 
-function LogItem({ act }: { act: ActivityEntry }) {
+function LogItem({ act, onPress, nutrition = [] }: { act: ActivityEntry; onPress: () => void; nutrition?: NutritionItem[] }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
   const dist = 'dist' in act ? fmtDist((act as any).dist) : null;
   const dur  = 'dur' in act ? fmtDur((act as any).dur) : null;
   const vert = 'vert' in act && Number((act as any).vert) > 0
-    ? `${(act as any).vert} ft` : null;
+    ? `${(act as any).vert} m` : null;
   const notes = (act as any).notes || null;
+  const nutrStats = nutrPerHour(
+    (act as any).nutritionEntries, nutrition,
+    Number((act as any).dur) || 0,
+    Number((act as any).elapsed) || undefined,
+  );
 
   const dateStr = new Date(act.date + 'T12:00:00').toLocaleDateString(undefined, {
     weekday: 'long', year: 'numeric', month: 'short', day: 'numeric',
   });
 
   return (
-    <View style={styles.item}>
+    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.itemHeader}>
         <View style={styles.itemLeft}>
           <View style={[styles.dot, { backgroundColor: dotColor }]} />
@@ -122,12 +237,52 @@ function LogItem({ act }: { act: ActivityEntry }) {
       </View>
       {vert && <Text style={styles.detail}>↑ {vert}</Text>}
       {notes ? <Text style={styles.notes} numberOfLines={2}>{notes}</Text> : null}
-    </View>
+      {nutrStats && (
+        <View style={styles.nutrRow}>
+          {nutrStats.carbs > 0 && (
+            <View>
+              <Text style={[styles.nutrVal, { color: colors.pink }]}>{nutrStats.carbs}</Text>
+              <Text style={[styles.nutrLabel, { color: colors.pink }]}>G CARBS / HR</Text>
+            </View>
+          )}
+          {nutrStats.hydration > 0 && (
+            <View>
+              <Text style={[styles.nutrVal, { color: colors.blue }]}>{nutrStats.hydration}</Text>
+              <Text style={[styles.nutrLabel, { color: colors.blue }]}>ML / HR</Text>
+            </View>
+          )}
+          {nutrStats.sodium > 0 && (
+            <View>
+              <Text style={[styles.nutrVal, { color: colors.amber }]}>{nutrStats.sodium}</Text>
+              <Text style={[styles.nutrLabel, { color: colors.amber }]}>MG SODIUM / HR</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    padding: 12,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  actionBtn: {
+    width: '47.5%',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  actionBtnText: { fontSize: 13, fontWeight: '700' },
 
   filterBar: {
     flexDirection: 'row',
@@ -186,4 +341,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
   },
+  nutrRow:   { flexDirection: 'row', gap: 16, marginTop: 10, marginLeft: 20 },
+  nutrVal:   { fontSize: 15, fontWeight: '800' },
+  nutrLabel: { fontSize: 8, fontWeight: '700', letterSpacing: 0.5, marginTop: 1 },
 });
