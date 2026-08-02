@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, Switch, KeyboardAvoidingView, Platform,
+  TextInput, Alert, Switch, KeyboardAvoidingView, Platform, Keyboard, Dimensions,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -69,8 +69,46 @@ function fmtVal(v: number, unit: string): string {
 
 interface Props { user: User; db: TrainingDB; onSaved: (u: TrainingDB) => void; }
 
+// KeyboardAvoidingView doesn't reliably compute offsets when this screen is
+// presented inside a pageSheet Modal (a known RN limitation), so fields deep
+// in the form — like the Cross-Training goal range — can stay hidden behind
+// the keyboard. Track the keyboard height and current scroll position
+// ourselves so we can scroll a focused field into view on demand.
+function useKeyboardHeight(): React.RefObject<number> {
+  const heightRef = useRef(0);
+  useEffect(() => {
+    const onHide = () => { heightRef.current = 0; };
+    const showSub = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillShow', e => { heightRef.current = e.endCoordinates.height; })
+      : Keyboard.addListener('keyboardDidShow', e => { heightRef.current = e.endCoordinates.height; });
+    const hideSub = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillHide', onHide)
+      : Keyboard.addListener('keyboardDidHide', onHide);
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+  return heightRef;
+}
+
 export default function GoalsScreen({ user, db, onSaved }: Props) {
   const weekKey = useMemo(getMondayKey, []);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+  const keyboardHeightRef = useKeyboardHeight();
+
+  // Scroll the focused input above the keyboard, with a little breathing room.
+  const handleFieldFocus = (fieldRef: React.RefObject<TextInput | null>) => {
+    setTimeout(() => {
+      fieldRef.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
+        const screenHeight = Dimensions.get('window').height;
+        const visibleBottom = screenHeight - keyboardHeightRef.current;
+        const overlap = (y + height + 16) - visibleBottom;
+        if (overlap > 0) {
+          scrollRef.current?.scrollTo({ y: scrollYRef.current + overlap, animated: true });
+        }
+      });
+    }, Platform.OS === 'ios' ? 50 : 150);
+  };
 
   const weekLabel = useMemo(() => {
     const d = new Date(weekKey + 'T12:00:00');
@@ -145,7 +183,14 @@ export default function GoalsScreen({ user, db, onSaved }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      ref={scrollRef}
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      onScroll={e => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={16}
+    >
 
       {/* ── This Week ─────────────────────────────── */}
       <Text style={styles.sectionTitle}>THIS WEEK</Text>
@@ -177,6 +222,7 @@ export default function GoalsScreen({ user, db, onSaved }: Props) {
         onToggleEnabled={() => patchRun({ enabled: !goal.run.enabled })}
         onToggleMetric={toggleRunMetric}
         onSetRange={setRunRange}
+        onFieldFocus={handleFieldFocus}
         distUnit="km" timeUnit="h" vertUnit="m"
       />
 
@@ -188,6 +234,7 @@ export default function GoalsScreen({ user, db, onSaved }: Props) {
         onToggleEnabled={() => patchCross({ enabled: !goal.cross.enabled })}
         onToggleMetric={toggleCrossMetric}
         onSetRange={setCrossRange}
+        onFieldFocus={handleFieldFocus}
         distUnit="km" timeUnit="h" vertUnit="m"
       />
 
@@ -294,13 +341,14 @@ function GoalBar({
 
 function SportGoalEditor({
   label, color, goal,
-  onToggleEnabled, onToggleMetric, onSetRange,
+  onToggleEnabled, onToggleMetric, onSetRange, onFieldFocus,
   distUnit, timeUnit, vertUnit,
 }: {
   label: string; color: string; goal: SportGoal;
   onToggleEnabled: () => void;
   onToggleMetric: (k: keyof SportGoal['metrics']) => void;
   onSetRange: (f: 'dist'|'time'|'vert', k: 'min'|'max', v: string) => void;
+  onFieldFocus: (fieldRef: React.RefObject<TextInput | null>) => void;
   distUnit: string; timeUnit: string; vertUnit: string;
 }) {
   return (
@@ -340,6 +388,7 @@ function SportGoalEditor({
               max={String(goal.dist.max || '')}
               onMin={v => onSetRange('dist', 'min', v)}
               onMax={v => onSetRange('dist', 'max', v)}
+              onFocus={onFieldFocus}
               placeholder={{ min: '50', max: '70' }}
             />
           )}
@@ -350,6 +399,7 @@ function SportGoalEditor({
               max={String(goal.time.max || '')}
               onMin={v => onSetRange('time', 'min', v)}
               onMax={v => onSetRange('time', 'max', v)}
+              onFocus={onFieldFocus}
               placeholder={{ min: '7', max: '10' }}
             />
           )}
@@ -360,6 +410,7 @@ function SportGoalEditor({
               max={String(goal.vert.max || '')}
               onMin={v => onSetRange('vert', 'min', v)}
               onMax={v => onSetRange('vert', 'max', v)}
+              onFocus={onFieldFocus}
               placeholder={{ min: '800', max: '1400' }}
             />
           )}
@@ -370,13 +421,16 @@ function SportGoalEditor({
 }
 
 function RangeInput({
-  label, min, max, onMin, onMax, placeholder,
+  label, min, max, onMin, onMax, onFocus, placeholder,
 }: {
   label: string;
   min: string; max: string;
   onMin: (v: string) => void; onMax: (v: string) => void;
+  onFocus?: (fieldRef: React.RefObject<TextInput | null>) => void;
   placeholder: { min: string; max: string };
 }) {
+  const minRef = useRef<TextInput>(null);
+  const maxRef = useRef<TextInput>(null);
   return (
     <View style={styles.rangeWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -384,9 +438,11 @@ function RangeInput({
         <View style={styles.rangeField}>
           <Text style={styles.rangeFieldLabel}>Min</Text>
           <TextInput
+            ref={minRef}
             style={styles.rangeInput}
             value={min}
             onChangeText={onMin}
+            onFocus={() => onFocus?.(minRef)}
             keyboardType="decimal-pad"
             placeholder={placeholder.min}
             placeholderTextColor={colors.muted2}
@@ -396,9 +452,11 @@ function RangeInput({
         <View style={styles.rangeField}>
           <Text style={styles.rangeFieldLabel}>Max</Text>
           <TextInput
+            ref={maxRef}
             style={styles.rangeInput}
             value={max}
             onChangeText={onMax}
+            onFocus={() => onFocus?.(maxRef)}
             keyboardType="decimal-pad"
             placeholder={placeholder.max}
             placeholderTextColor={colors.muted2}

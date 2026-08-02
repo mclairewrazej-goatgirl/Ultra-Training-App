@@ -64,7 +64,7 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
   const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
   const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
   const isCycling = db.primarySport === 'cycling';
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = localDateKey(new Date());
 
   const allActivities: ActivityEntry[] = useMemo(() => (
     [...db.runs, ...db.crosses, ...db.strengths, ...db.recoveries]
@@ -153,7 +153,7 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
     Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      return { iso: d.toISOString().slice(0, 10), num: d.getDate() };
+      return { iso: localDateKey(d), num: d.getDate() };
     })
   ), [monday]);
 
@@ -444,12 +444,6 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
   const runGoal    = goals.run[metric]   as { min: number; max: number };
   const crossGoal  = goals.cross[metric] as { min: number; max: number };
 
-  // Combined goal for the Total bar — sum of whichever of run/cross goals are enabled.
-  const totalGoal: { min: number; max: number } | null = (goals.run.enabled || goals.cross.enabled) ? {
-    min: (goals.run.enabled ? runGoal.min : 0) + (goals.cross.enabled ? crossGoal.min : 0),
-    max: (goals.run.enabled ? runGoal.max : 0) + (goals.cross.enabled ? crossGoal.max : 0),
-  } : null;
-
   const CHART_H = 130;
 
   const fmtV = (v: number) => {
@@ -471,7 +465,7 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
 
   // Regular, evenly-spaced axis ticks that scale to whichever is larger: this
   // week's totals or the configured goal range — rather than sticking at raw values.
-  const rawMax    = Math.max(total, runGoal.max || 0, crossGoal.max || 0, totalGoal?.max || 0, 1);
+  const rawMax    = Math.max(total, runGoal.max || 0, crossGoal.max || 0, 1);
   const axisTicks = niceTicks(rawMax, 4);
   const maxVal    = axisTicks[axisTicks.length - 1];
   const pct       = (v: number) => Math.min(1, v / maxVal);
@@ -483,30 +477,24 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
     ? 'Current Week'
     : `${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
-  // Per-bar goal bands: each bar is compared against its own goal, not a single shared one.
+  // Goal bands span the whole chart width behind the bars, like the web app —
+  // only for whichever of Run/Cross goals are actually enabled and set.
   const bandFor = (g: { min: number; max: number } | null) => {
     if (!g || (g.min <= 0 && g.max <= 0)) return null;
-    return {
-      top:    g.max > 0 ? CHART_H - Math.round(pct(g.max) * CHART_H) : null,
-      bottom: g.min > 0 ? CHART_H - Math.round(pct(g.min) * CHART_H) : null,
-    };
+    const top    = CHART_H - Math.round(pct(g.max) * CHART_H);
+    const bottom = CHART_H - Math.round(pct(g.min > 0 ? g.min : 0) * CHART_H);
+    return { top, height: Math.max(2, bottom - top) };
   };
   const runBand   = bandFor(goals.run.enabled   ? runGoal   : null);
   const crossBand = bandFor(goals.cross.enabled ? crossGoal : null);
-  const totalBand = bandFor(totalGoal);
 
-  // Legend entries — only shown for goals that are actually enabled/set for this metric,
-  // so the dashed range lines drawn on each bar can be identified without an overlay
-  // that blocks the bar itself.
+  // Legend entries — only shown for goals that are actually enabled/set for this metric.
   const legendItems: { label: string; color: string }[] = [];
   if (goals.run.enabled && (runGoal.min > 0 || runGoal.max > 0)) {
     legendItems.push({ label: `${isCycling ? 'Ride' : 'Run'} Goal Range`, color: colors.pink });
   }
   if (goals.cross.enabled && (crossGoal.min > 0 || crossGoal.max > 0)) {
     legendItems.push({ label: 'Cross Goal Range', color: colors.blue });
-  }
-  if (totalGoal && (totalGoal.min > 0 || totalGoal.max > 0)) {
-    legendItems.push({ label: 'Total Goal Range', color: colors.green });
   }
 
   return (
@@ -565,11 +553,25 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
             onPress={() => setShowTooltip(v => !v)}
             style={[vcStyles.chartArea, { height: CHART_H }]}
           >
-            {/* Bars — each with its own goal band, compared against its own scale */}
+            {/* Goal range bands — span the full chart width behind the bars, like the web app */}
+            {crossBand && (
+              <View pointerEvents="none" style={[vcStyles.goalBand, {
+                top: crossBand.top, height: crossBand.height,
+                backgroundColor: colors.blue + '38', borderColor: colors.blue,
+              }]} />
+            )}
+            {runBand && (
+              <View pointerEvents="none" style={[vcStyles.goalBand, {
+                top: runBand.top, height: runBand.height,
+                backgroundColor: colors.pink + '38', borderColor: colors.pink,
+              }]} />
+            )}
+
+            {/* Bars */}
             <View style={vcStyles.barsRow}>
-              <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  value={fmtV(run)}   chartH={CHART_H} band={runBand} />
-              <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  value={fmtV(cross)} chartH={CHART_H} band={crossBand} />
-              <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} value={fmtV(total)} chartH={CHART_H} band={totalBand} />
+              <ChartBar height={Math.round(pct(run) * CHART_H)}   color={colors.pink}  value={fmtV(run)}   chartH={CHART_H} />
+              <ChartBar height={Math.round(pct(cross) * CHART_H)} color={colors.blue}  value={fmtV(cross)} chartH={CHART_H} />
+              <ChartBar height={Math.round(pct(total) * CHART_H)} color={colors.green} value={fmtV(total)} chartH={CHART_H} />
             </View>
 
             {/* Stats tooltip (tap to show/hide) */}
@@ -611,12 +613,14 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
             <Text style={vcStyles.barLabel}>Total</Text>
           </View>
 
-          {/* Goal range legend — explains the dashed lines instead of shading over the bars */}
+          {/* Goal range legend — explains the shaded bands behind the bars */}
           {legendItems.length > 0 && (
             <View style={vcStyles.legendRow}>
               {legendItems.map(item => (
                 <View key={item.label} style={vcStyles.legendItem}>
-                  <View style={[vcStyles.legendSwatch, { borderColor: item.color }]} />
+                  <View style={[vcStyles.legendSwatch, {
+                    borderColor: item.color, backgroundColor: item.color + '38',
+                  }]} />
                   <Text style={vcStyles.legendText}>{item.label}</Text>
                 </View>
               ))}
@@ -628,14 +632,11 @@ function VolumeChart({ db, isCycling, skiActive, weekOffset, onChangeWeek }: {
   );
 }
 
-function ChartBar({ height, color, value, chartH, band }: {
+function ChartBar({ height, color, value, chartH }: {
   height: number; color: string; value: string; chartH: number;
-  band: { top: number | null; bottom: number | null } | null;
 }) {
   return (
     <View style={[vcStyles.barGroup, { height: chartH }]}>
-      {band && band.top    !== null && <View style={[vcStyles.goalLine, { top: band.top, borderColor: color }]} />}
-      {band && band.bottom !== null && <View style={[vcStyles.goalLine, { top: band.bottom, borderColor: color }]} />}
       <Text style={[vcStyles.barValue, { color }]}>{height > 2 ? value : '—'}</Text>
       <View style={[vcStyles.bar, { height: Math.max(height, 2), backgroundColor: color }]} />
     </View>
@@ -806,13 +807,11 @@ const vcStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  // Dashed range markers drawn on each bar (colored per-bar at call site) — no shaded
-  // overlay box, so the bar's own fill and value stay fully visible underneath.
-  goalLine: {
+  // Goal range band — spans the full chart width behind the bars, like the web app.
+  goalBand: {
     position: 'absolute', left: 0, right: 0,
-    borderTopWidth: 2,
+    borderTopWidth: 1, borderBottomWidth: 1,
     borderStyle: 'dashed',
-    opacity: 0.7,
   },
   barsRow: {
     flexDirection: 'row',
@@ -832,7 +831,10 @@ const vcStyles = StyleSheet.create({
     paddingHorizontal: 4, paddingTop: 10,
   },
   legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendSwatch: { width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed' },
+  legendSwatch: {
+    width: 14, height: 8, borderRadius: 2,
+    borderTopWidth: 1, borderBottomWidth: 1, borderStyle: 'dashed',
+  },
   legendText:   { fontSize: 10, color: colors.muted, fontWeight: '600' },
 
   tooltip: {

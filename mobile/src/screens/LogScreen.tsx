@@ -53,7 +53,12 @@ function actTitle(act: ActivityEntry): string {
   return 'Workout';
 }
 
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+// Local calendar date, not toISOString()'s UTC date — otherwise entries logged
+// near midnight can land on the wrong day (and, at month boundaries, the wrong month).
+function todayISO() {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
 
 interface Props {
   user: User;

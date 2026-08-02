@@ -214,7 +214,9 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
       setNotes(editingRace.notes || '');
     } else {
       setName(''); setRaceType('run'); setBikeType('Gravel'); setSkimoCat('Individual');
-      setDate(new Date().toISOString().slice(0, 10));
+      // Local calendar date, not toISOString()'s UTC date — avoids landing on the wrong day.
+      const t = new Date();
+      setDate(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`);
       setRegOpenDate('');
       setDist(''); setLoc(''); setGoal(''); setVert(''); setResult(''); setPlacement(''); setNotes('');
     }
