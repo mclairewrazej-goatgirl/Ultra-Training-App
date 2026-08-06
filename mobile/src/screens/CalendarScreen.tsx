@@ -28,7 +28,7 @@ function todayISO() {
   return toISO(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
-function planTypeColor(type: string) {
+export function planTypeColor(type: string) {
   if (type === 'Run')            return colors.pink;
   if (type === 'Cross-training') return colors.blue;
   if (type === 'Strength')       return colors.amber;
@@ -49,6 +49,7 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDate,   setSelectedDate]   = useState<string>(todayISO());
   const [planModalDate,  setPlanModalDate]  = useState<string | null>(null);
+  const [editingPlan,    setEditingPlan]    = useState<PlannedWorkout | null>(null);
   const [completingPlan, setCompletingPlan] = useState<PlannedWorkout | null>(null);
   const [viewingEntry,   setViewingEntry]   = useState<ActivityEntry | null>(null);
 
@@ -241,7 +242,12 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
           <Text style={styles.emptyPlans}>No planned workouts. Tap "+ Plan" to add one.</Text>
         )}
         {selectedPlans.map(plan => (
-          <View key={plan.id} style={[styles.planRow, plan.completed && styles.planRowDone]}>
+          <TouchableOpacity
+            key={plan.id}
+            style={[styles.planRow, plan.completed && styles.planRowDone]}
+            onPress={() => setEditingPlan(plan)}
+            activeOpacity={0.7}
+          >
             <View style={styles.planRowLeft}>
               <View style={styles.planTitleRow}>
                 <View style={[styles.planTypeDot, { backgroundColor: planTypeColor(plan.type) }]} />
@@ -266,7 +272,7 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
                 <Text style={styles.deletePlan}>✕</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
 
         {/* ── Races ── */}
@@ -370,6 +376,17 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
         />
       )}
 
+      {editingPlan && (
+        <PlanWorkoutModal
+          date={editingPlan.date}
+          plan={editingPlan}
+          user={user}
+          db={db}
+          onSaved={onSaved}
+          onClose={() => setEditingPlan(null)}
+        />
+      )}
+
       {completingPlan && (
         <MarkDoneModal
           plan={completingPlan}
@@ -385,31 +402,32 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
 
 // ─── Plan Workout Modal ───────────────────────────────────────────────────────
 
-export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
-  date: string; user: User; db: TrainingDB;
+export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
+  date: string; plan?: PlannedWorkout; user: User; db: TrainingDB;
   onSaved: (u: TrainingDB) => void; onClose: () => void;
 }) {
-  const [type,  setType]  = useState('Run');
-  const [desc,  setDesc]  = useState('');
-  const [dist,  setDist]  = useState('');
-  const [dur,   setDur]   = useState('');
-  const [notes, setNotes] = useState('');
+  const isEditing = !!plan;
+  const [type,  setType]  = useState(plan?.type ?? 'Run');
+  const [desc,  setDesc]  = useState(plan?.desc ?? '');
+  const [dist,  setDist]  = useState(plan?.dist ? String(plan.dist) : '');
+  const [dur,   setDur]   = useState(plan?.dur  ? String(plan.dur)  : '');
+  const [notes, setNotes] = useState(plan?.notes ?? '');
   const [saving, setSaving] = useState(false);
 
   const accentColor = planTypeColor(type);
-  const dateStr = new Date(date+'T12:00:00').toLocaleDateString(undefined, {
+  const dateStr = new Date((plan?.date ?? date)+'T12:00:00').toLocaleDateString(undefined, {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 
   const handleSave = async () => {
     setSaving(true);
-    const plan: PlannedWorkout = {
-      id: uid(), date, type, desc,
-      dist: Number(dist) || 0,
-      dur:  Number(dur)  || 0,
-      notes, planned: true,
+    const saved: PlannedWorkout = plan
+      ? { ...plan, type, desc, dist: Number(dist) || 0, dur: Number(dur) || 0, notes }
+      : { id: uid(), date, type, desc, dist: Number(dist) || 0, dur: Number(dur) || 0, notes, planned: true };
+    const newDB = {
+      ...db,
+      plans: plan ? db.plans.map(p => p.id === plan.id ? saved : p) : [...db.plans, saved],
     };
-    const newDB = { ...db, plans: [...db.plans, plan] };
     try {
       await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
       onSaved(newDB);
@@ -421,13 +439,37 @@ export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
     }
   };
 
+  const handleDelete = () => {
+    if (!plan) return;
+    Alert.alert('Delete plan', 'Remove this planned workout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        setSaving(true);
+        const newDB = { ...db, plans: db.plans.filter(p => p.id !== plan.id) };
+        try {
+          await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+          onSaved(newDB);
+          onClose();
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        } finally {
+          setSaving(false);
+        }
+      }},
+    ]);
+  };
+
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
-          <Text style={styles.modalTitle}>Plan Workout</Text>
-          <View style={{ width: 60 }} />
+          <Text style={styles.modalTitle}>{isEditing ? 'Edit Plan' : 'Plan Workout'}</Text>
+          {isEditing ? (
+            <TouchableOpacity onPress={handleDelete}><Text style={styles.deleteHeaderBtn}>Delete</Text></TouchableOpacity>
+          ) : (
+            <View style={{ width: 60 }} />
+          )}
         </View>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
@@ -473,7 +515,7 @@ export function PlanWorkoutModal({ date, user, db, onSaved, onClose }: {
             style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
             onPress={handleSave} disabled={saving}
           >
-            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Plan'}</Text>
+            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : isEditing ? 'Update Plan' : 'Save Plan'}</Text>
           </TouchableOpacity>
         </ScrollView>
         </KeyboardAvoidingView>
@@ -841,6 +883,7 @@ const styles = StyleSheet.create({
   },
   modalTitle:    { fontSize: 16, fontWeight: '700', color: colors.text },
   cancelBtn:     { fontSize: 15, color: colors.muted, width: 60 },
+  deleteHeaderBtn: { fontSize: 15, color: colors.red, fontWeight: '600', width: 60, textAlign: 'right' },
   modalContent:  { padding: 20, paddingBottom: 60 },
   planDateLabel: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
 
