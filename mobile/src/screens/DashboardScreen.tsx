@@ -6,10 +6,11 @@ import { User } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { db as firestoreDB } from '../config/firebase';
 import { colors, actColors } from '../theme';
-import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry } from '../types';
+import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry, PlannedWorkout } from '../types';
 import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
 import { normalizeGoal } from './GoalsScreen';
 import ActivityDetailModal from './ActivityDetailModal';
+import { PlanWorkoutModal, planTypeColor } from './CalendarScreen';
 
 interface Props {
   user: User;
@@ -62,6 +63,7 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
   const [weekOffset, setWeekOffset] = useState(0);
   const [showHeaderPicker, setShowHeaderPicker] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
+  const [editingPlan, setEditingPlan] = useState<PlannedWorkout | null>(null);
   const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
   const isCycling = db.primarySport === 'cycling';
   const todayISO = localDateKey(new Date());
@@ -165,6 +167,19 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
 
   const firstName = user.displayName?.split(' ')[0] ?? 'Athlete';
   const recentActivities = allActivities.slice(0, 6);
+
+  // Upcoming planned workouts — next 7 days (today through +6), not yet completed
+  const upcomingPlans: PlannedWorkout[] = useMemo(() => {
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
+    return db.plans
+      .filter(p => !p.completed)
+      .filter(p => {
+        const d = new Date(p.date + 'T12:00:00');
+        return d >= start && d <= end;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [db]);
 
   const handleDeleteEntry = () => {
     if (!viewingEntry) return;
@@ -287,6 +302,19 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
         })}
       </View>
 
+      {/* ── Upcoming Workouts ───────────────────────────────── */}
+      <Text style={styles.sectionLabel}>UPCOMING WORKOUTS</Text>
+      {upcomingPlans.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Nothing planned this week.</Text>
+          <Text style={styles.emptySubText}>Plan a workout from the Calendar tab.</Text>
+        </View>
+      ) : (
+        upcomingPlans.map(plan => (
+          <UpcomingPlanRow key={plan.id} plan={plan} isToday={plan.date === todayISO} onPress={() => setEditingPlan(plan)} />
+        ))
+      )}
+
       {/* ── Recent Activities ──────────────────────────────── */}
       <Text style={styles.sectionLabel}>RECENT ACTIVITY</Text>
 
@@ -313,6 +341,17 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
       onDelete={handleDeleteEntry}
       onClose={() => setViewingEntry(null)}
     />
+
+    {editingPlan && (
+      <PlanWorkoutModal
+        date={editingPlan.date}
+        plan={editingPlan}
+        user={user}
+        db={db}
+        onSaved={onSaved}
+        onClose={() => setEditingPlan(null)}
+      />
+    )}
     </>
   );
 }
@@ -651,6 +690,28 @@ function StatCard({ label, value, color }: { label: string; value: string; color
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
+  );
+}
+
+function UpcomingPlanRow({ plan, isToday, onPress }: { plan: PlannedWorkout; isToday: boolean; onPress: () => void }) {
+  const dotColor = planTypeColor(plan.type);
+  const dist = Number(plan.dist) > 0 ? `${Number(plan.dist).toFixed(1)} km` : '';
+  const dur  = Number(plan.dur)  > 0 ? fmtHours(Number(plan.dur)) : '';
+  const meta = [dist, dur].filter(Boolean).join(' · ');
+  const dateStr = new Date(plan.date + 'T12:00:00').toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+  });
+
+  return (
+    <TouchableOpacity style={styles.actRow} onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.actDot, { backgroundColor: dotColor }]} />
+      <View style={styles.actInfo}>
+        <Text style={styles.actLabel}>{plan.desc || plan.type}</Text>
+        <Text style={styles.actMeta}>
+          {isToday ? 'Today' : dateStr}{meta ? '  ·  ' + meta : ''}
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
