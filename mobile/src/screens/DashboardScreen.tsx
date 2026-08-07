@@ -64,6 +64,8 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
   const [showHeaderPicker, setShowHeaderPicker] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ActivityEntry | null>(null);
   const [editingPlan, setEditingPlan] = useState<PlannedWorkout | null>(null);
+  const [planningDate, setPlanningDate] = useState<string | null>(null);
+  const [calBubbleDay, setCalBubbleDay] = useState<string | null>(null);
   const { monday, sunday } = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
   const isCycling = db.primarySport === 'cycling';
   const todayISO = localDateKey(new Date());
@@ -159,6 +161,25 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
     })
   ), [monday]);
 
+  // Planned workouts by weekday index (0=Mon), for the mini calendar's plan markers + tap bubble
+  const weekPlanMap = useMemo(() => {
+    const map: Record<number, PlannedWorkout[]> = {};
+    db.plans.forEach(p => {
+      const d = new Date(p.date + 'T12:00:00');
+      if (d < monday || d > sunday) return;
+      const idx = (d.getDay() + 6) % 7;
+      if (!map[idx]) map[idx] = [];
+      map[idx].push(p);
+    });
+    return map;
+  }, [db.plans, monday, sunday]);
+
+  const bubbleDayIdx = calBubbleDay ? weekDays.findIndex(d => d.iso === calBubbleDay) : -1;
+  const bubblePlans  = bubbleDayIdx >= 0 ? (weekPlanMap[bubbleDayIdx] ?? []) : [];
+  const bubbleDateLabel = calBubbleDay
+    ? new Date(calBubbleDay + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+    : '';
+
   const weekRangeLabel = (() => {
     const start = monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const end   = sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -167,19 +188,6 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
 
   const firstName = user.displayName?.split(' ')[0] ?? 'Athlete';
   const recentActivities = allActivities.slice(0, 6);
-
-  // Upcoming planned workouts — next 7 days (today through +6), not yet completed
-  const upcomingPlans: PlannedWorkout[] = useMemo(() => {
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    return db.plans
-      .filter(p => !p.completed)
-      .filter(p => {
-        const d = new Date(p.date + 'T12:00:00');
-        return d >= start && d <= end;
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [db]);
 
   const handleDeleteEntry = () => {
     if (!viewingEntry) return;
@@ -280,12 +288,21 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
 
       {/* ── This Week mini-calendar ────────────────────────── */}
       <Text style={styles.sectionLabel}>{weekOffset === 0 ? 'THIS WEEK' : 'THAT WEEK'}</Text>
+      <Text style={styles.miniCalHint}>Tap a day to view or plan a workout</Text>
       <View style={styles.miniCal}>
         {weekDays.map((day, i) => {
-          const isToday = day.iso === todayISO;
-          const dots    = weekDotMap[i] ?? [];
+          const isToday    = day.iso === todayISO;
+          const isSelected = day.iso === calBubbleDay;
+          const dots       = weekDotMap[i] ?? [];
+          const hasPlan    = (weekPlanMap[i]?.length ?? 0) > 0;
           return (
-            <View key={day.iso} style={[styles.miniDay, isToday && styles.miniDayToday]}>
+            <TouchableOpacity
+              key={day.iso}
+              activeOpacity={0.7}
+              style={[styles.miniDay, isToday && styles.miniDayToday, isSelected && styles.miniDaySelected]}
+              onPress={() => setCalBubbleDay(prev => prev === day.iso ? null : day.iso)}
+            >
+              {hasPlan && <View style={styles.miniPlanDot} />}
               <Text style={[styles.miniDayName, isToday && styles.miniDayNameToday]}>
                 {WEEK_DAYS[i]}
               </Text>
@@ -297,22 +314,57 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
                   <View key={di} style={[styles.miniDot, { backgroundColor: c }]} />
                 ))}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* ── Upcoming Workouts ───────────────────────────────── */}
-      <Text style={styles.sectionLabel}>UPCOMING WORKOUTS</Text>
-      {upcomingPlans.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Nothing planned this week.</Text>
-          <Text style={styles.emptySubText}>Plan a workout from the Calendar tab.</Text>
+      {calBubbleDay && (
+        <View style={styles.dayBubble}>
+          <View style={styles.dayBubbleHeader}>
+            <Text style={styles.dayBubbleDate}>
+              {calBubbleDay === todayISO ? `Today · ${bubbleDateLabel}` : bubbleDateLabel}
+            </Text>
+            <TouchableOpacity onPress={() => setCalBubbleDay(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.dayBubbleClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {bubblePlans.length === 0 ? (
+            <>
+              <Text style={styles.dayBubbleEmpty}>Nothing planned.</Text>
+              <TouchableOpacity
+                style={styles.dayBubbleAddBtn}
+                onPress={() => { setPlanningDate(calBubbleDay); setCalBubbleDay(null); }}
+              >
+                <Text style={styles.dayBubbleAddBtnText}>+ Plan a workout</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            bubblePlans.map(plan => {
+              const dist = Number(plan.dist) > 0 ? `${Number(plan.dist).toFixed(1)} km` : '';
+              const dur  = Number(plan.dur)  > 0 ? fmtHours(Number(plan.dur)) : '';
+              const meta = [dist, dur].filter(Boolean).join(' · ');
+              return (
+                <TouchableOpacity
+                  key={plan.id}
+                  style={styles.dayBubbleRow}
+                  activeOpacity={0.7}
+                  onPress={() => { setEditingPlan(plan); setCalBubbleDay(null); }}
+                >
+                  <View style={[styles.actDot, { backgroundColor: planTypeColor(plan.type) }]} />
+                  <View style={styles.actInfo}>
+                    <Text style={styles.actLabel}>
+                      {plan.completed ? '✓ ' : ''}{plan.desc || plan.type}
+                    </Text>
+                    {meta ? <Text style={styles.actMeta}>{meta}</Text> : null}
+                  </View>
+                  <Text style={styles.dayBubbleChevron}>›</Text>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
-      ) : (
-        upcomingPlans.map(plan => (
-          <UpcomingPlanRow key={plan.id} plan={plan} isToday={plan.date === todayISO} onPress={() => setEditingPlan(plan)} />
-        ))
       )}
 
       {/* ── Recent Activities ──────────────────────────────── */}
@@ -350,6 +402,16 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
         db={db}
         onSaved={onSaved}
         onClose={() => setEditingPlan(null)}
+      />
+    )}
+
+    {planningDate && (
+      <PlanWorkoutModal
+        date={planningDate}
+        user={user}
+        db={db}
+        onSaved={onSaved}
+        onClose={() => setPlanningDate(null)}
       />
     )}
     </>
@@ -693,28 +755,6 @@ function StatCard({ label, value, color }: { label: string; value: string; color
   );
 }
 
-function UpcomingPlanRow({ plan, isToday, onPress }: { plan: PlannedWorkout; isToday: boolean; onPress: () => void }) {
-  const dotColor = planTypeColor(plan.type);
-  const dist = Number(plan.dist) > 0 ? `${Number(plan.dist).toFixed(1)} km` : '';
-  const dur  = Number(plan.dur)  > 0 ? fmtHours(Number(plan.dur)) : '';
-  const meta = [dist, dur].filter(Boolean).join(' · ');
-  const dateStr = new Date(plan.date + 'T12:00:00').toLocaleDateString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric',
-  });
-
-  return (
-    <TouchableOpacity style={styles.actRow} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.actDot, { backgroundColor: dotColor }]} />
-      <View style={styles.actInfo}>
-        <Text style={styles.actLabel}>{plan.desc || plan.type}</Text>
-        <Text style={styles.actMeta}>
-          {isToday ? 'Today' : dateStr}{meta ? '  ·  ' + meta : ''}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 function ActivityRow({ act, onPress }: { act: ActivityEntry; onPress: () => void }) {
   const dotColor = actColors[act.actType] ?? colors.muted;
   const dist = 'dist' in act && Number((act as any).dist) > 0
@@ -765,22 +805,51 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
   statLabel: { fontSize: 10, color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
+  miniCalHint: { fontSize: 11, color: colors.muted2, marginBottom: 8, fontStyle: 'italic' },
   miniCal: {
     flexDirection: 'row', backgroundColor: colors.surface,
     borderRadius: 12, borderWidth: 1, borderColor: colors.border,
-    marginBottom: 16, overflow: 'hidden',
+    marginBottom: 12, overflow: 'hidden',
   },
   miniDay: {
-    flex: 1, alignItems: 'center', paddingVertical: 10,
+    flex: 1, alignItems: 'center', paddingVertical: 10, position: 'relative',
     borderRightWidth: 0.5, borderRightColor: colors.border,
   },
   miniDayToday:     { backgroundColor: colors.pink + '18' },
+  miniDaySelected:  { backgroundColor: colors.blue + '18' },
   miniDayName:      { fontSize: 10, color: colors.muted, fontWeight: '600', marginBottom: 4 },
   miniDayNameToday: { color: colors.pink },
   miniDayNum:       { fontSize: 13, fontWeight: '600', color: colors.text },
   miniDayNumToday:  { color: colors.pink, fontWeight: '800' },
   miniDots:         { flexDirection: 'row', gap: 2, marginTop: 4, height: 8, alignItems: 'center' },
   miniDot:          { width: 4, height: 4, borderRadius: 2 },
+  miniPlanDot: {
+    position: 'absolute', top: 6, right: 6,
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#F59E0B',
+  },
+
+  dayBubble: {
+    backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border,
+    padding: 14, marginBottom: 16,
+  },
+  dayBubbleHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 10,
+  },
+  dayBubbleDate:  { fontSize: 13, fontWeight: '700', color: colors.text },
+  dayBubbleClose: { fontSize: 16, color: colors.muted, fontWeight: '300' },
+  dayBubbleEmpty: { fontSize: 13, color: colors.muted, marginBottom: 10 },
+  dayBubbleAddBtn: {
+    alignSelf: 'flex-start', backgroundColor: colors.pink,
+    borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  dayBubbleAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  dayBubbleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 8,
+  },
+  dayBubbleChevron: { fontSize: 18, color: colors.muted2 },
 
   emptyCard: {
     backgroundColor: colors.surface, borderRadius: 12,
