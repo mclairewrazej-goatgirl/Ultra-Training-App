@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal,
   TextInput, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
@@ -412,6 +413,7 @@ export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
   onSaved: (u: TrainingDB) => void; onClose: () => void;
 }) {
   const isEditing = !!plan;
+  const [planDate, setPlanDate] = useState(plan?.date ?? date);
   const [type,  setType]  = useState(plan?.type ?? 'Run');
   const [desc,  setDesc]  = useState(plan?.desc ?? '');
   const [dist,  setDist]  = useState(plan?.dist ? String(plan.dist) : '');
@@ -420,15 +422,16 @@ export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
   const [saving, setSaving] = useState(false);
 
   const accentColor = planTypeColor(type);
-  const dateStr = new Date((plan?.date ?? date)+'T12:00:00').toLocaleDateString(undefined, {
-    weekday: 'long', month: 'long', day: 'numeric',
-  });
 
   const handleSave = async () => {
+    if (!planDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Invalid date', 'Use YYYY-MM-DD format');
+      return;
+    }
     setSaving(true);
     const saved: PlannedWorkout = plan
-      ? { ...plan, type, desc, dist: Number(dist) || 0, dur: Number(dur) || 0, notes }
-      : { id: uid(), date, type, desc, dist: Number(dist) || 0, dur: Number(dur) || 0, notes, planned: true };
+      ? { ...plan, date: planDate, type, desc, dist: Number(dist) || 0, dur: Number(dur) || 0, notes }
+      : { id: uid(), date: planDate, type, desc, dist: Number(dist) || 0, dur: Number(dur) || 0, notes, planned: true };
     const newDB = {
       ...db,
       plans: plan ? db.plans.map(p => p.id === plan.id ? saved : p) : [...db.plans, saved],
@@ -466,7 +469,9 @@ export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
 
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaProvider>
       <View style={styles.modalContainer}>
+        <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
           <Text style={styles.modalTitle}>{isEditing ? 'Edit Plan' : 'Plan Workout'}</Text>
@@ -476,9 +481,12 @@ export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
             <View style={{ width: 60 }} />
           )}
         </View>
+        </SafeAreaView>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-          <Text style={styles.planDateLabel}>{dateStr}</Text>
+          <Text style={styles.fieldLabel}>DATE</Text>
+          <TextInput style={styles.input} value={planDate} onChangeText={setPlanDate}
+            placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted2} />
 
           <Text style={styles.fieldLabel}>TYPE</Text>
           <View style={styles.typeRow}>
@@ -525,6 +533,7 @@ export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
         </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -646,12 +655,15 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
 
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaProvider>
       <View style={styles.modalContainer}>
+        <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
           <Text style={styles.modalTitle}>{isEditing ? 'Edit Completion' : 'Mark as Done'}</Text>
           <View style={{ width: 60 }} />
         </View>
+        </SafeAreaView>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
           <View style={[styles.planSummary, { borderLeftColor: accentColor }]}>
@@ -788,6 +800,7 @@ function MarkDoneModal({ plan, user, db, onSaved, onClose }: {
         </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -882,6 +895,7 @@ const styles = StyleSheet.create({
 
   // Modal shared
   modalContainer: { flex: 1, backgroundColor: colors.bg },
+  headerSafe: { backgroundColor: colors.surface },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface,
@@ -890,7 +904,6 @@ const styles = StyleSheet.create({
   cancelBtn:     { fontSize: 15, color: colors.muted, width: 60 },
   deleteHeaderBtn: { fontSize: 15, color: colors.red, fontWeight: '600', width: 60, textAlign: 'right' },
   modalContent:  { padding: 20, paddingBottom: 60 },
-  planDateLabel: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
 
   fieldLabel: {
     fontSize: 11, color: colors.muted, fontWeight: '600',
