@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform,
+  Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, Switch, Linking,
 } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -10,6 +10,10 @@ import { TrainingDB, Race } from '../types';
 import { colors } from '../theme';
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+function normalizeUrl(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
 
 const RACE_TYPES = ['run', 'bike', 'skimo'] as const;
 const BIKE_TYPES = ['Gravel', 'Road', 'Mountain', 'Fat Bike'];
@@ -137,6 +141,11 @@ export default function RacesScreen({ user, db, onSaved }: Props) {
 
               <Text style={styles.raceDate}>{dateStr}</Text>
               {race.loc ? <Text style={styles.raceLoc}>📍 {race.loc}</Text> : null}
+              {race.websiteUrl ? (
+                <TouchableOpacity onPress={() => Linking.openURL(normalizeUrl(race.websiteUrl!))}>
+                  <Text style={styles.raceLink} numberOfLines={1}>🔗 {race.websiteUrl}</Text>
+                </TouchableOpacity>
+              ) : null}
 
               <View style={styles.statsRow}>
                 {Number(race.dist) > 0 && (
@@ -147,6 +156,11 @@ export default function RacesScreen({ user, db, onSaved }: Props) {
                 )}
                 {race.goal && tab === 'upcoming' && (
                   <Text style={styles.stat}>Goal: {race.goal}</Text>
+                )}
+                {race.requiresLottery && (
+                  <Text style={[styles.stat, { color: colors.purple }]}>
+                    🎟 Lottery{race.lotteryDate ? ` · draw ${race.lotteryDate}` : ''}
+                  </Text>
                 )}
               </View>
 
@@ -195,6 +209,9 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
   const [result,       setResult]       = useState('');
   const [placement,    setPlacement]    = useState('');
   const [notes,        setNotes]        = useState('');
+  const [websiteUrl,      setWebsiteUrl]      = useState('');
+  const [requiresLottery, setRequiresLottery] = useState(false);
+  const [lotteryDate,     setLotteryDate]     = useState('');
   const [saving,       setSaving]       = useState(false);
 
   React.useEffect(() => {
@@ -212,6 +229,9 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
       setResult(editingRace.result || '');
       setPlacement(editingRace.placement || '');
       setNotes(editingRace.notes || '');
+      setWebsiteUrl(editingRace.websiteUrl || '');
+      setRequiresLottery(!!editingRace.requiresLottery);
+      setLotteryDate(editingRace.lotteryDate || '');
     } else {
       setName(''); setRaceType('run'); setBikeType('Gravel'); setSkimoCat('Individual');
       // Local calendar date, not toISOString()'s UTC date — avoids landing on the wrong day.
@@ -219,6 +239,7 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
       setDate(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`);
       setRegOpenDate('');
       setDist(''); setLoc(''); setGoal(''); setVert(''); setResult(''); setPlacement(''); setNotes('');
+      setWebsiteUrl(''); setRequiresLottery(false); setLotteryDate('');
     }
   }, [editingRace, visible]);
 
@@ -227,6 +248,9 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
     if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) { Alert.alert('Invalid date', 'Use YYYY-MM-DD'); return; }
     if (regOpenDate.trim() && !regOpenDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
       Alert.alert('Invalid registration date', 'Use YYYY-MM-DD'); return;
+    }
+    if (requiresLottery && !lotteryDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Invalid lottery draw date', 'Use YYYY-MM-DD'); return;
     }
     setSaving(true);
     const regOpenChanged = editingRace ? editingRace.regOpenDate !== regOpenDate.trim() : false;
@@ -247,6 +271,9 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
       result: result.trim(),
       placement: placement.trim(),
       notes: notes.trim(),
+      websiteUrl: websiteUrl.trim() || undefined,
+      requiresLottery,
+      lotteryDate: requiresLottery ? lotteryDate.trim() : undefined,
     };
     const newDB = {
       ...db,
@@ -335,6 +362,29 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
             placeholder="Optional — get a reminder 7 days before"
           />
 
+          <TouchableOpacity
+            style={styles.switchRow}
+            activeOpacity={0.8}
+            onPress={() => setRequiresLottery(v => !v)}
+          >
+            <Text style={[styles.fieldLabel, { marginTop: 0, marginBottom: 0 }]}>REQUIRES LOTTERY</Text>
+            <Switch
+              value={requiresLottery}
+              onValueChange={setRequiresLottery}
+              trackColor={{ false: colors.border, true: colors.purple + '60' }}
+              thumbColor={requiresLottery ? colors.purple : colors.muted}
+            />
+          </TouchableOpacity>
+
+          {requiresLottery && (
+            <Field
+              label="LOTTERY DRAW DATE (YYYY-MM-DD)"
+              value={lotteryDate}
+              onChange={setLotteryDate}
+              placeholder="2026-12-01"
+            />
+          )}
+
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Field label="DISTANCE (KM)" value={dist} onChange={setDist} keyboard="decimal-pad" placeholder="0" />
@@ -346,6 +396,14 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
           </View>
 
           <Field label="LOCATION" value={loc} onChange={setLoc} placeholder="City, Country" />
+
+          <Field
+            label="RACE WEBSITE"
+            value={websiteUrl}
+            onChange={setWebsiteUrl}
+            placeholder="e.g. utmb.world"
+            keyboard="url"
+          />
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -376,7 +434,7 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
 
 function Field({ label, value, onChange, placeholder, keyboard, multiline }: {
   label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; keyboard?: 'decimal-pad'; multiline?: boolean;
+  placeholder?: string; keyboard?: 'decimal-pad' | 'url'; multiline?: boolean;
 }) {
   return (
     <View>
@@ -386,6 +444,8 @@ function Field({ label, value, onChange, placeholder, keyboard, multiline }: {
         value={value} onChangeText={onChange}
         placeholder={placeholder} placeholderTextColor={colors.muted2}
         keyboardType={keyboard ?? 'default'}
+        autoCapitalize={keyboard === 'url' ? 'none' : 'sentences'}
+        autoCorrect={keyboard === 'url' ? false : undefined}
         multiline={multiline} numberOfLines={multiline ? 3 : 1}
         textAlignVertical={multiline ? 'top' : 'auto'}
       />
@@ -425,6 +485,7 @@ const styles = StyleSheet.create({
   raceBadge:   { fontSize: 11, color: colors.red, fontWeight: '600', marginTop: 2 },
   raceDate:    { fontSize: 12, color: colors.muted, marginBottom: 2 },
   raceLoc:     { fontSize: 12, color: colors.muted, marginBottom: 4 },
+  raceLink:    { fontSize: 12, color: colors.blue, marginBottom: 4 },
   statsRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
   stat:        { fontSize: 12, color: colors.blue, fontWeight: '600' },
   raceNotes:   { fontSize: 12, color: colors.muted2, marginTop: 6, fontStyle: 'italic' },
@@ -456,6 +517,10 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 11, color: colors.muted, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: 14,
+  },
+  switchRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 14,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {

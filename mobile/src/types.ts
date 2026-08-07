@@ -120,6 +120,9 @@ export interface Race {
   regOpenDate?: string;
   regReminderAcknowledged?: boolean;
   placement?: string;
+  websiteUrl?: string;
+  requiresLottery?: boolean;
+  lotteryDate?: string;
 }
 
 export interface SeasonalSport {
