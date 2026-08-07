@@ -82,6 +82,11 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
         add(iso, { label: `Register: ${r.name || 'Race'}`, color: colors.amber });
       }
     });
+    // Lottery draw date markers
+    db.races.forEach(r => {
+      if (!r.requiresLottery || !r.lotteryDate) return;
+      add(r.lotteryDate, { label: `Lottery draw: ${r.name || 'Race'}`, color: colors.purple });
+    });
     // Logged activities below
     db.runs.forEach(r => {
       const dist = Number(r.dist) > 0 ? ` ${r.dist}k` : '';
