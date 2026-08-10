@@ -7,7 +7,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
-import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem, NutritionLogEntry } from '../types';
+import { TrainingDB, ActivityEntry, PlannedWorkout, Race, RunEntry, CrossEntry, StrengthEntry, RecoveryEntry, NutritionItem, NutritionLogEntry, TrainingEvent, TrainingEventCategory } from '../types';
 import { colors, actColors } from '../theme';
 import { nutrPerHour } from '../nutrition';
 import NutritionEntryEditor from '../components/NutritionEntryEditor';
@@ -17,6 +17,8 @@ const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const PLAN_TYPES = ['Run','Cross-training','Strength','Recovery','Race'];
+const EVENT_CATEGORIES: TrainingEventCategory[] =
+  ['Travel', 'Backcountry Trip', 'Sick', 'Injured', 'Other'];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -27,6 +29,25 @@ function toISO(year: number, month: number, day: number) {
 function todayISO() {
   const t = new Date();
   return toISO(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
+// Inclusive list of every ISO date between start and end (order-tolerant).
+function dateRange(startISO: string, endISO: string): string[] {
+  const start = new Date((startISO <= endISO ? startISO : endISO) + 'T12:00:00');
+  const end   = new Date((startISO <= endISO ? endISO : startISO) + 'T12:00:00');
+  const dates: string[] = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(toISO(d.getFullYear(), d.getMonth(), d.getDate()));
+  }
+  return dates;
+}
+
+export function eventCategoryColor(category: string) {
+  if (category === 'Travel')           return colors.blue;
+  if (category === 'Backcountry Trip') return colors.teal;
+  if (category === 'Sick')             return colors.red;
+  if (category === 'Injured')          return colors.amber;
+  return colors.muted;
 }
 
 export function planTypeColor(type: string) {
@@ -53,6 +74,8 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
   const [editingPlan,    setEditingPlan]    = useState<PlannedWorkout | null>(null);
   const [completingPlan, setCompletingPlan] = useState<PlannedWorkout | null>(null);
   const [viewingEntry,   setViewingEntry]   = useState<ActivityEntry | null>(null);
+  const [eventModalDate, setEventModalDate] = useState<string | null>(null);
+  const [editingEvent,   setEditingEvent]   = useState<TrainingEvent | null>(null);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y=>y-1); } else setMonth(m=>m-1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y=>y+1); } else setMonth(m=>m+1); };
@@ -66,6 +89,13 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
       if (!map[date]) map[date] = [];
       map[date].push(item);
     };
+    // Events (vacation/travel/sick/etc.) span a date range — shown first so
+    // days where training may be impacted are immediately visible.
+    (db.events ?? []).forEach(e => {
+      const color = eventCategoryColor(e.category);
+      const label = e.title || e.category;
+      dateRange(e.startDate, e.endDate).forEach(iso => add(iso, { label, color }));
+    });
     // Plans at top of cell
     db.plans.forEach(p => {
       const label = p.desc || p.type;
@@ -118,6 +148,20 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
     db.races.filter(r => r.date === selectedDate)
   ), [selectedDate, db]);
 
+  const selectedEvents: TrainingEvent[] = useMemo(() => (
+    (db.events ?? []).filter(e => selectedDate >= e.startDate && selectedDate <= e.endDate)
+  ), [selectedDate, db]);
+
+  // First active event's color per date, used to tint impacted calendar cells.
+  const eventTintMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (db.events ?? []).forEach(e => {
+      const color = eventCategoryColor(e.category);
+      dateRange(e.startDate, e.endDate).forEach(iso => { if (!map[iso]) map[iso] = color; });
+    });
+    return map;
+  }, [db]);
+
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const cells: (number | null)[] = [
@@ -142,6 +186,16 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try { await saveDB({ ...db, plans: db.plans.filter(p => p.id !== planId) }); }
+        catch (err: any) { Alert.alert('Error', err.message); }
+      }},
+    ]);
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    Alert.alert('Delete event', 'Remove this event?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try { await saveDB({ ...db, events: (db.events ?? []).filter(e => e.id !== eventId) }); }
         catch (err: any) { Alert.alert('Error', err.message); }
       }},
     ]);
@@ -200,10 +254,16 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
                 const items   = contentMap[iso] ?? [];
                 const isToday    = iso === todayStr;
                 const isSelected = iso === selectedDate;
+                const eventColor = eventTintMap[iso];
                 return (
                   <TouchableOpacity
                     key={iso}
-                    style={[styles.cell, isSelected && styles.cellSelected, isToday && !isSelected && styles.cellToday]}
+                    style={[
+                      styles.cell,
+                      eventColor && { backgroundColor: eventColor + '1a', borderLeftWidth: 2, borderLeftColor: eventColor },
+                      isSelected && styles.cellSelected,
+                      isToday && !isSelected && styles.cellToday,
+                    ]}
                     onPress={() => setSelectedDate(iso)}
                   >
                     <Text style={[
@@ -237,10 +297,48 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
       <ScrollView style={styles.dayPanel} contentContainerStyle={styles.dayPanelContent}>
         <View style={styles.dayPanelHeader}>
           <Text style={styles.dayPanelTitle}>{selectedDateLabel}</Text>
-          <TouchableOpacity style={styles.planBtn} onPress={() => setPlanModalDate(selectedDate)}>
-            <Text style={styles.planBtnText}>+ Plan</Text>
-          </TouchableOpacity>
+          <View style={styles.dayPanelHeaderBtns}>
+            <TouchableOpacity style={[styles.planBtn, styles.eventBtn]} onPress={() => setEventModalDate(selectedDate)}>
+              <Text style={styles.planBtnText}>+ Event</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.planBtn} onPress={() => setPlanModalDate(selectedDate)}>
+              <Text style={styles.planBtnText}>+ Plan</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* ── Events (vacation/travel/sick/etc.) ── */}
+        {selectedEvents.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>EVENTS</Text>
+            {selectedEvents.map(evt => {
+              const color = eventCategoryColor(evt.category);
+              return (
+                <TouchableOpacity
+                  key={evt.id}
+                  style={[styles.eventRow, { borderLeftColor: color }]}
+                  onPress={() => setEditingEvent(evt)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.planRowLeft}>
+                    <View style={styles.planTitleRow}>
+                      <View style={[styles.planTypeDot, { backgroundColor: color }]} />
+                      <Text style={[styles.planType, { color }]}>{evt.category}</Text>
+                    </View>
+                    {evt.title ? <Text style={styles.planDesc}>{evt.title}</Text> : null}
+                    <Text style={styles.planDetail}>
+                      {evt.startDate === evt.endDate ? evt.startDate : `${evt.startDate} → ${evt.endDate}`}
+                    </Text>
+                    {evt.notes ? <Text style={styles.planNotes} numberOfLines={1}>{evt.notes}</Text> : null}
+                  </View>
+                  <TouchableOpacity onPress={() => handleDeleteEvent(evt.id)}>
+                    <Text style={styles.deletePlan}>✕</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
 
         {/* ── Planned workouts first ── */}
         <Text style={styles.sectionLabel}>PLANNED</Text>
@@ -402,6 +500,27 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
           onClose={() => setCompletingPlan(null)}
         />
       )}
+
+      {eventModalDate && (
+        <EventModal
+          date={eventModalDate}
+          user={user}
+          db={db}
+          onSaved={onSaved}
+          onClose={() => setEventModalDate(null)}
+        />
+      )}
+
+      {editingEvent && (
+        <EventModal
+          date={editingEvent.startDate}
+          event={editingEvent}
+          user={user}
+          db={db}
+          onSaved={onSaved}
+          onClose={() => setEditingEvent(null)}
+        />
+      )}
     </View>
   );
 }
@@ -529,6 +648,139 @@ export function PlanWorkoutModal({ date, plan, user, db, onSaved, onClose }: {
             onPress={handleSave} disabled={saving}
           >
             <Text style={styles.saveBtnText}>{saving ? 'Saving…' : isEditing ? 'Update Plan' : 'Save Plan'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+// ─── Event Modal (vacation / travel / sick / backcountry, etc.) ───────────────
+
+function EventModal({ date, event, user, db, onSaved, onClose }: {
+  date: string; event?: TrainingEvent; user: User; db: TrainingDB;
+  onSaved: (u: TrainingDB) => void; onClose: () => void;
+}) {
+  const isEditing = !!event;
+  const [startDate, setStartDate] = useState(event?.startDate ?? date);
+  const [endDate,   setEndDate]   = useState(event?.endDate   ?? date);
+  const [category,  setCategory]  = useState<TrainingEventCategory>(event?.category ?? 'Travel');
+  const [title,     setTitle]     = useState(event?.title ?? '');
+  const [notes,     setNotes]     = useState(event?.notes ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const accentColor = eventCategoryColor(category);
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  const handleSave = async () => {
+    if (!DATE_RE.test(startDate) || !DATE_RE.test(endDate)) {
+      Alert.alert('Invalid date', 'Use YYYY-MM-DD format');
+      return;
+    }
+    const [rangeStart, rangeEnd] = startDate <= endDate ? [startDate, endDate] : [endDate, startDate];
+    setSaving(true);
+    const saved: TrainingEvent = event
+      ? { ...event, startDate: rangeStart, endDate: rangeEnd, category, title, notes }
+      : { id: uid(), startDate: rangeStart, endDate: rangeEnd, category, title, notes };
+    const newDB: TrainingDB = {
+      ...db,
+      events: event
+        ? (db.events ?? []).map(e => e.id === event.id ? saved : e)
+        : [...(db.events ?? []), saved],
+    };
+    try {
+      await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+      onSaved(newDB);
+      onClose();
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!event) return;
+    Alert.alert('Delete event', 'Remove this event?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        setSaving(true);
+        const newDB = { ...db, events: (db.events ?? []).filter(e => e.id !== event.id) };
+        try {
+          await setDoc(doc(firestoreDB, 'users', user.uid, 'db', 'data'), JSON.parse(JSON.stringify(newDB)));
+          onSaved(newDB);
+          onClose();
+        } catch (err: any) {
+          Alert.alert('Delete failed', err.message);
+        } finally {
+          setSaving(false);
+        }
+      }},
+    ]);
+  };
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaProvider>
+      <View style={styles.modalContainer}>
+        <SafeAreaView edges={['top']} style={styles.headerSafe}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
+          <Text style={styles.modalTitle}>{isEditing ? 'Edit Event' : 'Add Event'}</Text>
+          {isEditing ? (
+            <TouchableOpacity onPress={handleDelete}><Text style={styles.deleteHeaderBtn}>Delete</Text></TouchableOpacity>
+          ) : (
+            <View style={{ width: 60 }} />
+          )}
+        </View>
+        </SafeAreaView>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>START DATE</Text>
+              <TextInput style={styles.input} value={startDate} onChangeText={setStartDate}
+                placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted2} />
+            </View>
+            <View style={{ width: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>END DATE</Text>
+              <TextInput style={styles.input} value={endDate} onChangeText={setEndDate}
+                placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted2} />
+            </View>
+          </View>
+
+          <Text style={styles.fieldLabel}>CATEGORY</Text>
+          <View style={styles.typeRow}>
+            {EVENT_CATEGORIES.map(c => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.typeChip, category === c && { borderColor: eventCategoryColor(c), backgroundColor: eventCategoryColor(c)+'22' }]}
+                onPress={() => setCategory(c)}
+              >
+                <Text style={[styles.typeChipText, category === c && { color: eventCategoryColor(c) }]}>
+                  {c}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>TITLE</Text>
+          <TextInput style={styles.input} value={title} onChangeText={setTitle}
+            placeholder="e.g. Colorado trip, Wind River backcountry loop" placeholderTextColor={colors.muted2} />
+
+          <Text style={styles.fieldLabel}>NOTES</Text>
+          <TextInput style={[styles.input, styles.inputMulti]} value={notes} onChangeText={setNotes}
+            multiline numberOfLines={3} placeholderTextColor={colors.muted2}
+            placeholder="Where you'll be, what's going on, how it may affect training…" textAlignVertical="top" />
+
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
+            onPress={handleSave} disabled={saving}
+          >
+            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : isEditing ? 'Update Event' : 'Save Event'}</Text>
           </TouchableOpacity>
         </ScrollView>
         </KeyboardAvoidingView>
@@ -845,7 +1097,9 @@ const styles = StyleSheet.create({
   dayPanelContent: { padding: 14, paddingBottom: 40 },
   dayPanelHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   dayPanelTitle:   { fontSize: 13, fontWeight: '700', color: colors.text, flex: 1 },
+  dayPanelHeaderBtns: { flexDirection: 'row', gap: 8 },
   planBtn:         { backgroundColor: colors.pink, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
+  eventBtn:        { backgroundColor: colors.purple },
   planBtnText:     { color: '#fff', fontSize: 12, fontWeight: '700' },
 
   sectionLabel: {
@@ -853,6 +1107,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', marginBottom: 6, marginTop: 4,
   },
   emptyPlans: { fontSize: 12, color: colors.muted2, marginBottom: 8, fontStyle: 'italic' },
+
+  eventRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    borderLeftWidth: 3, paddingLeft: 10, marginBottom: 8,
+    backgroundColor: colors.surface, borderRadius: 8, padding: 10,
+  },
 
   raceRow: {
     borderLeftWidth: 3, borderLeftColor: colors.red, paddingLeft: 10, marginBottom: 8,

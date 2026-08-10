@@ -131,6 +131,18 @@ export interface SeasonalSport {
   endMD: string;   // MM-DD  e.g. "04-30"
 }
 
+export type TrainingEventCategory =
+  | 'Travel' | 'Backcountry Trip' | 'Sick' | 'Injured' | 'Other';
+
+export interface TrainingEvent {
+  id: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD, inclusive
+  category: TrainingEventCategory;
+  title: string;
+  notes: string;
+}
+
 export interface TrainingDB {
   runs: RunEntry[];
   crosses: CrossEntry[];
@@ -138,6 +150,7 @@ export interface TrainingDB {
   recoveries: RecoveryEntry[];
   races: Race[];
   plans: PlannedWorkout[];
+  events: TrainingEvent[];
   nutrition: NutritionItem[];
   trainingPlans: unknown[];
   goals: Record<string, unknown>;
@@ -158,6 +171,7 @@ export const emptyDB: TrainingDB = {
   recoveries: [],
   races: [],
   plans: [],
+  events: [],
   nutrition: [],
   trainingPlans: [],
   goals: {},
