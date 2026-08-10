@@ -18,7 +18,7 @@ const MONTHS = ['January','February','March','April','May','June',
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const PLAN_TYPES = ['Run','Cross-training','Strength','Recovery','Race'];
 const EVENT_CATEGORIES: TrainingEventCategory[] =
-  ['Travel', 'Backcountry Trip', 'Sick', 'Injured', 'Rest', 'Other'];
+  ['Travel', 'Backcountry Trip', 'Sick', 'Injured', 'Other'];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -47,17 +47,7 @@ export function eventCategoryColor(category: string) {
   if (category === 'Backcountry Trip') return colors.teal;
   if (category === 'Sick')             return colors.red;
   if (category === 'Injured')          return colors.amber;
-  if (category === 'Rest')             return colors.purple;
   return colors.muted;
-}
-
-export function eventCategoryIcon(category: string) {
-  if (category === 'Travel')           return '✈️';
-  if (category === 'Backcountry Trip') return '🏔️';
-  if (category === 'Sick')             return '🤒';
-  if (category === 'Injured')          return '🤕';
-  if (category === 'Rest')             return '😴';
-  return '📌';
 }
 
 export function planTypeColor(type: string) {
@@ -103,7 +93,7 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
     // days where training may be impacted are immediately visible.
     (db.events ?? []).forEach(e => {
       const color = eventCategoryColor(e.category);
-      const label = `${eventCategoryIcon(e.category)} ${e.title || e.category}`;
+      const label = e.title || e.category;
       dateRange(e.startDate, e.endDate).forEach(iso => add(iso, { label, color }));
     });
     // Plans at top of cell
@@ -332,7 +322,7 @@ export default function CalendarScreen({ user, db, onSaved, onEditEntry }: Props
                 >
                   <View style={styles.planRowLeft}>
                     <View style={styles.planTitleRow}>
-                      <Text style={styles.eventIcon}>{eventCategoryIcon(evt.category)}</Text>
+                      <View style={[styles.planTypeDot, { backgroundColor: color }]} />
                       <Text style={[styles.planType, { color }]}>{evt.category}</Text>
                     </View>
                     {evt.title ? <Text style={styles.planDesc}>{evt.title}</Text> : null}
@@ -771,7 +761,7 @@ function EventModal({ date, event, user, db, onSaved, onClose }: {
                 onPress={() => setCategory(c)}
               >
                 <Text style={[styles.typeChipText, category === c && { color: eventCategoryColor(c) }]}>
-                  {eventCategoryIcon(c)} {c}
+                  {c}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -779,12 +769,12 @@ function EventModal({ date, event, user, db, onSaved, onClose }: {
 
           <Text style={styles.fieldLabel}>TITLE</Text>
           <TextInput style={styles.input} value={title} onChangeText={setTitle}
-            placeholder="e.g. Family trip to Colorado" placeholderTextColor={colors.muted2} />
+            placeholder="e.g. Colorado trip, Wind River backcountry loop" placeholderTextColor={colors.muted2} />
 
           <Text style={styles.fieldLabel}>NOTES</Text>
           <TextInput style={[styles.input, styles.inputMulti]} value={notes} onChangeText={setNotes}
             multiline numberOfLines={3} placeholderTextColor={colors.muted2}
-            placeholder="How might this affect training?" textAlignVertical="top" />
+            placeholder="Where you'll be, what's going on, how it may affect training…" textAlignVertical="top" />
 
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
@@ -1123,7 +1113,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3, paddingLeft: 10, marginBottom: 8,
     backgroundColor: colors.surface, borderRadius: 8, padding: 10,
   },
-  eventIcon: { fontSize: 13, marginRight: 2 },
 
   raceRow: {
     borderLeftWidth: 3, borderLeftColor: colors.red, paddingLeft: 10, marginBottom: 8,

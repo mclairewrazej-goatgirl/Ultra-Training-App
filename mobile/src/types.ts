@@ -132,7 +132,7 @@ export interface SeasonalSport {
 }
 
 export type TrainingEventCategory =
-  | 'Travel' | 'Backcountry Trip' | 'Sick' | 'Injured' | 'Rest' | 'Other';
+  | 'Travel' | 'Backcountry Trip' | 'Sick' | 'Injured' | 'Other';
 
 export interface TrainingEvent {
   id: string;
