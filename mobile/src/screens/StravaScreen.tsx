@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   Alert, Modal, ScrollView, FlatList,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -400,7 +401,9 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
       {/* ── Activity picker modal ───────────────────────────────── */}
       <Modal visible={showPicker} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => setShowPicker(false)}>
+        <SafeAreaProvider>
         <View style={styles.pickerShell}>
+          <SafeAreaView edges={['top']} style={styles.pickerHeaderSafe}>
           <View style={styles.pickerHeader}>
             <TouchableOpacity onPress={() => setShowPicker(false)}>
               <Text style={styles.cancelBtn}>Cancel</Text>
@@ -408,6 +411,7 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
             <Text style={styles.pickerTitle}>Select Activities</Text>
             <View style={{ width: 60 }} />
           </View>
+          </SafeAreaView>
 
           <View style={styles.pickerTopRow}>
             <Text style={styles.pickerCount}>
@@ -468,13 +472,15 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
             </TouchableOpacity>
           </View>
         </View>
+        </SafeAreaProvider>
       </Modal>
 
       {/* ── Race match modal ────────────────────────────────────── */}
       <Modal visible={!!currentRace && !celebratingItem && !statsItem} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => handleRaceDecision(false)}>
         {currentRace && (
-          <View style={styles.matchWrap}>
+          <SafeAreaProvider>
+          <SafeAreaView edges={['top']} style={styles.matchWrap}>
             <Text style={styles.matchTitle}>Race day match?</Text>
             <Text style={styles.matchSub}>This Strava activity looks like one of your upcoming races.</Text>
 
@@ -497,7 +503,8 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => handleRaceDecision(false)}>
               <Text style={styles.secondaryBtnText}>Add to log only</Text>
             </TouchableOpacity>
-          </View>
+          </SafeAreaView>
+          </SafeAreaProvider>
         )}
       </Modal>
 
@@ -505,7 +512,8 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
       <Modal visible={!!currentPlan} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => handlePlanDecision(null)}>
         {currentPlan && (
-          <View style={styles.matchWrap}>
+          <SafeAreaProvider>
+          <SafeAreaView edges={['top']} style={styles.matchWrap}>
             <Text style={styles.matchTitle}>Planned workout match</Text>
             <Text style={styles.matchSub}>This activity matches a planned workout. Which one did it complete?</Text>
 
@@ -532,7 +540,8 @@ export default function StravaScreen({ user, db, onSaved }: Props) {
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => handlePlanDecision(null)}>
               <Text style={styles.secondaryBtnText}>None, just add to log</Text>
             </TouchableOpacity>
-          </View>
+          </SafeAreaView>
+          </SafeAreaProvider>
         )}
       </Modal>
 
@@ -627,6 +636,7 @@ const styles = StyleSheet.create({
 
   // Picker modal
   pickerShell: { flex: 1, backgroundColor: colors.bg },
+  pickerHeaderSafe: { backgroundColor: colors.surface },
   pickerHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
@@ -664,7 +674,7 @@ const styles = StyleSheet.create({
   syncBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
   // Match modals
-  matchWrap:  { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 28 },
+  matchWrap:  { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 12 },
   matchTitle: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 6 },
   matchSub:   { fontSize: 14, color: colors.muted, marginBottom: 20, lineHeight: 20 },
 

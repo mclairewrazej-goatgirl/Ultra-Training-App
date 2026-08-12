@@ -150,6 +150,7 @@ export default function App() {
       />
       <NavigationContainer>
         <Tab.Navigator
+          initialRouteName="Dashboard"
           screenOptions={({ route }) => ({
             tabBarIcon: ({ focused }) => (
               <TabIcon label={route.name} focused={focused} />
@@ -167,15 +168,8 @@ export default function App() {
             headerTitleStyle: { fontWeight: '800' },
           })}
         >
-          <Tab.Screen name="Dashboard">
-            {() => (
-              <DashboardScreen
-                user={user}
-                db={db}
-                onSaved={handleDBUpdate}
-                onEditEntry={setEditingEntry}
-              />
-            )}
+          <Tab.Screen name="Explore">
+            {() => <ExploreScreen db={db} />}
           </Tab.Screen>
 
           <Tab.Screen name="Activity Log" options={{ tabBarLabel: 'Log' }}>
@@ -189,8 +183,15 @@ export default function App() {
             )}
           </Tab.Screen>
 
-          <Tab.Screen name="Explore">
-            {() => <ExploreScreen db={db} />}
+          <Tab.Screen name="Dashboard">
+            {() => (
+              <DashboardScreen
+                user={user}
+                db={db}
+                onSaved={handleDBUpdate}
+                onEditEntry={setEditingEntry}
+              />
+            )}
           </Tab.Screen>
 
           <Tab.Screen name="Calendar">
