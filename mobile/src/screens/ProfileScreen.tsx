@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, Alert, Modal, ScrollView,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
 import { User } from 'firebase/auth';
@@ -183,7 +184,9 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
       {/* Ski Season modal */}
       <Modal visible={showSki} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => setShowSki(false)}>
+        <SafeAreaProvider>
         <View style={styles.modalShell}>
+          <SafeAreaView edges={['top']} style={styles.modalTopBarSafe}>
           <View style={styles.modalTopBar}>
             <TouchableOpacity onPress={() => setShowSki(false)}>
               <Text style={styles.backBtn}>‹ Back</Text>
@@ -191,14 +194,18 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
             <Text style={styles.modalTopTitle}>Ski Season</Text>
             <View style={{ width: 60 }} />
           </View>
+          </SafeAreaView>
           <SkiSeasonScreen user={user} db={db} onSaved={onSaved} />
         </View>
+        </SafeAreaProvider>
       </Modal>
 
       {/* My Goals modal */}
       <Modal visible={showGoals} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => setShowGoals(false)}>
+        <SafeAreaProvider>
         <View style={styles.modalShell}>
+          <SafeAreaView edges={['top']} style={styles.modalTopBarSafe}>
           <View style={styles.modalTopBar}>
             <TouchableOpacity onPress={() => setShowGoals(false)}>
               <Text style={styles.backBtn}>‹ Back</Text>
@@ -206,14 +213,18 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
             <Text style={styles.modalTopTitle}>My Goals</Text>
             <View style={{ width: 60 }} />
           </View>
+          </SafeAreaView>
           <GoalsScreen user={user} db={db} onSaved={onSaved} />
         </View>
+        </SafeAreaProvider>
       </Modal>
 
       {/* My Nutrition modal */}
       <Modal visible={showNutrition} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => setShowNutrition(false)}>
+        <SafeAreaProvider>
         <View style={styles.modalShell}>
+          <SafeAreaView edges={['top']} style={styles.modalTopBarSafe}>
           <View style={styles.modalTopBar}>
             <TouchableOpacity onPress={() => setShowNutrition(false)}>
               <Text style={styles.backBtn}>‹ Back</Text>
@@ -221,14 +232,18 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
             <Text style={styles.modalTopTitle}>My Nutrition</Text>
             <View style={{ width: 60 }} />
           </View>
+          </SafeAreaView>
           <NutritionScreen user={user} db={db} onSaved={onSaved} />
         </View>
+        </SafeAreaProvider>
       </Modal>
 
       {/* My Races modal */}
       <Modal visible={showRaces} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => setShowRaces(false)}>
+        <SafeAreaProvider>
         <View style={styles.modalShell}>
+          <SafeAreaView edges={['top']} style={styles.modalTopBarSafe}>
           <View style={styles.modalTopBar}>
             <TouchableOpacity onPress={() => setShowRaces(false)}>
               <Text style={styles.backBtn}>‹ Back</Text>
@@ -236,14 +251,18 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
             <Text style={styles.modalTopTitle}>My Races</Text>
             <View style={{ width: 60 }} />
           </View>
+          </SafeAreaView>
           <RacesScreen user={user} db={db} onSaved={onSaved} />
         </View>
+        </SafeAreaProvider>
       </Modal>
 
       {/* Strava modal */}
       <Modal visible={showStrava} animationType="slide" presentationStyle="pageSheet"
         onRequestClose={() => setShowStrava(false)}>
+        <SafeAreaProvider>
         <View style={styles.modalShell}>
+          <SafeAreaView edges={['top']} style={styles.modalTopBarSafe}>
           <View style={styles.modalTopBar}>
             <TouchableOpacity onPress={() => setShowStrava(false)}>
               <Text style={styles.backBtn}>‹ Back</Text>
@@ -251,8 +270,10 @@ export default function ProfileScreen({ user, db, onSaved }: Props) {
             <Text style={styles.modalTopTitle}>Strava</Text>
             <View style={{ width: 60 }} />
           </View>
+          </SafeAreaView>
           <StravaScreen user={user} db={db} onSaved={onSaved} />
         </View>
+        </SafeAreaProvider>
       </Modal>
     </ScrollView>
   );
@@ -331,6 +352,7 @@ const styles = StyleSheet.create({
   signOutText: { color: colors.red, fontWeight: '700', fontSize: 15 },
 
   modalShell:    { flex: 1, backgroundColor: colors.bg },
+  modalTopBarSafe: { backgroundColor: colors.surface },
   modalTopBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,

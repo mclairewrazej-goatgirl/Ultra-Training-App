@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 
 interface Props {
@@ -17,12 +18,15 @@ export default function RaceStatsModal({ visible, raceName, finishTime, onSave, 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onSkip}>
+      <SafeAreaProvider>
       <View style={styles.container}>
+        <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onSkip}><Text style={styles.skipBtn}>Skip</Text></TouchableOpacity>
           <Text style={styles.title}>Race Stats</Text>
           <View style={{ width: 44 }} />
         </View>
+        </SafeAreaView>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.raceName}>🏁 {raceName}</Text>
@@ -47,12 +51,14 @@ export default function RaceStatsModal({ visible, raceName, finishTime, onSave, 
         </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  headerSafe: { backgroundColor: colors.surface },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,

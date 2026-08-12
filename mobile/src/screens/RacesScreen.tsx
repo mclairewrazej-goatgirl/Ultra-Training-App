@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, Switch, Linking,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db as firestoreDB } from '../config/firebase';
@@ -24,6 +25,10 @@ function daysUntil(dateStr: string): number {
   const now  = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.ceil((race.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function weeksUntil(days: number): number {
+  return Math.round(days / 7);
 }
 
 function raceTypeBadge(race: Race): string {
@@ -130,6 +135,11 @@ export default function RacesScreen({ user, db, onSaved }: Props) {
                       {days > 0 ? days : days === 0 ? '🏁' : '✓'}
                     </Text>
                     <Text style={styles.daysLabel}>{days > 1 ? 'days' : days === 1 ? 'day' : days === 0 ? 'today' : 'done'}</Text>
+                    {days > 0 && (
+                      <Text style={styles.weeksSubLabel}>
+                        {weeksUntil(days)} {weeksUntil(days) === 1 ? 'week' : 'weeks'}
+                      </Text>
+                    )}
                   </View>
                 ) : (
                   <View style={styles.resultBadge}>
@@ -294,12 +304,15 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaProvider>
       <View style={styles.modalContainer}>
+        <SafeAreaView edges={['top']} style={styles.modalHeaderSafe}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Text style={styles.cancelBtn}>Cancel</Text></TouchableOpacity>
           <Text style={styles.modalTitle}>{editingRace ? 'Edit Race' : 'Add Race'}</Text>
           <View style={{ width: 60 }} />
         </View>
+        </SafeAreaView>
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
@@ -428,6 +441,7 @@ function RaceModal({ visible, editingRace, user, db, onSaved, onClose }: {
         </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -499,6 +513,10 @@ const styles = StyleSheet.create({
   },
   daysNum:   { fontSize: 18, fontWeight: '800', color: colors.text },
   daysLabel: { fontSize: 10, color: colors.muted, textTransform: 'uppercase' },
+  weeksSubLabel: {
+    fontSize: 9, color: colors.muted2, marginTop: 3,
+    paddingTop: 3, borderTopWidth: 1, borderTopColor: colors.border,
+  },
 
   resultBadge: { alignItems: 'flex-end' },
   resultTime:  { fontSize: 16, fontWeight: '800', color: colors.green },
@@ -506,6 +524,7 @@ const styles = StyleSheet.create({
 
   // Modal
   modalContainer: { flex: 1, backgroundColor: colors.bg },
+  modalHeaderSafe: { backgroundColor: colors.surface },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface,

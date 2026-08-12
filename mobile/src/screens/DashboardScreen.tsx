@@ -6,11 +6,11 @@ import { User } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { db as firestoreDB } from '../config/firebase';
 import { colors, actColors } from '../theme';
-import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry, PlannedWorkout } from '../types';
+import { TrainingDB, ActivityEntry, RunEntry, CrossEntry, StrengthEntry, PlannedWorkout, Race, TrainingEvent } from '../types';
 import { isInSkiSeason, isSkiSubtype } from './SkiSeasonScreen';
 import { normalizeGoal } from './GoalsScreen';
 import ActivityDetailModal from './ActivityDetailModal';
-import { PlanWorkoutModal, planTypeColor } from './CalendarScreen';
+import { PlanWorkoutModal, planTypeColor, eventCategoryColor } from './CalendarScreen';
 
 interface Props {
   user: User;
@@ -174,8 +174,37 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
     return map;
   }, [db.plans, monday, sunday]);
 
+  // Races on a given day + multi-day events (travel/sick/injured/etc.) overlapping it —
+  // surfaced in the tap bubble alongside planned workouts, mirroring CalendarScreen.
+  const weekRaceMap = useMemo(() => {
+    const map: Record<number, Race[]> = {};
+    db.races.forEach(r => {
+      const d = new Date(r.date + 'T12:00:00');
+      if (d < monday || d > sunday) return;
+      const idx = (d.getDay() + 6) % 7;
+      if (!map[idx]) map[idx] = [];
+      map[idx].push(r);
+    });
+    return map;
+  }, [db.races, monday, sunday]);
+
+  const weekEventMap = useMemo(() => {
+    const map: Record<number, TrainingEvent[]> = {};
+    weekDays.forEach((day, idx) => {
+      (db.events ?? []).forEach(e => {
+        if (day.iso >= e.startDate && day.iso <= e.endDate) {
+          if (!map[idx]) map[idx] = [];
+          map[idx].push(e);
+        }
+      });
+    });
+    return map;
+  }, [db.events, weekDays]);
+
   const bubbleDayIdx = calBubbleDay ? weekDays.findIndex(d => d.iso === calBubbleDay) : -1;
   const bubblePlans  = bubbleDayIdx >= 0 ? (weekPlanMap[bubbleDayIdx] ?? []) : [];
+  const bubbleRaces  = bubbleDayIdx >= 0 ? (weekRaceMap[bubbleDayIdx] ?? []) : [];
+  const bubbleEvents = bubbleDayIdx >= 0 ? (weekEventMap[bubbleDayIdx] ?? []) : [];
   const bubbleDateLabel = calBubbleDay
     ? new Date(calBubbleDay + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
     : '';
@@ -288,13 +317,20 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
 
       {/* ── This Week mini-calendar ────────────────────────── */}
       <Text style={styles.sectionLabel}>{weekOffset === 0 ? 'THIS WEEK' : 'THAT WEEK'}</Text>
-      <Text style={styles.miniCalHint}>Tap a day to view or plan a workout</Text>
+      <Text style={styles.miniCalHint}>Tap a day to view workouts, races, and events</Text>
       <View style={styles.miniCal}>
         {weekDays.map((day, i) => {
           const isToday    = day.iso === todayISO;
           const isSelected = day.iso === calBubbleDay;
           const dots       = weekDotMap[i] ?? [];
           const hasPlan    = (weekPlanMap[i]?.length ?? 0) > 0;
+          const dayRaces   = weekRaceMap[i] ?? [];
+          const dayEvents  = weekEventMap[i] ?? [];
+          const hasRace    = dayRaces.length > 0;
+          const hasEvent   = dayEvents.length > 0;
+          // Races are always red (matches the RACES badge elsewhere); events take on
+          // their own category color (Travel/Sick/Injured/etc.), same as the Calendar tab.
+          const eventDotColor = hasRace ? colors.red : hasEvent ? eventCategoryColor(dayEvents[0].category) : undefined;
           return (
             <TouchableOpacity
               key={day.iso}
@@ -303,6 +339,9 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
               onPress={() => setCalBubbleDay(prev => prev === day.iso ? null : day.iso)}
             >
               {hasPlan && <View style={styles.miniPlanDot} />}
+              {(hasRace || hasEvent) && (
+                <View style={[styles.miniEventDot, { backgroundColor: eventDotColor }]} />
+              )}
               <Text style={[styles.miniDayName, isToday && styles.miniDayNameToday]}>
                 {WEEK_DAYS[i]}
               </Text>
@@ -330,9 +369,35 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
             </TouchableOpacity>
           </View>
 
+          {bubbleRaces.length > 0 && (
+            <View style={styles.dayBubbleSection}>
+              {bubbleRaces.map(race => (
+                <View key={race.id} style={[styles.dayBubbleEventRow, { borderLeftColor: colors.red }]}>
+                  <Text style={styles.dayBubbleEventTitle}>🏁 {race.name || 'Race'}</Text>
+                  {race.loc ? <Text style={styles.dayBubbleEventMeta}>📍 {race.loc}</Text> : null}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {bubbleEvents.length > 0 && (
+            <View style={styles.dayBubbleSection}>
+              {bubbleEvents.map(evt => {
+                const color = eventCategoryColor(evt.category);
+                return (
+                  <View key={evt.id} style={[styles.dayBubbleEventRow, { borderLeftColor: color }]}>
+                    <Text style={[styles.dayBubbleEventTitle, { color }]}>{evt.category}{evt.title ? ` · ${evt.title}` : ''}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           {bubblePlans.length === 0 ? (
             <>
-              <Text style={styles.dayBubbleEmpty}>Nothing planned.</Text>
+              {bubbleRaces.length === 0 && bubbleEvents.length === 0 && (
+                <Text style={styles.dayBubbleEmpty}>Nothing planned.</Text>
+              )}
               <TouchableOpacity
                 style={styles.dayBubbleAddBtn}
                 onPress={() => { setPlanningDate(calBubbleDay); setCalBubbleDay(null); }}
@@ -827,6 +892,10 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 6, right: 6,
     width: 6, height: 6, borderRadius: 3, backgroundColor: '#F59E0B',
   },
+  miniEventDot: {
+    position: 'absolute', top: 6, left: 6,
+    width: 6, height: 6, borderRadius: 3,
+  },
 
   dayBubble: {
     backgroundColor: colors.surface, borderRadius: 12,
@@ -845,6 +914,13 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8,
   },
   dayBubbleAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  dayBubbleSection: { marginBottom: 10, gap: 6 },
+  dayBubbleEventRow: {
+    borderLeftWidth: 3, borderRadius: 6,
+    backgroundColor: colors.surface2, paddingVertical: 8, paddingHorizontal: 10,
+  },
+  dayBubbleEventTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  dayBubbleEventMeta:  { fontSize: 11, color: colors.muted, marginTop: 2 },
   dayBubbleRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 8,
