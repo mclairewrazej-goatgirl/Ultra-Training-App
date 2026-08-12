@@ -137,7 +137,7 @@ export default function RacesScreen({ user, db, onSaved }: Props) {
                     <Text style={styles.daysLabel}>{days > 1 ? 'days' : days === 1 ? 'day' : days === 0 ? 'today' : 'done'}</Text>
                     {days > 0 && (
                       <Text style={styles.weeksSubLabel}>
-                        {weeksUntil(days)} {weeksUntil(days) === 1 ? 'wk' : 'wks'}
+                        {weeksUntil(days)} {weeksUntil(days) === 1 ? 'week' : 'weeks'}
                       </Text>
                     )}
                   </View>

@@ -324,8 +324,13 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
           const isSelected = day.iso === calBubbleDay;
           const dots       = weekDotMap[i] ?? [];
           const hasPlan    = (weekPlanMap[i]?.length ?? 0) > 0;
-          const hasRace    = (weekRaceMap[i]?.length ?? 0) > 0;
-          const hasEvent   = (weekEventMap[i]?.length ?? 0) > 0;
+          const dayRaces   = weekRaceMap[i] ?? [];
+          const dayEvents  = weekEventMap[i] ?? [];
+          const hasRace    = dayRaces.length > 0;
+          const hasEvent   = dayEvents.length > 0;
+          // Races are always red (matches the RACES badge elsewhere); events take on
+          // their own category color (Travel/Sick/Injured/etc.), same as the Calendar tab.
+          const eventDotColor = hasRace ? colors.red : hasEvent ? eventCategoryColor(dayEvents[0].category) : undefined;
           return (
             <TouchableOpacity
               key={day.iso}
@@ -335,7 +340,7 @@ export default function DashboardScreen({ user, db, onSaved, onEditEntry }: Prop
             >
               {hasPlan && <View style={styles.miniPlanDot} />}
               {(hasRace || hasEvent) && (
-                <View style={[styles.miniEventDot, { backgroundColor: hasRace ? colors.red : colors.amber }]} />
+                <View style={[styles.miniEventDot, { backgroundColor: eventDotColor }]} />
               )}
               <Text style={[styles.miniDayName, isToday && styles.miniDayNameToday]}>
                 {WEEK_DAYS[i]}
