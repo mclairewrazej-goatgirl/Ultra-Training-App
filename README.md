@@ -42,10 +42,14 @@ A single-file, browser-based training log built for endurance athletes. Log work
 - Next-race countdown on the dashboard; a "How did it go?" prompt for races with no result yet
 - Confetti and a finish-time / placement prompt when you finish a race (including from Strava sync)
 
+### Stats
+- Year totals and a month-by-month table (distance, hours, vert, cross-training, recovery) plus cross-training by type
+
 ### Nutrition Database
 - Build a personal fuel database (gels, bars, drink mixes, etc.)
 - Attach nutrition entries to individual workouts to track fueling
-- Customize item names, calories, and carb content
+- Items have a category (Fuel, Hydration, Electrolyte, …), carbs, water, sodium, calories and caffeine
+- Each activity shows carbs / water / sodium per hour, using elapsed time when you've entered it
 
 ### Calculator
 - Pace calculator: enter distance + time to get pace in min/km and min/mi
