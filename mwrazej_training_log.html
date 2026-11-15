@@ -167,6 +167,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .cal-num{font-size:11px;color:var(--muted);margin-bottom:4px}
 .cal-num.today-num{color:var(--pink);font-weight:700}
 .cal-pip{font-size:10px;margin-top:2px;line-height:1.4}
+.sub-chips{display:flex;flex-wrap:wrap;gap:6px}
+.sub-chip{font:inherit;font-size:12px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer}
+.sub-chip.on{border-color:var(--green);background:rgba(46,196,182,.15);color:var(--green);font-weight:600}
+.sub-chips.strength .sub-chip.on{border-color:var(--amber);background:rgba(255,171,64,.15);color:var(--amber)}
 .goals-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}
 .goal-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
 .goal-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
@@ -836,7 +840,8 @@ function load(){
   getDocRef().get().then(function(doc){
     if(doc.exists) DB=Object.assign(DB,doc.data());
     if(!DB.events)DB.events=[];
-    if(migrateYogaToRecovery())save();
+    var moved=migrateYogaToRecovery();
+    if(migrateRecoveryRuns()||moved)save();
     document.body.setAttribute('data-theme',DB.theme==='light'?'light':'dark');
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
@@ -2166,7 +2171,7 @@ function buildOtherModal(){return`<div class="modal">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${todayISO()}"></div>
     <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="f-category" onchange="updateOtherSubs()"><option value="strength">Strength</option><option value="recovery">Recovery</option></select></div>
   </div>
-  <div class="form-group"><label class="form-label">Activity</label><select class="form-input" id="f-subtype"><option>Indoor Climbing</option><option>Gym Strength</option></select></div>
+  <div class="form-group"><label class="form-label">What did you do? <span style="text-transform:none;letter-spacing:0;color:var(--muted2)">(pick all that apply)</span></label><div class="sub-chips" id="f-subtype-chips"></div></div>
   <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="f-dur"></div>
   <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="3" placeholder="Exercises, sets, how you felt..."></textarea></div>
   <div class="modal-footer">
@@ -2260,7 +2265,7 @@ function fillForm(data,type){
   }
   if(type==='other'&&data._type){
     var cat=document.getElementById('f-category');
-    if(cat){cat.value=data._type;updateOtherSubs();setTimeout(()=>{var st=document.getElementById('f-subtype');if(st&&data.subtype)st.value=data.subtype;},10);}
+    if(cat){cat.value=data._type;updateOtherSubs(subtypeList(data));}
   }
   if(type==='race'){
     ['f-race-name','f-loc','f-goal','f-result','f-race-vert'].forEach(id=>{
@@ -2343,14 +2348,19 @@ function saveOther(){
   var date=document.getElementById('f-date')?.value;
   if(!date){alert('Please enter a date.');return;}
   var cat=document.getElementById('f-category')?.value||'strength';
+  var picked=selectedChips('f-subtype-chips');
+  if(!picked.length)picked=[cat==='strength'?'Other Strength':'Other Recovery'];
   var obj={id:editingId||uid(),date,actType:cat,
-    subtype:document.getElementById('f-subtype')?.value,
+    subtypes:picked,subtype:picked.join(', '),
     dur:document.getElementById('f-dur')?.value||0,
     notes:document.getElementById('f-notes')?.value||''
   };
   var arr=cat==='strength'?DB.strengths:DB.recoveries;
   var other=cat==='strength'?DB.recoveries:DB.strengths;
   if(editingId){
+    // Keep fields the form doesn't show (Strava id, plan link) when editing.
+    var prev=arr.concat(other).find(r=>r.id===editingId);
+    if(prev)obj=Object.assign({},prev,obj);
     var idx=arr.findIndex(r=>r.id===editingId);
     if(idx>=0){arr[idx]=obj;}
     else{var oidx=other.findIndex(r=>r.id===editingId);if(oidx>=0)other.splice(oidx,1);arr.push(obj);}
@@ -3127,7 +3137,7 @@ function showStravaSelectModal(acts){
     var date=(act.start_date_local||'').slice(0,10);
     var distKm=parseFloat(((act.distance||0)/1000).toFixed(1));
     var durMin=Math.round((act.moving_time||0)/60);
-    var sType=act.type||act.sport_type||'Activity';
+    var sType=stravaSport(act)||'Activity';
     var hasPlan=DB.plans.some(function(p){return p.date===date&&!p.completed;});
     var actDistKm=(act.distance||0)/1000;
     var hasRaceMatch=DB.races.some(function(r){
@@ -3210,11 +3220,13 @@ function stravaImportSelected(){
   stravaNomatchQueue=[];
   stravaRaceQueue=[];
   stravaMaybeRaceQueue=[];
+  stravaSubtypeQueue=[];
   selected.forEach(function(act){
     var date=(act.start_date_local||'').slice(0,10);
-    var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed;});
+    var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed&&stravaPlanFits(act,p);});
     var actDistKm=(act.distance||0)/1000;
-    var sType=act.type||act.sport_type||'';
+    var sType=stravaSport(act);
+    var isOther=['recovery','strength'].indexOf(stravaCategory(act))>-1;
     var runT=['Run','TrailRun','VirtualRun'];
     var rideT=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
     var skiT=['NordicSki','BackcountrySki','AlpineSki'];
@@ -3226,7 +3238,7 @@ function stravaImportSelected(){
     });
     if(racesForDate.length>0)stravaRaceQueue.push({stravaAct:act,races:racesForDate,plans:plansForDate});
     else if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
-    else if(looksLikeRace(act))stravaMaybeRaceQueue.push(act);
+    else if(!isOther&&looksLikeRace(act))stravaMaybeRaceQueue.push(act);
     else stravaNomatchQueue.push(act);
   });
   processNextStravaItem();
@@ -3255,6 +3267,9 @@ function processNextStravaItem(){
     save();
     renderAll();
     showStravaToast(count+' Strava activit'+(count===1?'y':'ies')+' added to your training log.');
+  }
+  if(stravaSubtypeQueue.length>0){
+    setTimeout(showStravaSubtypePrompt,150);
   }
 }
 
@@ -3286,7 +3301,7 @@ function showStravaMatchModal(item){
       '<button class="modal-close" onclick="stravaAddAndSkip(\''+actId+'\')" style="font-size:22px">&times;</button>'+
     '</div>'+
     '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">'+escHtml(act.name||'Activity')+'</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+date+' &middot; '+escHtml(act.type||act.sport_type||'')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+date+' &middot; '+escHtml(stravaSport(act)||'')+'</div>'+
     statsHtml+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">You have '+(plans.length===1?'a planned workout':plans.length+' planned workouts')+' on this day. Does this activity complete one of them?</div>'+
     planBtns+
@@ -3311,12 +3326,23 @@ function stravaApplyToPlan(planId,stravaActId){
     p.actualHr=act.average_heartrate?Math.round(act.average_heartrate):0;
     p.completionNotes=act.name?'Strava: '+act.name:'';
     p.actualActivityType=p.actualActivityType||p.type;
-    var sType=act.type||act.sport_type||'';
+    var sType=stravaSport(act)||'';
     if(sType==='TrailRun')p.actualTerrain='trail';
     else if(sType==='VirtualRun')p.actualTerrain='treadmill';
     else if(!p.actualTerrain)p.actualTerrain='road';
     p.stravaActivityId=stravaActId;
+    var sCat=stravaCategory(act);
+    if(sCat==='recovery')p.actualActivityType='Recovery';
+    else if(sCat==='strength')p.actualActivityType='Strength';
     upsertActivityFromPlan(p);
+    if(sCat==='recovery'||sCat==='strength'){
+      var logged=(sCat==='recovery'?DB.recoveries:DB.strengths).find(function(r){return r.planId===p.id;});
+      if(logged){
+        var subs=stravaDefaultSubtypes(act,sCat);
+        logged.subtypes=subs;logged.subtype=subs.join(', ');logged.stravaId=stravaActId;
+        stravaSubtypeQueue.push({id:logged.id,cat:sCat});
+      }
+    }
     celebrate('Strava workout logged! ⚡');
     maybeCelebrateWeeklyGoal();
   }
@@ -3366,7 +3392,7 @@ function showStravaRaceMatchModal(item){
       '<button class="modal-close" onclick="stravaSkipRaceMatch(\''+actId+'\')" style="font-size:22px">&times;</button>'+
     '</div>'+
     '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">'+escHtml(act.name||'Activity')+'</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+date+' &middot; '+escHtml(act.type||act.sport_type||'')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+date+' &middot; '+escHtml(stravaSport(act)||'')+'</div>'+
     statsHtml+
     '<div style="font-size:13px;font-weight:600;color:var(--pink);margin-bottom:6px">&#127937; Race day match!</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">This activity matches a race you have scheduled. Was this your race?</div>'+
@@ -3415,52 +3441,51 @@ function stravaSkipRaceMatch(stravaActId){
 
 function stravaAddAsActivity(act){
   var existingStrId=String(act.id);
-  if(DB.runs.some(function(r){return r.stravaId===existingStrId;})||
-     DB.crosses.some(function(r){return r.stravaId===existingStrId;})||
-     DB.strengths.some(function(r){return r.stravaId===existingStrId;}))return;
+  if([DB.runs,DB.crosses,DB.strengths,DB.recoveries].some(function(a){return a.some(function(r){return r.stravaId===existingStrId;});}))return;
   var date=(act.start_date_local||'').slice(0,10);
-  var sType=act.type||act.sport_type||'Run';
+  var sType=stravaSport(act);
+  var cat=stravaCategory(act);
+  var cycling=isCycling();
   var distKm=parseFloat(((act.distance||0)/1000).toFixed(2));
   var durMin=Math.round((act.moving_time||0)/60);
   var vert=Math.round(act.total_elevation_gain||0);
   var hr=act.average_heartrate?Math.round(act.average_heartrate):0;
   var elMin=Math.round((act.elapsed_time||0)/60);
   var base={id:uid(),date:date,dist:distKm,dur:durMin,elapsed:elMin>durMin?elMin:'',vert:vert,hr:hr,notes:act.name||'',stravaId:String(act.id)};
-  var runTypes=['Run','TrailRun','VirtualRun'];
-  var rideTypes=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
-  var strengthTypes=['RockClimbing','WeightTraining','Crossfit'];
-  var skiTypes=['NordicSki','BackcountrySki','AlpineSki'];
-  if((runTypes.includes(sType)&&!isCycling())||(!rideTypes.includes(sType)&&!strengthTypes.includes(sType)&&!skiTypes.includes(sType)&&!['Hike','Walk'].includes(sType)&&isCycling()===false&&sType!=='')){
-    var terrain='road';
-    if(sType==='TrailRun')terrain='trail';
-    else if(sType==='VirtualRun')terrain='treadmill';
+  if(cat==='recovery'||cat==='strength'){
+    var subs=stravaDefaultSubtypes(act,cat);
+    var entry={id:base.id,date:date,actType:cat,subtypes:subs,subtype:subs.join(', '),dur:durMin,hr:hr,notes:base.notes,stravaId:base.stravaId};
+    (cat==='recovery'?DB.recoveries:DB.strengths).push(entry);
+    stravaSubtypeQueue.push({id:entry.id,cat:cat});
+    return;
+  }
+  if(cat==='run'&&!cycling){
+    var terrain=sType==='TrailRun'?'trail':sType==='VirtualRun'?'treadmill':'road';
     DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',terrain:terrain,workoutDetails:'',nutritionEntries:[]}));
-  }else if(rideTypes.includes(sType)){
-    if(isCycling()){
-      var bikeType='Road';
-      if(sType==='GravelRide')bikeType='Gravel';
-      if(sType==='MountainBikeRide')bikeType='Mountain';
+    return;
+  }
+  if(cat==='ride'){
+    if(cycling){
+      var bikeType=sType==='GravelRide'?'Gravel':/MountainBike/.test(sType)?'Mountain':'Road';
       DB.runs.push(Object.assign({},base,{actType:'run',runType:'easy',bikeType:bikeType,terrain:'road',workoutDetails:'',nutritionEntries:[]}));
     }else{
-      var crossBikeType='Road Bike';
-      if(sType==='GravelRide')crossBikeType='Gravel Bike';
-      if(sType==='MountainBikeRide')crossBikeType='Mountain Bike';
+      var crossBikeType=sType==='GravelRide'?'Gravel Bike':/MountainBike/.test(sType)?'Mountain Bike':'Road Bike';
       DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossBikeType,rpe:0,nutritionEntries:[]}));
     }
-  }else if(['Yoga','Pilates'].includes(sType)){
-    DB.recoveries.push(Object.assign({},base,{actType:'recovery',subtype:sType==='Yoga'?'Yoga':'Mobility'}));
-  }else if(strengthTypes.includes(sType)){
-    var sub=sType==='RockClimbing'?'Indoor Climbing':'Gym Strength';
-    DB.strengths.push(Object.assign({},base,{actType:'strength',subtype:sub}));
-  }else if(['Hike','Walk'].includes(sType)&&isCycling()===false){
-    DB.runs.push(Object.assign({},base,{actType:'run',runType:'hike',terrain:'trail',workoutDetails:'',nutritionEntries:[]}));
-  }else{
-    var crossSub='Cross Train';
-    if(['Hike','Walk'].includes(sType))crossSub='Hike';
-    else if(skiTypes.includes(sType))crossSub='Skate Ski';
-    else if(runTypes.includes(sType))crossSub='Run';
-    DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossSub,rpe:0,nutritionEntries:[]}));
+    return;
   }
+  if(cat==='hike'&&!cycling){
+    DB.runs.push(Object.assign({},base,{actType:'run',runType:'hike',terrain:'trail',workoutDetails:'',nutritionEntries:[]}));
+    return;
+  }
+  var crossSub='Cross Train';
+  if(cat==='hike')crossSub='Hike';
+  else if(cat==='run')crossSub='Run';
+  else if(sType==='NordicSki')crossSub='Skate Ski';
+  else if(sType==='BackcountrySki')crossSub='Backcountry Ski';
+  else if(sType==='AlpineSki')crossSub='Alpine Ski';
+  else if(sType&&sType!=='Workout')crossSub=sType.replace(/([a-z])([A-Z])/g,'$1 $2');
+  DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossSub,rpe:0,nutritionEntries:[]}));
 }
 
 function markStravaProcessed(stravaActId){
@@ -3948,16 +3973,38 @@ function finishRaceSkip(){closeAllModals();var cb=raceFinishDone;raceFinishDone=
 
 
 // ─── STRENGTH / RECOVERY SUBTYPES ───────────────────────────────────────────
+// An entry can have several (e.g. Stretching + Foam Rolling). Stored as
+// subtypes:[...] plus subtype:'Stretching, Foam Rolling' so older screens still read it.
 var OTHER_SUBTYPES={
-  strength:['Gym Strength','Indoor Climbing','Core','Other Strength'],
-  recovery:['Yoga','Stretching','Mobility','Foam Rolling','Massage','Physio','Other Recovery']
+  strength:['Gym Strength','Core','Bodyweight','Indoor Climbing','Outdoor Climbing','Other Strength'],
+  recovery:['Yoga','Stretching','Mobility','Foam Rolling','Massage','Physio Exercises','Pilates','Other Recovery']
 };
-function updateOtherSubs(){
+var LEGACY_SUBTYPES={'Physio':'Physio Exercises'};
+function subtypeList(r){
+  var list=Array.isArray(r&&r.subtypes)&&r.subtypes.length?r.subtypes:String((r&&r.subtype)||'').split(',');
+  return list.map(function(x){x=String(x).trim();return LEGACY_SUBTYPES[x]||x;}).filter(Boolean);
+}
+function subChipsHtml(cat,selected){
+  var list=(OTHER_SUBTYPES[cat]||OTHER_SUBTYPES.strength).slice();
+  selected.forEach(function(x){if(list.indexOf(x)===-1)list.push(x);});
+  return list.map(function(x){
+    return'<button type="button" class="sub-chip'+(selected.indexOf(x)>-1?' on':'')+'" data-val="'+escHtml(x)+'" onclick="this.classList.toggle(\'on\')">'+escHtml(x)+'</button>';
+  }).join('');
+}
+function selectedChips(containerId){
+  var out=[];
+  document.querySelectorAll('#'+containerId+' .sub-chip.on').forEach(function(b){out.push(b.dataset.val);});
+  return out;
+}
+function updateOtherSubs(selected){
   var cat=document.getElementById('f-category')?.value||'strength';
-  var sel=document.getElementById('f-subtype');if(!sel)return;
-  var cur=sel.value,list=OTHER_SUBTYPES[cat]||OTHER_SUBTYPES.strength;
-  if(cur&&list.indexOf(cur)===-1&&OTHER_SUBTYPES.strength.concat(OTHER_SUBTYPES.recovery).indexOf(cur)===-1)list=list.concat([cur]);
-  sel.innerHTML=list.map(function(s){return'<option'+(s===cur?' selected':'')+'>'+s+'</option>';}).join('');
+  var box=document.getElementById('f-subtype-chips');if(!box)return;
+  if(!Array.isArray(selected)){
+    // Switching category: keep only picks that exist in the new list.
+    selected=selectedChips('f-subtype-chips').filter(function(x){return OTHER_SUBTYPES[cat].indexOf(x)>-1;});
+  }
+  box.className='sub-chips '+cat;
+  box.innerHTML=subChipsHtml(cat,selected);
 }
 // Yoga used to sync from Strava as strength. Move those entries to recovery once.
 function migrateYogaToRecovery(){
@@ -3969,6 +4016,108 @@ function migrateYogaToRecovery(){
   }
   DB.yogaMigrated=true;
   return true;
+}
+// Yoga, Pilates and other non-run Strava activities were also landing in runs
+// (the run check matched any unknown type). Move Strava "runs" with no distance
+// and a recovery-sounding name into recovery once.
+var RECOVERY_NAME_RE=/\b(yoga|pilates|stretch(ing)?|mobility|foam ?roll(ing)?|massage|physio)\b/i;
+function guessRecoverySubtypes(name){
+  var n=name||'',out=[];
+  [['Yoga',/yoga/i],['Pilates',/pilates/i],['Stretching',/stretch/i],['Mobility',/mobility/i],['Foam Rolling',/foam ?roll/i],['Massage',/massage/i],['Physio Exercises',/physio/i]]
+    .forEach(function(m){if(m[1].test(n))out.push(m[0]);});
+  return out;
+}
+function migrateRecoveryRuns(){
+  if(DB.recoveryRunsMigrated)return false;
+  var moved=DB.runs.filter(function(r){return r.stravaId&&!r.planId&&pf(r.dist)<0.1&&RECOVERY_NAME_RE.test(r.notes||'');});
+  if(moved.length){
+    var ids=moved.map(function(r){return r.id;});
+    DB.runs=DB.runs.filter(function(r){return ids.indexOf(r.id)===-1;});
+    moved.forEach(function(r){
+      var subs=guessRecoverySubtypes(r.notes);if(!subs.length)subs=['Other Recovery'];
+      DB.recoveries.push({id:r.id,date:r.date,actType:'recovery',subtypes:subs,subtype:subs.join(', '),dur:r.dur,hr:r.hr,notes:r.notes,stravaId:r.stravaId});
+    });
+  }
+  DB.recoveryRunsMigrated=true;
+  return true;
+}
+
+// ─── STRAVA: activity type → where it goes in the log ───────────────────────
+// sport_type is the detailed type (Pilates, HIIT...); the older "type" field
+// reports many of those as plain "Workout", so read sport_type first.
+function stravaSport(act){return(act&&(act.sport_type||act.type))||'';}
+var STRAVA_RUN=['Run','TrailRun','VirtualRun'];
+var STRAVA_RIDE=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','EMountainBikeRide','Velomobile'];
+var STRAVA_SKI=['NordicSki','BackcountrySki','AlpineSki'];
+var STRAVA_RECOVERY=['Yoga','Pilates','Stretching'];
+var STRAVA_STRENGTH=['WeightTraining','Crossfit','RockClimbing'];
+function stravaCategory(act){
+  var t=stravaSport(act),name=act.name||'';
+  if(STRAVA_RUN.indexOf(t)>-1)return'run';
+  if(STRAVA_RIDE.indexOf(t)>-1)return'ride';
+  if(STRAVA_SKI.indexOf(t)>-1)return'ski';
+  if(t==='Hike'||t==='Walk')return'hike';
+  if(STRAVA_RECOVERY.indexOf(t)>-1)return'recovery';
+  if(STRAVA_STRENGTH.indexOf(t)>-1)return'strength';
+  if(t==='Workout'||t==='HighIntensityIntervalTraining'){
+    if(RECOVERY_NAME_RE.test(name))return'recovery';
+    if(/\b(strength|core|gym|lift(ing)?|weights?|abs|climb(ing)?|boulder(ing)?)\b/i.test(name))return'strength';
+  }
+  return'cross';
+}
+function stravaDefaultSubtypes(act,cat){
+  var t=stravaSport(act),name=act.name||'';
+  if(cat==='recovery'){
+    var g=guessRecoverySubtypes(name);
+    if(t==='Yoga'&&g.indexOf('Yoga')===-1)g.unshift('Yoga');
+    if(t==='Pilates'&&g.indexOf('Pilates')===-1)g.unshift('Pilates');
+    if(t==='Stretching'&&g.indexOf('Stretching')===-1)g.unshift('Stretching');
+    return g.length?g:['Other Recovery'];
+  }
+  if(t==='RockClimbing')return[/outdoor|crag|multi.?pitch|trad|sport climb/i.test(name)?'Outdoor Climbing':'Indoor Climbing'];
+  var s=[];
+  if(/\bcore|abs\b/i.test(name))s.push('Core');
+  if(t==='WeightTraining'||t==='Crossfit'||/gym|lift|weights?/i.test(name)||!s.length)s.unshift('Gym Strength');
+  return s;
+}
+// Plans a Strava activity can complete: yoga shouldn't tick off a long run.
+function stravaPlanFits(act,p){
+  var c=stravaCategory(act),t=p.type||'';
+  if(c==='recovery')return t==='Recovery'||t==='Rest';
+  if(c==='strength')return t==='Strength';
+  return t!=='Recovery'&&t!=='Rest'&&t!=='Strength';
+}
+
+// After import, ask what a recovery or strength session actually was.
+var stravaSubtypeQueue=[];
+function showStravaSubtypePrompt(){
+  var item=stravaSubtypeQueue[0];
+  var arr=item.cat==='strength'?DB.strengths:DB.recoveries;
+  var r=arr.find(function(x){return x.id===item.id;});
+  if(!r){stravaSubtypeQueue.shift();processNextStravaItem();return;}
+  var isRec=item.cat==='recovery';
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal" style="max-width:440px">'+
+    '<div class="modal-title">'+(isRec?'🧘 What recovery did you do?':'💪 What kind of strength?')+'<button class="modal-close" onclick="stravaSubtypeDone(false)">✕</button></div>'+
+    '<div style="font-size:15px;font-weight:600;color:var(--text)">'+escHtml(r.notes||'Strava activity')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin:4px 0 14px">'+fmtDateShort(r.date)+(pi(r.dur)?' · '+minsToHM(pi(r.dur)):'')+' · logged as '+(isRec?'Recovery':'Strength')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Pick everything you did.</div>'+
+    '<div class="sub-chips '+item.cat+'" id="sp-chips">'+subChipsHtml(item.cat,subtypeList(r))+'</div>'+
+    '<div class="modal-footer"><button class="btn btn-outline" onclick="stravaSubtypeDone(false)">Skip</button><button class="btn btn-pink" onclick="stravaSubtypeDone(true)">Save</button></div>'+
+  '</div>';
+  document.getElementById('modal-container').appendChild(wrap);
+}
+function stravaSubtypeDone(save_){
+  var item=stravaSubtypeQueue.shift();
+  if(save_&&item){
+    var picked=selectedChips('sp-chips');
+    var arr=item.cat==='strength'?DB.strengths:DB.recoveries;
+    var r=arr.find(function(x){return x.id===item.id;});
+    if(r&&picked.length){r.subtypes=picked;r.subtype=picked.join(', ');save();renderAll();}
+  }
+  closeAllModals();
+  processNextStravaItem();
 }
 
 // ─── TRAINING EVENTS (travel, trips, sick, injured) ─────────────────────────
@@ -4136,7 +4285,7 @@ function stravaMaybeRaceAnswer(yes){
   markStravaProcessed(String(act.id));
   if(!yes){save();renderAll();processNextStravaItem();return;}
   var t=act.elapsed_time||act.moving_time||0;
-  var sType=act.type||act.sport_type||'';
+  var sType=stravaSport(act)||'';
   var raceType=/Ride/.test(sType)?'bike':/Ski/.test(sType)?'skimo':'run';
   var race={id:uid(),name:act.name||'Race',date:(act.start_date_local||'').slice(0,10),raceType:raceType,
     bikeType:raceType==='bike'?(sType==='GravelRide'?'Gravel':sType==='MountainBikeRide'?'Mountain':'Road'):'',
