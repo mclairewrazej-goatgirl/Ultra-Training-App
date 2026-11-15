@@ -765,19 +765,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <script>
 // ─── STRAVA CONFIG ──────────────────────────────────────────────────────────
 // To enable Strava sync:
-// 1. Go to https://www.strava.com/settings/api and create an API application
-// 2. Set "Authorization Callback Domain" to your Netlify domain (e.g. mwrazej-training.netlify.app)
-// 3. Replace 'YOUR_STRAVA_CLIENT_ID' below with your numeric Client ID
-// 4. Set STRAVA_REDIRECT_URI below to the exact URL of this page on your deployment
-//    (must match a URI registered in your Strava app settings exactly)
-//    e.g. 'https://mwrazej-training.netlify.app/mwrazej_training_log.html'
-// 5. In Netlify → Site settings → Environment variables, add:
-//      STRAVA_CLIENT_ID     = your Client ID
-//      STRAVA_CLIENT_SECRET = your Client Secret
+// 1. At https://www.strava.com/settings/api set "Authorization Callback Domain"
+//    to this site's domain (e.g. ultra-training-app-pearl.vercel.app).
+// 2. In the hosting environment variables (Vercel → Settings → Environment
+//    Variables) add STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET, then redeploy.
 var STRAVA_CLIENT_ID = '235428';
 // Strava sends you back to whichever site you connected from. Its "Authorization
 // Callback Domain" setting must match that site's domain.
 var STRAVA_REDIRECT_URI = (location.protocol === 'https:') ? location.origin + location.pathname : '';
+// Server functions live at /.netlify/functions on Netlify and /api everywhere else (Vercel).
+function stravaFnUrl(name){return (/netlify\.app$/.test(location.hostname)?'/.netlify/functions/':'/api/')+name;}
 // ────────────────────────────────────────────────────────────────────────────
 
 // ─── FIREBASE CONFIG ────────────────────────────────────────────────────────
@@ -2969,12 +2966,20 @@ function renderStravaStatus(){
   else{ca.style.display='block';da.style.display='none';}
 }
 
-function stravaConnect(){
-  if(!STRAVA_CLIENT_ID||STRAVA_CLIENT_ID==='YOUR_STRAVA_CLIENT_ID'){
-    alert('Strava is not yet configured. Please follow the setup instructions in the source code (search for STRAVA_CLIENT_ID).');
-    return;
-  }
-  var redirectUri=encodeURIComponent(STRAVA_REDIRECT_URI||window.location.href.split('?')[0].split('#')[0]);
+async function stravaConnect(){
+  if(!STRAVA_CLIENT_ID){alert('Strava is not set up in this app yet.');return;}
+  if(location.protocol!=='https:'){alert('Strava can only be connected from the live site (https), not from a local copy.');return;}
+  // Check the server side first, so a missing setting shows a clear message here
+  // instead of failing after the trip to Strava.
+  var problem='';
+  try{
+    var r=await fetch(stravaFnUrl('strava-exchange-token'),{method:'GET'});
+    var j=await r.json().catch(function(){return {};});
+    if(r.status===404)problem='The Strava sign-in helper is missing from this deployment. Redeploy the site.';
+    else if(!j.configured)problem='Strava keys are missing on the server. In Vercel, open the project → Settings → Environment Variables, add STRAVA_CLIENT_ID (235428) and STRAVA_CLIENT_SECRET (from strava.com/settings/api), then Deployments → ⋯ → Redeploy.';
+  }catch(e){problem='Could not reach the Strava sign-in helper ('+e.message+'). Check your connection and try again.';}
+  if(problem){alert('Strava can\'t connect yet.\n\n'+problem);return;}
+  var redirectUri=encodeURIComponent(STRAVA_REDIRECT_URI);
   window.location.href='https://www.strava.com/oauth/authorize'+
     '?client_id='+encodeURIComponent(STRAVA_CLIENT_ID)+
     '&response_type=code'+
@@ -2995,14 +3000,14 @@ async function handleStravaCallback(){
   var code=params.get('code');
   var scope=params.get('scope');
   var error=params.get('error');
-  if(!code)return;
+  if(!code&&!error)return;
   window.history.replaceState({},'',window.location.pathname+window.location.hash);
   if(error||!scope||!scope.includes('activity:read')){
     alert('Strava authorization was denied or missing activity permissions. Please try again.');
     return;
   }
   try{
-    var resp=await fetch('/.netlify/functions/strava-exchange-token',{
+    var resp=await fetch(stravaFnUrl('strava-exchange-token'),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({code:code})
@@ -3021,7 +3026,7 @@ async function handleStravaCallback(){
     renderStravaStatus();
     showStravaToast('Strava connected! Hit "Sync Activities" to import your workouts.');
   }catch(e){
-    alert('Strava connection failed: '+e.message+'\n\nMake sure STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are set in the hosting environment variables, and that Strava\'s Authorization Callback Domain is '+location.hostname+'.');
+    alert('Strava connection failed: '+e.message);
   }
 }
 
@@ -3030,7 +3035,7 @@ async function stravaGetValidToken(){
   var now=Math.floor(Date.now()/1000);
   if(DB.stravaTokens.expiresAt-now<300){
     try{
-      var resp=await fetch('/.netlify/functions/strava-refresh-token',{
+      var resp=await fetch(stravaFnUrl('strava-refresh-token'),{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({refresh_token:DB.stravaTokens.refreshToken})

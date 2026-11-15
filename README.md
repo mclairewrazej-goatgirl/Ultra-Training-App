@@ -123,7 +123,7 @@ A theme toggle in the sidebar switches between a dark (default) navy palette and
 ## Deploying on Vercel
 
 1. In Vercel, **Add New → Project**, import this GitHub repo. Leave Framework Preset as **Other** and leave the build command and output directory empty.
-2. In **Settings → Environment Variables**, add `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`.
+2. In **Settings → Environment Variables**, add `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`, then redeploy (variables only apply to deployments made after they are added). The **Connect Strava** button checks this first and tells you if they are missing.
 3. In **Firebase Console → Authentication → Settings → Authorized domains**, add your Vercel domain (e.g. `your-app.vercel.app`).
 4. In **Google Cloud Console → APIs & Services → Credentials**, open the *Web client* OAuth client and add `https://your-app.vercel.app/__/auth/handler` under **Authorized redirect URIs**. Sign-in runs through this site's own domain (see the `/__/auth` rewrite in `vercel.json`) so it works in the iPhone home-screen app.
 5. In **Strava → Settings → My API Application**, set **Authorization Callback Domain** to your Vercel domain. Strava allows only one domain, so Strava connect on any other host stops working after this.
