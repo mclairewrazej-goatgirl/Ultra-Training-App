@@ -770,6 +770,8 @@ function save(){
 // Home-screen apps and phones can't reliably use sign-in pop-ups, so they use a
 // full-page redirect instead. Desktop browsers keep the pop-up.
 function useRedirectSignIn(){
+  // Redirect sign-in only works when /__/auth is served from this domain (Vercel).
+  if(FIREBASE_CONFIG.authDomain!==location.hostname)return false;
   var standalone=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);
   var touch=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   return standalone||touch;
