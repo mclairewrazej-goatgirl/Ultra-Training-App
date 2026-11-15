@@ -1,15 +1,23 @@
 exports.handler = async function(event) {
+  const clientId = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+
+  // GET is a setup check the app runs before sending you to Strava.
+  if (event.httpMethod === 'GET') {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ configured: !!(clientId && clientSecret) })
+    };
+  }
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  const clientId = process.env.STRAVA_CLIENT_ID;
-  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
-
   if (!clientId || !clientSecret) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Strava credentials not configured. Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in Netlify environment variables.' })
+      body: JSON.stringify({ error: 'Strava credentials not configured. Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in the hosting environment variables (Vercel: Settings → Environment Variables), then redeploy.' })
     };
   }
 
@@ -41,7 +49,12 @@ exports.handler = async function(event) {
     if (!response.ok || data.errors) {
       return {
         statusCode: response.status,
-        body: JSON.stringify({ error: data.message || 'Strava token exchange failed' })
+        body: JSON.stringify({
+          error: (data.message || 'Strava token exchange failed') +
+            (JSON.stringify(data.errors || []).includes('client')
+              ? '. Check that STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in the hosting settings match strava.com/settings/api exactly, then redeploy.'
+              : '')
+        })
       };
     }
 
