@@ -1629,7 +1629,7 @@ function renderCalendar(){
     dayCross.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--blue);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','cross')">${r.subtype||'CT'}${pf(r.dist)>0?' '+pf(r.dist).toFixed(1)+'km':''}</div>`;});
     daySt.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','strength')">${r.subtype||'Strength'}</div>`;});
     dayRec.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--green);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','recovery')">${r.subtype||'Recovery'}</div>`;});
-    dayPlans.forEach(p=>{var doneIcon=p.completed?'&#10003; ':'';var planColor=p.completed?'var(--green)':'var(--amber)';pips+=`<div class="cal-pip" style="color:${planColor};font-style:italic;cursor:pointer" onclick="event.stopPropagation();viewPlan('${p.id}')">${doneIcon}${p.type}: ${(p.desc||'').slice(0,18)}</div>`;});
+    dayPlans.forEach(p=>{var doneIcon=p.completed?'&#10003; ':'';var planColor=p.completed?'var(--green)':'var(--amber)';pips+=`<div class="cal-pip" style="color:${planColor};font-style:italic;cursor:pointer" onclick="event.stopPropagation();viewPlan('${p.id}')">${doneIcon}${escHtml(p.type)}: ${escHtml((p.desc||'').slice(0,18))}</div>`;});
     dayRaces.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--pink2);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🏁 ${escHtml(r.name)}</div>`;});
     DB.races.forEach(r=>{
       if(r.result)return;
@@ -2220,6 +2220,32 @@ function buildRaceModal(){
   </div>
 </div>`;}
 
+function buildPlanModal(prefill){
+  prefill=prefill||{};
+  var e=function(v){return v==null?'':escHtml(v);};
+  var types=isCycling()?['Ride','Long Ride','Workout','Cross Train','Strength','Rest']:['Run','Long Run','Workout','Cross Train','Strength','Rest'];
+  if(prefill.type&&types.indexOf(prefill.type)===-1)types.push(prefill.type);
+  var opts=types.map(function(t){return'<option'+(prefill.type===t?' selected':'')+'>'+e(t)+'</option>';}).join('');
+  return`<div class="modal">
+  <div class="modal-title">${prefill.id?'Edit Plan':'Plan Workout'} <button class="modal-close" onclick="closeAllModals()">×</button></div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${e(prefill.date||todayISO())}"></div>
+    <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-plantype">${opts}</select></div>
+  </div>
+  <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="f-plandesc" placeholder="e.g. 12km easy + strides, 10×400m @ 5k pace" value="${e(prefill.desc)}"></div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Target Distance (km)</label><input class="form-input" type="number" inputmode="decimal" step="0.1" id="f-plandist" value="${pf(prefill.dist)||''}"></div>
+    <div class="form-group"><label class="form-label">Target Duration (min)</label><input class="form-input" type="number" inputmode="numeric" id="f-plandur" value="${pi(prefill.dur)||''}"></div>
+  </div>
+  <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-plannotes" rows="2" placeholder="Additional notes for this session...">${e(prefill.notes)}</textarea></div>
+  ${prefill.id?`<input type="hidden" id="f-planid" value="${e(prefill.id)}">`:''}
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
+    <button class="btn btn-pink" onclick="savePlan()">Save Plan</button>
+  </div>
+</div>`;
+}
+
 function fillForm(data,type){
   ['date','dist','dur','vert','hr','notes','elapsed','rpe'].forEach(k=>{
     var el=document.getElementById('f-'+k);
@@ -2403,24 +2429,21 @@ function savePlan(){
   var date=document.getElementById('f-date')?.value;
   if(!date){alert('Please enter a date.');return;}
   var existingId=document.getElementById('f-planid')?.value;
-  var obj={
+  var existing=existingId?DB.plans.find(p=>p.id===existingId):null;
+  // Start from the saved workout so fields this form doesn't show (completion
+  // details, Strava link, import tag) survive an edit.
+  var obj=Object.assign({planned:true,completed:false},existing||{},{
     id:existingId||uid(),
     date,
     type:document.getElementById('f-plantype')?.value||'Run',
     desc:document.getElementById('f-plandesc')?.value||'',
     dist:document.getElementById('f-plandist')?.value||0,
     dur:document.getElementById('f-plandur')?.value||0,
-    notes:document.getElementById('f-plannotes')?.value||'',
-    completed:document.getElementById('f-plan-completed')?.value==='1',
-    actualDist:document.getElementById('f-plan-actual-dist')?.value||0,
-    actualDur:document.getElementById('f-plan-actual-dur')?.value||0,
-    actualVert:document.getElementById('f-plan-actual-vert')?.value||0,
-    actualHr:document.getElementById('f-plan-actual-hr')?.value||0,
-    completionNotes:document.getElementById('f-plan-completion-notes')?.value||''
-  };
-  if(existingId){var idx=DB.plans.findIndex(p=>p.id===existingId);if(idx>=0)DB.plans[idx]=obj;else DB.plans.push(obj);}
+    notes:document.getElementById('f-plannotes')?.value||''
+  });
+  if(existing){var idx=DB.plans.indexOf(existing);DB.plans[idx]=obj;}
   else DB.plans.push(obj);
-  save();closeAllModals();renderCalendar();
+  save();closeAllModals();renderAll();
 }
 
 function deleteAct(id,type){
@@ -2558,18 +2581,18 @@ function viewPlan(id){
         ${p.actualHr?`<div class="detail-box"><div class="detail-val" style="color:var(--green)">${p.actualHr}</div><div class="detail-lbl">Avg HR (bpm)</div></div>`:''}
       </div>`;
     }
-    var actualTypeLine=(p.actualActivityType&&p.actualActivityType!==p.type)?`<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">Planned: <span style="color:var(--amber)">${p.type}</span> &rarr; Completed as: <span style="color:var(--green)">${p.actualActivityType}</span></div>`:'';
+    var actualTypeLine=(p.actualActivityType&&p.actualActivityType!==p.type)?`<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">Planned: <span style="color:var(--amber)">${escHtml(p.type)}</span> &rarr; Completed as: <span style="color:var(--green)">${escHtml(p.actualActivityType)}</span></div>`:'';
     var completionNutritionLine='';
     if(Array.isArray(p.completionNutritionEntries)&&p.completionNutritionEntries.length){
       completionNutritionLine=`<div style="margin-top:10px;font-size:11px;color:var(--muted)">Nutrition entries: ${p.completionNutritionEntries.length}</div>`;
     }
-    completionSection=`<div class="completion-section">${actualTypeLine}${actualLines}${p.completionNotes?`<div style="margin-top:10px;font-size:12px;color:var(--text);line-height:1.6">${p.completionNotes}</div>`:''}${completionNutritionLine}</div>`;
+    completionSection=`<div class="completion-section">${actualTypeLine}${actualLines}${p.completionNotes?`<div style="margin-top:10px;font-size:12px;color:var(--text);line-height:1.6">${escHtml(p.completionNotes)}</div>`:''}${completionNutritionLine}</div>`;
   }
   var html=`<div class="view-modal">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div>
-        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:.5px">${p.type}</span>${doneBadge}</div>
-        <div style="font-size:16px;font-weight:600;color:var(--text);margin-top:4px">${p.desc||'No description'}</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:.5px">${escHtml(p.type)}</span>${doneBadge}</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text);margin-top:4px">${escHtml(p.desc||'No description')}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:4px">${p.date}</div>
       </div>
       <button class="modal-close" onclick="closeAllModals()" style="font-size:22px">×</button>
@@ -2578,7 +2601,7 @@ function viewPlan(id){
       ${pf(p.dist)>0?`<div class="detail-box"><div class="detail-val">${pf(p.dist)} km</div><div class="detail-lbl">Target distance</div></div>`:''}
       ${pi(p.dur)>0?`<div class="detail-box"><div class="detail-val">${minsToHM(pi(p.dur))}</div><div class="detail-lbl">Target duration</div></div>`:''}
     </div>`:''}
-    ${p.notes?`<div style="background:var(--surface2);border-radius:8px;padding:12px;margin-top:12px;font-size:12px;color:var(--text);line-height:1.6">${p.notes}</div>`:''}
+    ${p.notes?`<div style="background:var(--surface2);border-radius:8px;padding:12px;margin-top:12px;font-size:12px;color:var(--text);line-height:1.6;white-space:pre-wrap">${escHtml(p.notes)}</div>`:''}
     ${!p.completed?`<div style="margin-top:14px"><label class="checkbox-label" style="font-size:13px"><input type="checkbox" id="cb-completed" onchange="document.getElementById('completion-section').style.display=this.checked?'block':'none'"> Mark as completed</label></div>`:''}
     ${completionSection}
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
@@ -4057,7 +4080,7 @@ function renderComingUp(){
   var el=document.getElementById('coming-up');if(!el)return;
   var today=todayISO(),end=addDaysISO(today,7),items=[];
   DB.plans.filter(function(p){return!p.completed&&p.date>=today&&p.date<=end;}).forEach(function(p){
-    items.push({date:p.date,color:'var(--amber)',title:escHtml(p.desc||p.type),sub:p.type+(pf(p.dist)?' · '+pf(p.dist)+' km':'')+(pi(p.dur)?' · '+pi(p.dur)+' min':''),onclick:"viewPlan('"+p.id+"')"});
+    items.push({date:p.date,color:'var(--amber)',title:escHtml(p.desc||p.type),sub:escHtml(p.type)+(pf(p.dist)?' · '+pf(p.dist)+' km':'')+(pi(p.dur)?' · '+pi(p.dur)+' min':''),onclick:"viewPlan('"+p.id+"')"});
   });
   (DB.races||[]).filter(function(r){return!r.result&&r.date>=today&&r.date<=end;}).forEach(function(r){
     items.push({date:r.date,color:'var(--pink2)',title:'🏁 '+escHtml(r.name),sub:'Race day',onclick:"openRaceDetail('"+r.id+"')"});
