@@ -130,6 +130,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .plan-add{font-size:16px;line-height:1}
 .import-note{font-size:12px;color:var(--muted);line-height:1.5}
 .import-error{background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.4);color:var(--text);border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px}
+.import-vol{background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px}
+.import-vol .ftab{flex:1;text-align:center}
 .import-warn{background:rgba(255,171,64,.08);border:1px solid rgba(255,171,64,.35);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text);margin-bottom:12px}
 .import-warn ul{margin:6px 0 0 18px;padding:0}
 .import-anchor{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text);margin-bottom:12px}
@@ -2367,6 +2369,31 @@ function suggestRaceForPlan(st){
   return best;
 }
 
+// Plans like SWAP give wide ranges ("6–12 mi") so one plan suits low- and high-volume
+// runners. A volume pick turns each range into one number: the low end, the high end,
+// or the middle (rounded to the nearest half mile/km and 5 minutes).
+var VOLUMES=[['range','Range'],['low','Low'],['mid','Middle'],['high','High']];
+function volPick(R,vol){
+  var out={dist:R.dist||0,distMax:R.distMax||0,dur:R.dur||0,durMax:R.durMax||0};
+  if(!vol||vol==='range')return out;
+  var mid=function(a,b,step){return Math.round((a+b)/2/step)*step;};
+  if(out.distMax>out.dist&&out.dist){
+    var mi=(R.unit||R.srcUnit)==='mi',a=mi?out.dist/MI_KM:out.dist,b=mi?out.distMax/MI_KM:out.distMax;
+    var v=vol==='low'?a:vol==='high'?b:mid(a,b,0.5);
+    out.dist=vol==='low'?out.dist:vol==='high'?out.distMax:(mi?Math.round(v*MI_KM*100)/100:v);
+  }
+  if(out.durMax>out.dur&&out.dur)out.dur=vol==='low'?out.dur:vol==='high'?out.durMax:mid(out.dur,out.durMax,5);
+  out.distMax=0;out.durMax=0;
+  return out;
+}
+// The original range behind a planned workout, if it has one.
+function planRangeOf(p){
+  if(p.planRange)return p.planRange;
+  if(pf(p.distMax)>pf(p.dist)||pi(p.durMax)>pi(p.dur))return{dist:pf(p.dist),distMax:pf(p.distMax),dur:pi(p.dur),durMax:pi(p.durMax),unit:p.descMi||p.distUnit==='mi'?'mi':'km'};
+  return null;
+}
+function volLabel(v){var f=VOLUMES.find(function(x){return x[0]===v;});return f?f[1]:'';}
+
 // Turn the AI's transcription into editable rows (km, real dates computed later).
 function buildImportRows(raw){
   var rows=(raw.workouts||[]).map(function(w,i){
@@ -2379,7 +2406,7 @@ function buildImportRows(raw){
     return{key:i,week:+w.week||1,day:IMPORT_DAYS.indexOf(w.day)>=0?w.day:'Mon',type:type,isRace:w.type==='Race',
       desc:milesToKmText(w.title||''),descMi:d&&d.unit==='mi'||/\d\s*(mi|miles?)\b/i.test(w.title||'')?(w.title||''):'',dist:dist,distMax:distMax,
       dur:u&&+u.min>0?Math.round(+u.min):0,durMax:u&&+u.max>+u.min?Math.round(+u.max):0,
-      notes:notes,source:w.sourceText||'',include:w.type!=='Rest'&&w.type!=='Race',dateOverride:''};
+      notes:notes,source:w.sourceText||'',srcUnit:d&&d.unit==='mi'?'mi':'km',include:w.type!=='Rest'&&w.type!=='Race',dateOverride:''};
   });
   return rows;
 }
@@ -2545,6 +2572,7 @@ function renderImportPreview(){
   var included=st.rows.filter(function(r){return r.include&&!(r._past&&!r.keepPast);}).length;
   var pastCount=st.rows.filter(function(r){return r._past&&r.include;}).length;
   var restCount=st.rows.filter(function(r){return r.type==='Rest';}).length;
+  var rangeCount=st.rows.filter(function(r){return r.distMax>r.dist||r.durMax>r.dur;}).length;
   var n=importPlanWeeks(st),races=upcomingRaces();
   var sel='<select class="form-input" style="margin:6px 0" onchange="setImportAnchor(this.value)">'+
     races.map(function(r){var w=weeksUntilRace(r);return'<option value="race:'+escHtml(r.id)+'"'+(st.anchor==='race'&&st.raceId===r.id?' selected':'')+'>'+escHtml(r.name||'Race')+' · '+fmtDateShort(r.date)+' · '+w+' wk away</option>';}).join('')+
@@ -2569,12 +2597,15 @@ function renderImportPreview(){
     '<div class="import-anchor"><div style="flex:1 1 100%">'+anchorLine+'</div><span style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="shiftImport(-1)">‹ Week earlier</button><button class="btn btn-outline btn-sm" onclick="shiftImport(1)">Week later ›</button></span></div>'+
     (warn.length?'<div class="import-warn"><b>Check these against the PDF:</b><ul>'+warn.map(function(w){return'<li>'+escHtml(w)+'</li>';}).join('')+'</ul></div>':'')+
     (pastCount?'<div class="import-note" style="margin-bottom:10px">'+pastCount+' workout'+(pastCount>1?'s fall':' falls')+' before today and won\'t be added.</div>':'')+
+    (rangeCount?'<div class="import-vol"><div style="font-weight:600;font-size:12px;margin-bottom:4px">Your volume</div><div class="filter-tabs" style="margin:0">'+VOLUMES.map(function(v){return'<div class="ftab'+((st.volume||'range')===v[0]?' active':'')+'" onclick="setImportVolume(\''+v[0]+'\')">'+v[1]+'</div>';}).join('')+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+rangeCount+' sessions have a range. '+((st.volume||'range')==='range'?'Pick low, middle or high to give each one a single distance.':(st.volume==='mid'?'Using the middle of each range':'Using the '+volLabel(st.volume).toLowerCase()+' end of each range')+(st.volume==='mid'?' (rounded to the nearest half '+(st.rows.some(function(r){return r.srcUnit==='mi';})?'mile':'km')+')':'')+'. You can change this later on the Training Plan page.')+'</div></div>':'')+
     (restCount?'<label class="checkbox-label" style="margin-bottom:10px;font-size:12px"><input type="checkbox" '+(st.showRest?'checked':'')+' onchange="toggleImportRest(this.checked)"> Add rest days to the calendar too ('+restCount+')</label>':'')+
     '<div class="import-weeks">'+weeks.map(function(wk){
       var rows=groups[wk];
       var first=rows[0]&&rows[0]._date,last=rows[rows.length-1]&&rows[rows.length-1]._date;
-      var km=rows.filter(function(r){return r.include;}).reduce(function(s,r){return s+(r.dist||0);},0);
-      return'<div class="import-week"><div class="import-week-hdr">Week '+wk+(first?' · '+fmtDateShort(first)+(last&&last!==first?' – '+fmtDateShort(last):''):'')+(km?'<span>'+fmtNum(km)+'+ km</span>':'')+'</div>'+
+      var inc=rows.filter(function(r){return r.include;}).map(function(r){return volPick(r,st.volume);});
+      var km=inc.reduce(function(s,v){return s+(v.dist||0);},0),kmMax=inc.reduce(function(s,v){return s+(v.distMax||v.dist||0);},0);
+      return'<div class="import-week"><div class="import-week-hdr">Week '+wk+(first?' · '+fmtDateShort(first)+(last&&last!==first?' – '+fmtDateShort(last):''):'')+(km?'<span>'+fmtNum(km)+(kmMax>km?'–'+fmtNum(kmMax):'')+' km</span>':'')+'</div>'+
         rows.map(function(r){return importRowHtml(r);}).join('')+'</div>';
     }).join('')+'</div>'+
     '<div class="modal-footer" style="position:sticky;bottom:-22px;background:var(--surface);padding:12px 0 4px;margin-top:10px">'+
@@ -2587,7 +2618,8 @@ function renderImportPreview(){
 
 function importRowHtml(r){
   var dim=!r.include||r._past;
-  var meta=[escHtml(r.type),planDistText(r),planDurText(r)].filter(Boolean).join(' · ');
+  var v=volPick(r,planImport&&planImport.volume);
+  var meta=[escHtml(r.type),planDistText(v),planDurText(v)].filter(Boolean).join(' · ');
   if(r.editing){
     var types=['Run','Long Run','Workout','Cross Train','Strength','Rest'];
     if(types.indexOf(r.type)<0)types.push(r.type);
@@ -2614,6 +2646,7 @@ function importRowHtml(r){
 
 function findImportRow(key){return planImport.rows.find(function(r){return r.key===key;});}
 function toggleImportRow(key,on){var r=findImportRow(key);if(r){r.include=on;saveImportDraft();renderImportPreview();}}
+function setImportVolume(v){planImport.volume=v;saveImportDraft();renderImportPreview();}
 function toggleImportRest(on){planImport.showRest=on;planImport.rows.forEach(function(r){if(r.type==='Rest')r.include=on;});saveImportDraft();renderImportPreview();}
 function setImportAnchor(v){
   if(v==='start'){planImport.anchor='start';if(!planImport.startDate)planImport.startDate=addDaysISO(mondayOf(todayISO()),7);}
@@ -2645,15 +2678,17 @@ function commitImport(){
   var dates=[];
   rows.forEach(function(r){
     var date=importRowDate(st,r,w1);dates.push(date);
-    var p={id:uid(),date:date,type:r.type,desc:r.desc,dist:r.dist||0,dur:r.dur||0,notes:r.notes,planned:true,completed:false,importId:importId};
-    if(r.distMax)p.distMax=r.distMax;
+    var v=volPick(r,st.volume);
+    var p={id:uid(),date:date,type:r.type,desc:r.desc,dist:v.dist||0,dur:v.dur||0,notes:r.notes,planned:true,completed:false,importId:importId};
+    if(v.distMax)p.distMax=v.distMax;
     if(r.descMi)p.descMi=r.descMi;
-    if(r.durMax)p.durMax=r.durMax;
+    if(v.durMax)p.durMax=v.durMax;
+    if(r.distMax>r.dist||r.durMax>r.dur)p.planRange={dist:r.dist||0,distMax:r.distMax||0,dur:r.dur||0,durMax:r.durMax||0,unit:r.srcUnit||'km'};
     DB.plans.push(p);
   });
   dates.sort();
   if(!Array.isArray(DB.planImports))DB.planImports=[];
-  DB.planImports.push({id:importId,name:st.raw.planName||st.fileName||'Training plan',fileName:st.fileName||'',raceId:st.anchor==='race'?st.raceId:'',startDate:dates[0],endDate:dates[dates.length-1],count:rows.length,importedAt:Date.now()});
+  DB.planImports.push({id:importId,name:st.raw.planName||st.fileName||'Training plan',fileName:st.fileName||'',raceId:st.anchor==='race'?st.raceId:'',startDate:dates[0],endDate:dates[dates.length-1],count:rows.length,volume:st.volume||'range',importedAt:Date.now()});
   save();clearImportDraft();planImport=null;closeAllModals();
   var d0=parseLocalDate(dates[0]);calYear=d0.getFullYear();calMonth=d0.getMonth();
   renderAll();
@@ -2720,6 +2755,10 @@ function renderPlansPage(){
   var head='<div class="plan-head"><div style="min-width:0"><div class="plan-name" style="font-size:15px">'+escHtml(imp.name)+'</div>'+
     '<div class="plan-meta">'+fmtDateShort(imp.startDate)+' – '+fmtDateShort(imp.endDate)+(race?' · for '+escHtml(race.name):'')+' · '+mine.length+' workouts, '+done+' done</div></div>'+
     '<div class="plan-actions"><button class="btn btn-outline btn-sm" onclick="shiftImportedPlan(\''+escHtml(imp.id)+'\',-1)">‹ Week</button><button class="btn btn-outline btn-sm" onclick="shiftImportedPlan(\''+escHtml(imp.id)+'\',1)">Week ›</button><button class="btn btn-danger btn-sm" onclick="deleteImportedPlan(\''+escHtml(imp.id)+'\')">Delete</button></div></div>';
+  var ranged=mine.filter(function(p){return!p.completed&&planRangeOf(p);}).length;
+  var curVol=imp.volume||'range';
+  if(ranged)head+='<div class="import-vol" style="margin-bottom:12px"><div style="font-weight:600;font-size:12px;margin-bottom:4px">Volume</div><div class="filter-tabs" style="margin:0">'+VOLUMES.map(function(v){return'<div class="ftab'+(curVol===v[0]?' active':'')+'" onclick="setPlanVolume(\''+escHtml(imp.id)+'\',\''+v[0]+'\')">'+v[1]+'</div>';}).join('')+'</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:4px">Changes the '+ranged+' upcoming workout'+(ranged===1?'':'s')+' that came with a range. Workouts you\'ve edited or completed stay as they are.</div></div>';
   var body='';
   for(var w=1;w<=last;w++){
     var mon=addDaysISO(base,(w-1)*7);
@@ -2755,6 +2794,20 @@ function shiftImportedPlan(id,n){
   var dates=DB.plans.filter(function(p){return p.importId===id;}).map(function(p){return p.date;}).sort();
   if(dates.length){imp.startDate=dates[0];imp.endDate=dates[dates.length-1];}
   save();renderAll();
+}
+
+// Re-applies a volume pick to an imported plan's ranged workouts that aren't done yet.
+function setPlanVolume(id,vol){
+  var imp=(DB.planImports||[]).find(function(i){return i.id===id;});if(!imp)return;
+  DB.plans.forEach(function(p){
+    if(p.importId!==id||p.completed)return;
+    var R=planRangeOf(p);if(!R)return;
+    var v=volPick(R,vol);
+    p.planRange=R;p.dist=v.dist;p.dur=v.dur;
+    if(v.distMax)p.distMax=v.distMax;else delete p.distMax;
+    if(v.durMax)p.durMax=v.durMax;else delete p.durMax;
+  });
+  imp.volume=vol;save();renderAll();
 }
 
 function openPlansPage(id){if(id)plansViewId=id;showPage('plans',document.getElementById('nav-plans'));}
@@ -2968,6 +3021,8 @@ function savePlan(){
   var dmax=toKmIn(document.getElementById('f-plandistmax')?.value),tmax=pi(document.getElementById('f-plandurmax')?.value);
   if(dmax>pf(obj.dist))obj.distMax=dmax;else delete obj.distMax;
   if(tmax>pi(obj.dur))obj.durMax=tmax;else delete obj.durMax;
+  // A hand-edited distance or time wins over the plan's range when the volume is changed later.
+  if(existing&&existing.planRange&&(pf(existing.dist)!==pf(obj.dist)||pf(existing.distMax)!==pf(obj.distMax)||pi(existing.dur)!==pi(obj.dur)||pi(existing.durMax)!==pi(obj.durMax)))delete obj.planRange;
   if(existing){var idx=DB.plans.indexOf(existing);DB.plans[idx]=obj;}
   else DB.plans.push(obj);
   save();closeAllModals();renderAll();
