@@ -241,6 +241,36 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .strava-btn{background:#FC4C02;color:#fff}
 .strava-btn:hover{background:#d94102}
 .strava-toast{border-left:3px solid #FC4C02}
+/* Races */
+.race-card{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.race-card-big{font-size:15px;font-weight:700;white-space:nowrap}
+.race-card-small{font-size:11px;color:var(--muted);margin-top:3px}
+.race-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px}
+.race-stats .detail-val{font-size:16px}
+.race-link{margin-bottom:6px;text-decoration:none}
+.race-section{border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
+.race-section-title,.race-form-section .race-section-title{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
+.race-form-section{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:13px}
+.race-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--muted);padding:4px 0}
+.race-row b{color:var(--text);font-weight:600;text-align:right}
+.race-verdict{font-size:15px;font-weight:700;margin-top:8px}
+.race-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fuel-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.fuel-totals .detail-val{font-size:15px}
+#race-strip{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.race-next{display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(90deg,var(--pink3),transparent);border:1px solid var(--border);border-left:3px solid var(--pink);border-radius:10px;padding:12px 16px;cursor:pointer}
+.race-next-lbl{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--pink);font-weight:700}
+.race-next-name{font-size:15px;font-weight:700;color:var(--text);margin-top:2px}
+.race-next-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.race-next-count{font-size:18px;font-weight:800;color:var(--amber);white-space:nowrap;text-align:right}
+.race-alert{background:var(--surface);border:1px solid var(--border2);border-left:3px solid var(--amber);border-radius:10px;padding:10px 14px}
+.race-alert-msg{font-size:12px;color:var(--text);line-height:1.5}
+.race-alert-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.race-alert-btns a{text-decoration:none}
+.nav-badge,.tab-badge{background:var(--pink);color:#fff;font-size:9px;font-weight:700;border-radius:999px;min-width:16px;height:16px;line-height:16px;padding:0 4px;text-align:center}
+.nav-badge{margin-left:auto}
+.tab{position:relative}
+.tab-badge{position:absolute;top:0;left:calc(50% + 6px)}
 .tabbar{display:none}
 @media(max-width:600px){
   /* Phone layout: bottom tab bar replaces the hamburger menu; "More" opens the sidebar */
@@ -305,7 +335,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Goals
   </div>
   <div class="nav-item" id="nav-races" onclick="showPage('races',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Races
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Races<span class="nav-badge" id="nav-races-badge" style="display:none"></span>
   </div>
   <div class="nav-item" id="nav-nutrition" onclick="showPage('nutrition',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>Nutrition
@@ -381,6 +411,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div><div class="page-title" id="dash-title">Training Log</div><div class="page-sub">A complete training log for the endurance athlete.</div></div>
     <div><select id="dash-week-select" class="form-input" onchange="changeDashWeek(parseInt(this.value))" style="font-size:12px;padding:6px 10px;min-width:170px"></select></div>
   </div>
+  <div id="race-strip" style="display:none"></div>
   <div class="section-title" id="dash-primary-sport-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Running Stats</div>
   <div class="stat-grid">
     <div class="stat-card pk">
@@ -682,7 +713,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <span class="tab-add-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
   </button>
   <button class="tab" id="tab-races" onclick="showPage('races',document.getElementById('nav-races'))">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Races
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Races<span class="tab-badge" id="tab-races-badge" style="display:none"></span>
   </button>
   <button class="tab" id="tab-more" onclick="toggleSidebar()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More
@@ -831,7 +862,7 @@ function importData(e){
   e.target.value='';
 }
 
-function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();renderStravaStatus();}
+function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderRaceStrip();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();renderStravaStatus();}
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -1527,7 +1558,12 @@ function renderCalendar(){
     daySt.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','strength')">${r.subtype||'Strength'}</div>`;});
     dayRec.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--green);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','recovery')">${r.subtype||'Recovery'}</div>`;});
     dayPlans.forEach(p=>{var doneIcon=p.completed?'&#10003; ':'';var planColor=p.completed?'var(--green)':'var(--amber)';pips+=`<div class="cal-pip" style="color:${planColor};font-style:italic;cursor:pointer" onclick="event.stopPropagation();viewPlan('${p.id}')">${doneIcon}${p.type}: ${(p.desc||'').slice(0,18)}</div>`;});
-    dayRaces.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--pink2);font-weight:600">🏁 ${r.name}</div>`;});
+    dayRaces.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--pink2);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🏁 ${escHtml(r.name)}</div>`;});
+    DB.races.forEach(r=>{
+      if(r.result)return;
+      if(r.regOpenDate===ds&&!r.registered)pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🎟 Register: ${escHtml(r.name)}</div>`;
+      if(r.requiresLottery&&r.lotteryDate===ds)pips+=`<div class="cal-pip" style="color:#b388ff;cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🎲 Lottery: ${escHtml(r.name)}</div>`;
+    });
     html+=`<div class="${cl}" onclick="openModalDate('${ds}')"><div class="cal-num${isToday?' today-num':''}">${d}</div>${pips}</div>`;
   }
   body.innerHTML=html;
@@ -1747,29 +1783,28 @@ function renderRaces(){
   var results=DB.races.filter(r=>r.result).sort((a,b)=>b.date.localeCompare(a.date));
   var list=raceFilter==='upcoming'?upcoming:results;
   var el=document.getElementById('race-list');
-  if(!list.length){el.innerHTML='<div class="empty-state">No races yet. Add one with the button above.</div>';return;}
+  if(!list.length){el.innerHTML='<div class="empty-state">'+(raceFilter==='upcoming'?'No upcoming races. Add one with the button above.':'No results yet. Finished races show up here.')+'</div>';return;}
   el.innerHTML=list.map(r=>{
-    var d=parseLocalDate(r.date);
-    var days=Math.ceil((d-new Date())/86400000);
+    var days=daysUntilISO(r.date);
     var past=days<0;
-    return`<div class="log-entry">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between">
-        <div>
-          <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px">${r.name}${r.raceType==='bike'?` <span class="badge badge-cross">${r.bikeType||'Bike'}</span>`:''}${r.raceType==='skimo'?` <span class="badge badge-cross" style="background:rgba(100,180,255,.15);color:#64b4ff">Skimo${r.skimoCategory?' · '+r.skimoCategory.charAt(0).toUpperCase()+r.skimoCategory.slice(1):''}</span>`:''}</div>
-          <div style="font-size:11px;color:var(--muted)">${r.loc||''}${r.dist?' · '+r.dist+'km':''}${pi(r.vert)>0?' · '+pi(r.vert)+'m':''}</div>
-          ${r.goal?`<div style="font-size:11px;color:var(--blue);margin-top:3px">Goal: ${r.goal}</div>`:''}
-          ${r.result?`<div style="font-size:12px;color:var(--green);margin-top:4px;font-weight:600">Result: ${r.result}</div>`:''}
-          ${r.notes?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${r.notes}</div>`:''}
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:12px;color:var(--muted)">${r.date}</div>
-          <div style="font-size:${past?'11':'16'}px;font-weight:${past?'400':'600'};color:${past?'var(--muted)':'var(--amber)'};margin-top:3px">${past?'Done':days===0?'Today!':days+' days'}</div>
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="btn btn-outline btn-sm" onclick="editRace('${r.id}')">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteRace('${r.id}')">Delete</button>
-          </div>
-        </div>
+    var right,sub='';
+    if(r.result){
+      var diff=raceGoalDiff(r);
+      right=`<div class="race-card-big" style="color:var(--green)">${escHtml(r.result)}</div>${r.placement?`<div class="race-card-small">${escHtml(r.placement)}</div>`:''}`;
+      if(diff)sub=`<div style="font-size:11px;color:${diff.color};margin-top:4px;font-weight:600">${diff.text}</div>`;
+    }else{
+      right=`<div class="race-card-big" style="color:${past?'var(--muted)':'var(--amber)'}">${past?'Add result':countdownText(days)}</div>`;
+      var st=raceRegStatus(r);
+      if(st)sub=`<div style="font-size:11px;color:${st.color};margin-top:4px;font-weight:600">${st.text}</div>`;
+    }
+    return`<div class="log-entry race-card" onclick="openRaceDetail('${r.id}')">
+      <div style="min-width:0">
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px">${escHtml(r.name)}${raceTypeBadge(r)}</div>
+        <div style="font-size:11px;color:var(--muted)">${fmtDateShort(r.date)} ${r.date.slice(0,4)}${r.loc?' · '+escHtml(r.loc):''}${pf(r.dist)?' · '+pf(r.dist)+' km':''}${pi(r.vert)>0?' · '+pi(r.vert)+' m':''}</div>
+        ${r.goal&&!r.result?`<div style="font-size:11px;color:var(--blue);margin-top:3px">Goal ${escHtml(r.goal)}</div>`:''}
+        ${sub}
       </div>
+      <div style="text-align:right;flex-shrink:0">${right}</div>
     </div>`;
   }).join('');
 }
@@ -2042,10 +2077,9 @@ function buildOtherModal(){return`<div class="modal">
 
 function buildRaceModal(){
   var cycling=isCycling();
-  var bikeDefault=cycling?'bike':'run';
   var bikeDisplay=cycling?'block':'none';
   return`<div class="modal">
-  <div class="modal-title">Add Race <button class="modal-close" onclick="closeAllModals()">×</button></div>
+  <div class="modal-title">${editingId?'Edit Race':'Add Race'} <button class="modal-close" onclick="closeAllModals()">×</button></div>
   <div class="form-group"><label class="form-label">Race Name</label><input class="form-input" id="f-race-name" placeholder="e.g. UTMB, Gravel Worlds"></div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Race Type</label><select class="form-input" id="f-race-type" onchange="onRaceTypeChange()"><option value="run" ${!cycling?'selected':''}>Running</option><option value="bike" ${cycling?'selected':''}>Cycling</option><option value="skimo">Skimo</option></select></div>
@@ -2054,15 +2088,30 @@ function buildRaceModal(){
   </div>
   <div class="form-row">
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date"></div>
-    <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" id="f-dist"></div>
-  </div>
-  <div class="form-row">
     <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="f-loc"></div>
-    <div class="form-group"><label class="form-label">Goal Time</label><input class="form-input" id="f-goal" placeholder="hh:mm:ss"></div>
   </div>
   <div class="form-row">
-    <div class="form-group"><label class="form-label">Vert (m)</label><input class="form-input" type="number" id="f-race-vert" placeholder="e.g. 1200"></div>
-    <div class="form-group"><label class="form-label">Result (if completed)</label><input class="form-input" id="f-result" placeholder="e.g. 3:42:15 — leave blank if upcoming"></div>
+    <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" inputmode="decimal" id="f-dist"></div>
+    <div class="form-group"><label class="form-label">Vert (m)</label><input class="form-input" type="number" inputmode="numeric" id="f-race-vert" placeholder="e.g. 1200"></div>
+  </div>
+  <div class="form-group"><label class="form-label">Goal Time</label><input class="form-input" id="f-goal" placeholder="h:mm:ss"></div>
+  <div class="form-group"><label class="form-label">Website</label><input class="form-input" id="f-race-url" type="url" inputmode="url" placeholder="race website or registration page"></div>
+  <div class="race-form-section">
+    <div class="race-section-title">Registration</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Registration opens</label><input class="form-input" type="date" id="f-reg-date"></div>
+      <div class="form-group"><label class="form-label">At (optional)</label><input class="form-input" type="time" id="f-reg-time"></div>
+    </div>
+    <label class="checkbox-label"><input type="checkbox" id="f-lottery" onchange="document.getElementById('lottery-date-group').style.display=this.checked?'':'none'"> Entry is by lottery</label>
+    <div class="form-group" id="lottery-date-group" style="display:none;margin-top:8px"><label class="form-label">Lottery draw date</label><input class="form-input" type="date" id="f-lottery-date"></div>
+    <label class="checkbox-label" style="margin-top:6px"><input type="checkbox" id="f-registered"> I've already registered (or entered the lottery)</label>
+  </div>
+  <div class="race-form-section">
+    <div class="race-section-title">Result <span style="text-transform:none;font-weight:400;letter-spacing:0">(after the race)</span></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Finish time</label><input class="form-input" id="f-result" placeholder="h:mm:ss"></div>
+      <div class="form-group"><label class="form-label">Placement</label><input class="form-input" id="f-placement" placeholder="e.g. 14th overall"></div>
+    </div>
   </div>
   <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="2"></textarea></div>
   <div class="modal-footer">
@@ -2070,45 +2119,6 @@ function buildRaceModal(){
     <button class="btn btn-pink" onclick="saveRace()">Save Race</button>
   </div>
 </div>`;}
-
-function buildPlanModal(prefill){prefill=prefill||{};return`<div class="modal">
-  <div class="modal-title">${prefill.id?'Edit Plan':'Plan Workout'} <button class="modal-close" onclick="closeAllModals()">×</button></div>
-  <div class="form-row">
-    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${prefill.date||new Date().toISOString().slice(0,10)}"></div>
-    <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-plantype">
-      ${isCycling()?`<option ${prefill.type==='Ride'?'selected':''}>Ride</option>
-      <option ${prefill.type==='Long Ride'?'selected':''}>Long Ride</option>
-      <option ${prefill.type==='Workout'?'selected':''}>Workout</option>
-      <option ${prefill.type==='Cross Train'?'selected':''}>Cross Train</option>
-      <option ${prefill.type==='Strength'?'selected':''}>Strength</option>
-      <option ${prefill.type==='Rest'?'selected':''}>Rest</option>`:`<option ${prefill.type==='Run'?'selected':''}>Run</option>
-      <option ${prefill.type==='Long Run'?'selected':''}>Long Run</option>
-      <option ${prefill.type==='Workout'?'selected':''}>Workout</option>
-      <option ${prefill.type==='Cross Train'?'selected':''}>Cross Train</option>
-      <option ${prefill.type==='Strength'?'selected':''}>Strength</option>
-      <option ${prefill.type==='Rest'?'selected':''}>Rest</option>`}
-    </select></div>
-  </div>
-  <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="f-plandesc" placeholder="e.g. 12km easy + strides, 10×400m @ 5k pace" value="${prefill.desc||''}"></div>
-  <div class="form-row">
-    <div class="form-group"><label class="form-label">Target Distance (km)</label><input class="form-input" type="number" step="0.1" id="f-plandist" value="${prefill.dist||''}"></div>
-    <div class="form-group"><label class="form-label">Target Duration (min)</label><input class="form-input" type="number" id="f-plandur" value="${prefill.dur||''}"></div>
-  </div>
-  <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-plannotes" rows="2" placeholder="Additional notes for this session...">${prefill.notes||''}</textarea></div>
-  ${prefill.id?`<input type="hidden" id="f-planid" value="${prefill.id}"><input type="hidden" id="f-plan-completed" value="${prefill.completed?'1':'0'}"><input type="hidden" id="f-plan-actual-dist" value="${prefill.actualDist||''}"><input type="hidden" id="f-plan-actual-dur" value="${prefill.actualDur||''}"><input type="hidden" id="f-plan-actual-vert" value="${prefill.actualVert||''}"><input type="hidden" id="f-plan-actual-hr" value="${prefill.actualHr||''}"><input type="hidden" id="f-plan-completion-notes" value="${prefill.completionNotes||''}">`:''}
-  <div class="modal-footer">
-    <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
-    <button class="btn btn-pink" onclick="savePlan()">Save Plan</button>
-  </div>
-</div>`;}
-
-function updateOtherSubs(){
-  var cat=document.getElementById('f-category').value;
-  var sel=document.getElementById('f-subtype');
-  sel.innerHTML=cat==='strength'
-    ?'<option>Indoor Climbing</option><option>Gym Strength</option>'
-    :'<option>Yoga/Stretch</option><option>Massage</option><option>Physio</option>';
-}
 
 function fillForm(data,type){
   ['date','dist','dur','vert','hr','notes'].forEach(k=>{
@@ -2156,6 +2166,11 @@ function fillForm(data,type){
     if(raceBikeEl&&data.bikeType)raceBikeEl.value=data.bikeType;
     var skimoCatEl=document.getElementById('f-skimo-category');
     if(skimoCatEl&&data.skimoCategory)skimoCatEl.value=data.skimoCategory;
+    var setv=function(id,v){var e=document.getElementById(id);if(e&&v)e.value=v;};
+    setv('f-placement',data.placement);setv('f-race-url',data.websiteUrl);
+    setv('f-reg-date',data.regOpenDate);setv('f-reg-time',data.regOpenTime);setv('f-lottery-date',data.lotteryDate);
+    var lt=document.getElementById('f-lottery');if(lt){lt.checked=!!data.requiresLottery;document.getElementById('lottery-date-group').style.display=lt.checked?'':'none';}
+    var rg=document.getElementById('f-registered');if(rg)rg.checked=!!data.registered;
   }
 }
 
@@ -2240,23 +2255,43 @@ function saveOther(){
 }
 
 function saveRace(){
-  var name=document.getElementById('f-race-name')?.value;
+  var name=(document.getElementById('f-race-name')?.value||'').trim();
   var date=document.getElementById('f-date')?.value;
   if(!name||!date){alert('Please enter name and date.');return;}
-  var obj={id:editingId||uid(),name,date,
-    raceType:document.getElementById('f-race-type')?.value||'run',
-    bikeType:document.getElementById('f-race-bike-type')?.value||'',
-    skimoCategory:document.getElementById('f-skimo-category')?.value||'',
-    dist:document.getElementById('f-dist')?.value||0,
-    loc:document.getElementById('f-loc')?.value||'',
-    goal:document.getElementById('f-goal')?.value||'',
-    vert:document.getElementById('f-race-vert')?.value||0,
-    result:document.getElementById('f-result')?.value||'',
-    notes:document.getElementById('f-notes')?.value||''
-  };
+  var val=function(id){return(document.getElementById(id)?.value||'').trim();};
+  var prev=editingId?findRace(editingId):null;
+  var regDate=val('f-reg-date'),lottery=!!document.getElementById('f-lottery')?.checked,registered=!!document.getElementById('f-registered')?.checked;
+  // Keep everything not on this form (fuel plan, Strava link, race report, lottery outcome).
+  var obj=Object.assign({},prev||{},{id:editingId||uid(),name,date,
+    raceType:val('f-race-type')||'run',
+    bikeType:val('f-race-bike-type'),
+    skimoCategory:val('f-skimo-category'),
+    dist:val('f-dist')||0,
+    loc:val('f-loc'),
+    goal:val('f-goal'),
+    vert:val('f-race-vert')||0,
+    result:val('f-result'),
+    placement:val('f-placement'),
+    websiteUrl:val('f-race-url'),
+    regOpenDate:regDate,
+    regOpenTime:regDate?val('f-reg-time'):'',
+    requiresLottery:lottery,
+    lotteryDate:lottery?val('f-lottery-date'):'',
+    registered:registered,
+    notes:val('f-notes')
+  });
+  if(!lottery)delete obj.lotteryStatus;
+  else if(registered&&!obj.lotteryStatus)obj.lotteryStatus='pending';
+  if(!registered&&prev&&prev.registered)delete obj.lotteryStatus;
+  // A new or changed registration date brings the reminder back.
+  if(!prev||prev.regOpenDate!==regDate)delete obj.reminderSnoozeUntil;
   if(editingId){var idx=DB.races.findIndex(r=>r.id===editingId);if(idx>=0)DB.races[idx]=obj;else DB.races.push(obj);}
   else DB.races.push(obj);
-  save();closeAllModals();renderRaces();renderCalendar();editingId=null;
+  var justFinished=obj.result&&!(prev&&prev.result);
+  editingId=null;
+  afterRaceChange();closeAllModals();
+  if(justFinished){var diff=raceGoalDiff(obj);raceCelebrate('Congrats on finishing '+obj.name+'!'+(diff?' '+diff.text+'.':''));}
+  else openRaceDetail(obj.id);
 }
 
 function savePlan(){
@@ -2294,7 +2329,7 @@ function deleteAct(id,type){
 
 function deleteRace(id){
   if(!confirm('Delete this race?'))return;
-  DB.races=DB.races.filter(r=>r.id!==id);save();renderRaces();renderCalendar();
+  DB.races=DB.races.filter(r=>r.id!==id);openRaceId=null;closeAllModals();save();renderRaces();renderCalendar();renderRaceStrip();
 }
 
 function editAct(id,type){
@@ -3245,13 +3280,14 @@ function stravaApplyToRace(raceId,stravaActId){
     race.result=h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
     race.stravaActivityId=stravaActId;
     stravaAddAsActivity(act);
-    celebrate('Race result saved! &#127937;');
-    maybeCelebrateWeeklyGoal();
   }
   markStravaProcessed(stravaActId);
   stravaRaceQueue=stravaRaceQueue.filter(function(i){return String(i.stravaAct.id)!==stravaActId;});
   save();renderAll();closeAllModals();
-  processNextStravaItem();
+  if(qItem&&race){
+    // Celebrate, then ask for placement and a few words before moving on.
+    openRaceFinish(raceId,{celebrate:true,onDone:function(){maybeCelebrateWeeklyGoal();processNextStravaItem();}});
+  }else processNextStravaItem();
 }
 
 function stravaSkipRaceMatch(stravaActId){
@@ -3414,6 +3450,387 @@ function viewPlanPDF(url,name){
 // ────────────────────────────────────────────────────────────────────────────
 
 // Data loads via fbAuth.onAuthStateChanged above
+
+// ─── RACES: detail page, registration reminders, finish flow ────────────────
+
+function todayISO(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function addDaysISO(iso,n){var d=parseLocalDate(iso);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function daysUntilISO(iso){return Math.round((parseLocalDate(iso)-parseLocalDate(todayISO()))/86400000);}
+function fmtDateShort(iso){return parseLocalDate(iso).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
+function fmtTime12(t){if(!t)return'';var p=t.split(':');var h=+p[0],m=p[1]||'00';return(h%12||12)+':'+m+(h<12?' am':' pm');}
+function safeUrl(u){u=(u||'').trim();if(!u)return'';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>]+$/i.test(u)?u:'';}
+
+// "3:42:15" → seconds. Two parts are read as h:mm for half-marathon distance and up, else mm:ss.
+function parseRaceTime(str,distKm){
+  if(!str)return 0;
+  var s=String(str).trim().toLowerCase();
+  var hm=s.match(/^(?:(\d+)\s*h)?\s*(?:(\d+)\s*m(?:in)?)?\s*(?:(\d+)\s*s)?$/);
+  if(hm&&(hm[1]||hm[2]||hm[3]))return(+hm[1]||0)*3600+(+hm[2]||0)*60+(+hm[3]||0);
+  var parts=s.split(':').map(function(x){return parseInt(x,10);});
+  if(parts.some(isNaN))return 0;
+  if(parts.length===3)return parts[0]*3600+parts[1]*60+parts[2];
+  if(parts.length===2)return pf(distKm)>=21?parts[0]*3600+parts[1]*60:parts[0]*60+parts[1];
+  if(parts.length===1)return parts[0]*60;
+  return 0;
+}
+function fmtSecs(sec){
+  sec=Math.round(Math.abs(sec));var h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return h>0?h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):m+':'+String(s).padStart(2,'0');
+}
+function fmtGap(sec){
+  sec=Math.round(Math.abs(sec));var h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  if(h>0)return h+'h '+m+'m';if(m>0)return m+' min'+(s?' '+s+'s':'');return s+' sec';
+}
+// Pace or speed for a race at a given time, worded for its sport.
+function racePaceText(r,sec){
+  var dist=pf(r.dist);if(!sec||!dist)return'';
+  if(r.raceType==='bike')return(dist/(sec/3600)).toFixed(1)+' km/h';
+  var perKm=sec/dist;
+  var txt=fmtSecs(perKm)+' /km · '+fmtSecs(perKm*1.609344)+' /mi';
+  if(r.raceType==='skimo'&&pi(r.vert)>0)txt+=' · '+Math.round(pi(r.vert)/(sec/3600))+' m/h climbing';
+  return txt;
+}
+function raceGoalDiff(r){
+  var g=parseRaceTime(r.goal,r.dist),res=parseRaceTime(r.result,r.dist);
+  if(!g||!res)return null;
+  var d=res-g;
+  if(Math.abs(d)<1)return{text:'Right on goal',color:'var(--green)'};
+  return d<0?{text:fmtGap(d)+' faster than goal',color:'var(--green)'}:{text:fmtGap(d)+' slower than goal',color:'var(--amber)'};
+}
+function raceTypeBadge(r){
+  if(r.raceType==='bike')return' <span class="badge badge-cross">'+escHtml(r.bikeType||'Bike')+'</span>';
+  if(r.raceType==='skimo')return' <span class="badge badge-cross" style="background:rgba(100,180,255,.15);color:#64b4ff">Skimo'+(r.skimoCategory?' · '+r.skimoCategory.charAt(0).toUpperCase()+r.skimoCategory.slice(1):'')+'</span>';
+  return'';
+}
+function countdownText(days){
+  if(days===0)return'Today!';if(days===1)return'Tomorrow';
+  if(days<14)return days+' days';
+  var w=Math.floor(days/7),d=days%7;return w+' weeks'+(d?' '+d+' day'+(d>1?'s':''):'');
+}
+
+// Registration status chip for an upcoming race.
+function raceRegStatus(r){
+  if(r.requiresLottery&&r.lotteryStatus==='in')return{text:'Got in via lottery',color:'var(--green)'};
+  if(r.requiresLottery&&r.lotteryStatus==='out')return{text:"Didn't get in",color:'var(--muted)'};
+  if(r.registered)return{text:r.requiresLottery?'Lottery entered'+(r.lotteryDate?' · draw '+fmtDateShort(r.lotteryDate):''):'Registered',color:r.requiresLottery?'#b388ff':'var(--green)'};
+  if(!r.regOpenDate)return null;
+  var d=daysUntilISO(r.regOpenDate);
+  if(d>0)return{text:'Registration opens '+(d===1?'tomorrow':'in '+d+' days'),color:'var(--amber)'};
+  if(d===0)return{text:'Registration opens today'+(r.regOpenTime?' at '+fmtTime12(r.regOpenTime):''),color:'var(--pink)'};
+  return{text:'Registration open, not registered yet',color:'var(--pink)'};
+}
+
+// Everything that needs Maddy's attention, soonest first.
+// Unlike the old pop-up, these sit quietly on the dashboard until handled or snoozed.
+function getRaceAlerts(){
+  var today=todayISO(),alerts=[];
+  (DB.races||[]).forEach(function(r){
+    var snoozed=r.reminderSnoozeUntil&&r.reminderSnoozeUntil>today;
+    if(!r.result&&r.date>=today&&!r.registered&&r.regOpenDate&&!snoozed){
+      var d=daysUntilISO(r.regOpenDate);
+      if(d<=14)alerts.push({race:r,kind:'reg',sort:d});
+    }
+    if(r.requiresLottery&&r.registered&&r.lotteryDate&&(!r.lotteryStatus||r.lotteryStatus==='pending')&&!snoozed){
+      var ld=daysUntilISO(r.lotteryDate);
+      if(ld<=3)alerts.push({race:r,kind:'lottery',sort:ld});
+    }
+    if(!r.result&&r.date<today&&!r.resultPromptDismissed&&r.lotteryStatus!=='out'&&daysUntilISO(r.date)>=-30){
+      alerts.push({race:r,kind:'result',sort:-100});
+    }
+  });
+  return alerts.sort(function(a,b){return a.sort-b.sort;});
+}
+
+function nextRace(){
+  var today=todayISO();
+  return(DB.races||[]).filter(function(r){return!r.result&&r.date>=today&&r.lotteryStatus!=='out';})
+    .sort(function(a,b){return a.date.localeCompare(b.date);})[0]||null;
+}
+
+// Dashboard: next-race countdown plus any reminders.
+function renderRaceStrip(){
+  var el=document.getElementById('race-strip');
+  var alerts=getRaceAlerts();
+  var badge=alerts.length?String(alerts.length):'';
+  ['tab-races-badge','nav-races-badge'].forEach(function(id){var b=document.getElementById(id);if(b){b.textContent=badge;b.style.display=badge?'':'none';}});
+  if(!el)return;
+  var html='';
+  var nr=nextRace();
+  if(nr){
+    var days=daysUntilISO(nr.date);
+    html+='<div class="race-next" onclick="openRaceDetail(\''+nr.id+'\')">'+
+      '<div><div class="race-next-lbl">Next race</div><div class="race-next-name">'+escHtml(nr.name)+'</div>'+
+      '<div class="race-next-sub">'+fmtDateShort(nr.date)+(nr.loc?' · '+escHtml(nr.loc):'')+(nr.goal?' · goal '+escHtml(nr.goal):'')+'</div></div>'+
+      '<div class="race-next-count">'+countdownText(days)+'</div></div>';
+  }
+  alerts.forEach(function(a){
+    var r=a.race,id=r.id,url=safeUrl(r.websiteUrl),msg='',btns='';
+    if(a.kind==='reg'){
+      var d=daysUntilISO(r.regOpenDate),when=fmtDateShort(r.regOpenDate)+(r.regOpenTime?', '+fmtTime12(r.regOpenTime):'');
+      msg=d>0?'Registration for <b>'+escHtml(r.name)+'</b> opens '+(d===1?'tomorrow':'in '+d+' days')+' ('+when+').'
+        :d===0?'Registration for <b>'+escHtml(r.name)+'</b> opens <b>today</b>'+(r.regOpenTime?' at '+fmtTime12(r.regOpenTime):'')+'.'
+        :'Registration for <b>'+escHtml(r.name)+'</b> is open. Have you signed up?';
+      if(url)btns+='<a class="btn btn-pink btn-sm" href="'+url+'" target="_blank" rel="noopener">Website</a>';
+      btns+='<button class="btn btn-outline btn-sm" onclick="markRaceRegistered(\''+id+'\')">'+(r.requiresLottery?'I entered the lottery':'I registered')+'</button>';
+      btns+='<button class="btn btn-outline btn-sm" onclick="snoozeRaceReminder(\''+id+'\')">Later</button>';
+    }else if(a.kind==='lottery'){
+      var ld=daysUntilISO(r.lotteryDate);
+      msg=ld>0?'Lottery draw for <b>'+escHtml(r.name)+'</b> is '+(ld===1?'tomorrow':'in '+ld+' days')+'.':'Lottery for <b>'+escHtml(r.name)+'</b> has been drawn. Did you get in?';
+      if(ld<=0){
+        btns+='<button class="btn btn-pink btn-sm" onclick="setLotteryStatus(\''+id+'\',\'in\')">I got in!</button>';
+        btns+='<button class="btn btn-outline btn-sm" onclick="setLotteryStatus(\''+id+'\',\'out\')">Didn\'t get in</button>';
+      }
+      btns+='<button class="btn btn-outline btn-sm" onclick="snoozeRaceReminder(\''+id+'\')">Later</button>';
+    }else{
+      msg='How did <b>'+escHtml(r.name)+'</b> go? Add your finish time.';
+      btns+='<button class="btn btn-pink btn-sm" onclick="openRaceFinish(\''+id+'\')">Add result</button>';
+      btns+='<button class="btn btn-outline btn-sm" onclick="dismissResultPrompt(\''+id+'\')">Dismiss</button>';
+    }
+    html+='<div class="race-alert"><div class="race-alert-msg">'+msg+'</div><div class="race-alert-btns">'+btns+'</div></div>';
+  });
+  el.innerHTML=html;
+  el.style.display=html?'':'none';
+}
+
+function findRace(id){return(DB.races||[]).find(function(r){return r.id===id;});}
+function afterRaceChange(){save();renderRaces();renderCalendar();renderRaceStrip();}
+function markRaceRegistered(id){var r=findRace(id);if(!r)return;r.registered=true;if(r.requiresLottery&&!r.lotteryStatus)r.lotteryStatus='pending';delete r.reminderSnoozeUntil;afterRaceChange();refreshRaceDetail(id);}
+function unmarkRaceRegistered(id){var r=findRace(id);if(!r)return;r.registered=false;delete r.lotteryStatus;afterRaceChange();refreshRaceDetail(id);}
+function setLotteryStatus(id,st){var r=findRace(id);if(!r)return;r.lotteryStatus=st;delete r.reminderSnoozeUntil;afterRaceChange();if(st==='in')celebrate('You got in! 🎟️');refreshRaceDetail(id);}
+function dismissResultPrompt(id){var r=findRace(id);if(!r)return;r.resultPromptDismissed=true;afterRaceChange();}
+// "Later": hide until the day before registration opens, or until tomorrow once it's close or open.
+function snoozeRaceReminder(id){
+  var r=findRace(id);if(!r)return;
+  var tomorrow=addDaysISO(todayISO(),1),until=tomorrow;
+  if(!r.registered&&r.regOpenDate){var dayBefore=addDaysISO(r.regOpenDate,-1);if(dayBefore>until)until=dayBefore;}
+  r.reminderSnoozeUntil=until;afterRaceChange();
+  showStravaToast('Okay, I\'ll remind you again on '+fmtDateShort(until)+'.');
+}
+
+// Calendar file with alerts the day before and the morning of, so the phone itself reminds you.
+function downloadRaceIcs(id,kind){
+  var r=findRace(id);if(!r)return;
+  var date=kind==='lottery'?r.lotteryDate:r.regOpenDate;if(!date)return;
+  var d=date.replace(/-/g,''),url=safeUrl(r.websiteUrl);
+  var esc=function(s){return String(s||'').replace(/\\/g,'\\\\').replace(/([,;])/g,'\\$1').replace(/\n/g,'\\n');};
+  var title=kind==='lottery'?'Lottery draw: '+r.name:'Registration opens: '+r.name;
+  var timed=kind!=='lottery'&&r.regOpenTime;
+  var stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  var lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Training Log//Races//EN','CALSCALE:GREGORIAN','BEGIN:VEVENT',
+    'UID:'+r.id+'-'+(kind||'reg')+'@training-log','DTSTAMP:'+stamp];
+  if(timed){
+    var t=r.regOpenTime.replace(':','')+'00';
+    lines.push('DTSTART:'+d+'T'+t,'DURATION:PT30M');
+  }else{
+    lines.push('DTSTART;VALUE=DATE:'+d,'DTEND;VALUE=DATE:'+addDaysISO(date,1).replace(/-/g,''));
+  }
+  lines.push('SUMMARY:'+esc(title));
+  if(url)lines.push('URL:'+url,'DESCRIPTION:'+esc(url));
+  // Day before at 9 am, and on the day (an hour before a set time, or 8 am).
+  var dayBefore=timed?'-P1D':'-PT15H',onDay=timed?'-PT1H':'PT8H';
+  [dayBefore,onDay].forEach(function(tr){lines.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+esc(title),'TRIGGER:'+tr,'END:VALARM');});
+  lines.push('END:VEVENT','END:VCALENDAR');
+  var blob=new Blob([lines.join('\r\n')],{type:'text/calendar'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=(r.name||'race').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+(kind==='lottery'?'-lottery':'-registration')+'.ics';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},5000);
+}
+
+// ── Race detail page ──
+var openRaceId=null;
+function refreshRaceDetail(id){if(openRaceId===id&&document.getElementById('race-detail'))openRaceDetail(id);}
+function openRaceDetail(id){
+  var r=findRace(id);if(!r)return;
+  openRaceId=id;
+  var today=todayISO(),days=daysUntilISO(r.date),url=safeUrl(r.websiteUrl);
+  var done=!!r.result,past=r.date<today;
+  var h='<div class="view-modal race-detail" id="race-detail">';
+  h+='<div class="modal-title" style="align-items:flex-start"><div><div style="font-size:18px;font-weight:700">'+escHtml(r.name)+raceTypeBadge(r)+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);font-weight:400;margin-top:4px">'+fmtDateShort(r.date)+' '+r.date.slice(0,4)+(r.loc?' · '+escHtml(r.loc):'')+'</div></div>'+
+    '<button class="modal-close" onclick="closeRaceDetail()">✕</button></div>';
+  // headline numbers
+  h+='<div class="race-stats">';
+  if(!done)h+='<div class="detail-box"><div class="detail-val" style="color:var(--amber)">'+(past?'Finished?':countdownText(days))+'</div><div class="detail-lbl">'+(past?'Race day passed':'To go')+'</div></div>';
+  if(pf(r.dist))h+='<div class="detail-box"><div class="detail-val">'+pf(r.dist)+' km</div><div class="detail-lbl">Distance</div></div>';
+  if(pi(r.vert))h+='<div class="detail-box"><div class="detail-val">'+pi(r.vert)+' m</div><div class="detail-lbl">Vert</div></div>';
+  if(done)h+='<div class="detail-box"><div class="detail-val" style="color:var(--green)">'+escHtml(r.result)+'</div><div class="detail-lbl">Finish time</div></div>';
+  if(done&&r.placement)h+='<div class="detail-box"><div class="detail-val">'+escHtml(r.placement)+'</div><div class="detail-lbl">Placement</div></div>';
+  h+='</div>';
+  if(url)h+='<a class="btn btn-outline btn-sm race-link" href="'+url+'" target="_blank" rel="noopener">Race website ↗</a>';
+
+  // Goal vs result
+  var gs=parseRaceTime(r.goal,r.dist),rs=parseRaceTime(r.result,r.dist);
+  if(r.goal||done){
+    h+='<div class="race-section"><div class="race-section-title">'+(done?'Result vs goal':'Goal')+'</div>';
+    if(r.goal)h+='<div class="race-row"><span>Goal time</span><b>'+escHtml(r.goal)+'</b></div>';
+    if(gs&&racePaceText(r,gs))h+='<div class="race-row"><span>Goal '+(r.raceType==='bike'?'speed':'pace')+'</span><b>'+racePaceText(r,gs)+'</b></div>';
+    if(done){
+      if(rs&&racePaceText(r,rs))h+='<div class="race-row"><span>Actual '+(r.raceType==='bike'?'speed':'pace')+'</span><b>'+racePaceText(r,rs)+'</b></div>';
+      var diff=raceGoalDiff(r);
+      if(diff)h+='<div class="race-verdict" style="color:'+diff.color+'">'+diff.text+'</div>';
+    }
+    h+='</div>';
+  }
+  if(!done&&!r.goal)h+='<div class="race-section"><div class="race-section-title">Goal</div><div style="font-size:12px;color:var(--muted)">Add a goal time (Edit) to see the pace you need.</div></div>';
+
+  // Registration (upcoming only)
+  if(!done&&!past){
+    var st=raceRegStatus(r);
+    h+='<div class="race-section"><div class="race-section-title">Registration</div>';
+    if(st)h+='<div style="font-size:13px;font-weight:600;color:'+st.color+';margin-bottom:6px">'+st.text+'</div>';
+    if(r.regOpenDate)h+='<div class="race-row"><span>Opens</span><b>'+fmtDateShort(r.regOpenDate)+(r.regOpenTime?', '+fmtTime12(r.regOpenTime):'')+'</b></div>';
+    if(r.requiresLottery)h+='<div class="race-row"><span>Lottery draw</span><b>'+(r.lotteryDate?fmtDateShort(r.lotteryDate):'Date not set')+'</b></div>';
+    h+='<div class="race-btns">';
+    if(!r.registered)h+='<button class="btn btn-pink btn-sm" onclick="markRaceRegistered(\''+r.id+'\')">'+(r.requiresLottery?'I entered the lottery':'I registered')+'</button>';
+    else if(r.requiresLottery&&(!r.lotteryStatus||r.lotteryStatus==='pending')){
+      h+='<button class="btn btn-pink btn-sm" onclick="setLotteryStatus(\''+r.id+'\',\'in\')">I got in!</button>';
+      h+='<button class="btn btn-outline btn-sm" onclick="setLotteryStatus(\''+r.id+'\',\'out\')">Didn\'t get in</button>';
+    }else h+='<button class="btn btn-outline btn-sm" onclick="unmarkRaceRegistered(\''+r.id+'\')">Undo registered</button>';
+    if(r.regOpenDate&&!r.registered&&daysUntilISO(r.regOpenDate)>=0)h+='<button class="btn btn-outline btn-sm" onclick="downloadRaceIcs(\''+r.id+'\',\'reg\')">📅 Add reminder to my calendar</button>';
+    if(r.requiresLottery&&r.lotteryDate&&daysUntilISO(r.lotteryDate)>=0)h+='<button class="btn btn-outline btn-sm" onclick="downloadRaceIcs(\''+r.id+'\',\'lottery\')">📅 Add lottery draw to calendar</button>';
+    h+='</div>';
+    if(!r.regOpenDate&&!r.registered)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Add the date registration opens (Edit) and you\'ll get a reminder on the dashboard.</div>';
+    h+='</div>';
+  }
+
+  // Fuel plan
+  h+='<div class="race-section"><div class="race-section-title">Fuel plan</div>';
+  if(!DB.nutrition||!DB.nutrition.length){
+    h+='<div style="font-size:12px;color:var(--muted)">Add gels, drinks and food in the Nutrition tab, then plan your race fueling here.</div>';
+  }else{
+    h+='<div id="fuel-rows"></div>'+
+      '<button class="btn btn-outline btn-sm" type="button" onclick="addFuelRow()">+ Add item</button>'+
+      '<div id="fuel-totals" class="fuel-totals"></div>'+
+      '<div style="font-size:10px;color:var(--muted2);margin-top:4px" id="fuel-basis"></div>';
+  }
+  h+='</div>';
+
+  if(r.raceNotes)h+='<div class="race-section"><div class="race-section-title">Race report</div><div style="font-size:12px;color:var(--text);white-space:pre-wrap">'+escHtml(r.raceNotes)+'</div></div>';
+  if(r.notes)h+='<div class="race-section"><div class="race-section-title">Notes</div><div style="font-size:12px;color:var(--text);white-space:pre-wrap">'+escHtml(r.notes)+'</div></div>';
+
+  h+='<div class="modal-footer" style="flex-wrap:wrap">';
+  h+='<button class="btn btn-danger btn-sm" onclick="deleteRace(\''+r.id+'\')">Delete</button>';
+  h+='<span style="flex:1"></span>';
+  if(!done&&past)h+='<button class="btn btn-pink btn-sm" onclick="openRaceFinish(\''+r.id+'\')">Add result</button>';
+  h+='<button class="btn btn-outline btn-sm" onclick="editRace(\''+r.id+'\')">Edit</button>';
+  h+='</div></div>';
+
+  closeAllModals();
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML=h;
+  wrap.addEventListener('click',function(e){if(e.target===wrap)closeRaceDetail();});
+  document.getElementById('modal-container').appendChild(wrap);
+  if(DB.nutrition&&DB.nutrition.length){
+    (r.fuelPlan||[]).forEach(function(e){addFuelRow(e.nutritionId,e.qty,true);});
+    updateFuelTotals();
+  }
+}
+function closeRaceDetail(){openRaceId=null;closeAllModals();}
+
+function addFuelRow(itemId,qty,noSave){
+  var c=document.getElementById('fuel-rows');if(!c)return;
+  var opts=DB.nutrition.map(function(n){return'<option value="'+n.id+'"'+(n.id===itemId?' selected':'')+'>'+escHtml(n.name)+'</option>';}).join('');
+  var row=document.createElement('div');
+  row.className='nutri-entry-row fuel-row';
+  row.innerHTML='<select class="form-input" onchange="saveFuelPlan()">'+opts+'</select>'+
+    '<input class="form-input" type="number" min="0.5" step="0.5" value="'+(qty||1)+'" style="width:72px" oninput="saveFuelPlan()" aria-label="Servings">'+
+    '<button class="btn btn-danger btn-sm" type="button" onclick="this.parentElement.remove();saveFuelPlan()">×</button>';
+  c.appendChild(row);
+  if(!noSave)saveFuelPlan();
+}
+function readFuelRows(){
+  var out=[];
+  document.querySelectorAll('#fuel-rows .fuel-row').forEach(function(row){
+    var q=parseFloat(row.querySelector('input').value)||0;
+    if(q>0)out.push({nutritionId:row.querySelector('select').value,qty:q});
+  });
+  return out;
+}
+var fuelSaveTimer=null;
+function saveFuelPlan(){
+  var r=findRace(openRaceId);if(!r)return;
+  r.fuelPlan=readFuelRows();
+  updateFuelTotals();
+  clearTimeout(fuelSaveTimer);fuelSaveTimer=setTimeout(save,600);
+}
+function updateFuelTotals(){
+  var r=findRace(openRaceId),el=document.getElementById('fuel-totals'),basis=document.getElementById('fuel-basis');
+  if(!r||!el)return;
+  var plan=readFuelRows(),carbs=0,water=0,sodium=0;
+  plan.forEach(function(e){var n=DB.nutrition.find(function(x){return x.id===e.nutritionId;});if(!n)return;
+    carbs+=pf(n.carbsPerServing)*e.qty;water+=pf(n.hydrationPerServing)*e.qty;sodium+=pf(n.sodiumPerServing)*e.qty;});
+  if(!plan.length){el.innerHTML='';if(basis)basis.textContent='';return;}
+  var secs=parseRaceTime(r.result,r.dist)||parseRaceTime(r.goal,r.dist),hrs=secs/3600;
+  var cell=function(v,unit,lbl){return'<div class="detail-box"><div class="detail-val">'+Math.round(v)+unit+'</div><div class="detail-lbl">'+lbl+'</div></div>';};
+  var out='';
+  if(hrs>0)out+=cell(carbs/hrs,'g','Carbs / hr')+cell(water/hrs,' mL','Water / hr')+cell(sodium/hrs,' mg','Sodium / hr');
+  out+=cell(carbs,'g','Total carbs')+(water?cell(water,' mL','Total water'):'')+(sodium?cell(sodium,' mg','Total sodium'):'');
+  el.innerHTML=out;
+  if(basis)basis.textContent=hrs>0?'Per hour is based on your '+(r.result?'finish':'goal')+' time of '+fmtSecs(secs)+'.':'Add a goal time to see per-hour numbers.';
+}
+
+// ── Finishing a race ──
+function raceCelebrate(msg){
+  var overlay=document.createElement('div');
+  overlay.className='celebrate-overlay';
+  var bits=['🏁','🎉','✨','🏆','🎊'];
+  for(var i=0;i<60;i++){
+    var p=document.createElement('div');
+    p.className='celebrate-piece';
+    p.textContent=bits[i%bits.length];
+    p.style.left=(Math.random()*100)+'vw';
+    p.style.fontSize=(16+Math.random()*14)+'px';
+    p.style.animationDuration=(1.6+Math.random()*1.4)+'s';
+    p.style.animationDelay=(Math.random()*0.8)+'s';
+    overlay.appendChild(p);
+  }
+  document.body.appendChild(overlay);
+  setTimeout(function(){overlay.remove();},3800);
+  if(msg){var t=document.createElement('div');t.className='celebrate-toast';t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.remove();},3500);}
+}
+
+// Finish-time + placement prompt. Used from the dashboard, the race page and Strava sync.
+var raceFinishDone=null;
+function openRaceFinish(id,opts){
+  opts=opts||{};
+  var r=findRace(id);if(!r)return;
+  raceFinishDone=opts.onDone||null;
+  closeAllModals();
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal" style="max-width:420px">'+
+    '<div class="modal-title">'+(opts.celebrate?'🏁 You finished '+escHtml(r.name)+'!':'Race result: '+escHtml(r.name))+'<button class="modal-close" onclick="finishRaceSkip()">✕</button></div>'+
+    (r.goal?'<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Your goal was <b style="color:var(--blue)">'+escHtml(r.goal)+'</b>.</div>':'')+
+    '<div class="form-row">'+
+      '<div class="form-group"><label class="form-label">Finish time</label><input class="form-input" id="fin-time" placeholder="h:mm:ss" value="'+escHtml(r.result||opts.time||'')+'"></div>'+
+      '<div class="form-group"><label class="form-label">Placement</label><input class="form-input" id="fin-place" placeholder="e.g. 14th overall, 3rd F" value="'+escHtml(r.placement||'')+'"></div>'+
+    '</div>'+
+    '<div class="form-group"><label class="form-label">How did it go?</label><textarea class="form-input" id="fin-notes" rows="3" placeholder="Highs, lows, what to change next time">'+escHtml(r.raceNotes||'')+'</textarea></div>'+
+    '<div class="modal-footer"><button class="btn btn-outline" onclick="finishRaceSkip()">'+(opts.celebrate?'Skip':'Cancel')+'</button><button class="btn btn-pink" onclick="finishRaceSave(\''+id+'\','+(opts.celebrate?'true':'false')+')">Save</button></div>'+
+  '</div>';
+  document.getElementById('modal-container').appendChild(wrap);
+  if(opts.celebrate)raceCelebrate();
+}
+function finishRaceSave(id,alreadyCelebrated){
+  var r=findRace(id);if(!r)return;
+  var time=(document.getElementById('fin-time').value||'').trim();
+  if(!time){alert('Please enter your finish time.');return;}
+  var wasDone=!!r.result;
+  r.result=time;
+  r.placement=(document.getElementById('fin-place').value||'').trim();
+  r.raceNotes=(document.getElementById('fin-notes').value||'').trim();
+  delete r.resultPromptDismissed;
+  afterRaceChange();
+  closeAllModals();
+  if(!wasDone&&!alreadyCelebrated){var diff=raceGoalDiff(r);raceCelebrate('Congrats on finishing '+r.name+'!'+(diff?' '+diff.text+'.':''));}
+  else{var d2=raceGoalDiff(r);if(d2)showStravaToast(d2.text+'!');}
+  var cb=raceFinishDone;raceFinishDone=null;if(cb)cb();
+}
+function finishRaceSkip(){closeAllModals();var cb=raceFinishDone;raceFinishDone=null;if(cb)cb();}
+
 </script>
 </body>
 </html>

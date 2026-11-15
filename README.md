@@ -33,8 +33,11 @@ A single-file, browser-based training log built for endurance athletes. Log work
 ### Races
 - Track upcoming races and past results
 - Supports running, cycling (road, gravel, mountain, fat bike), and skimo races
-- Fields: date, distance, elevation, finish time, place, and notes
-- Toggle between upcoming and completed race views
+- Tap a race for its page: countdown, goal time and goal pace, registration status, fuel plan (carbs / water / sodium per hour at your goal time), and after the race your result and placement next to your goal
+- Registration reminders: add the date (and time) registration opens and whether it's a lottery. The dashboard shows a reminder from two weeks out until you mark yourself registered, and "Add reminder to my calendar" downloads a calendar event with phone alerts the day before and on the day
+- Lottery races ask whether you got in once the draw date passes
+- Next-race countdown on the dashboard; a "How did it go?" prompt for races with no result yet
+- Confetti and a finish-time / placement prompt when you finish a race (including from Strava sync)
 
 ### Nutrition Database
 - Build a personal fuel database (gels, bars, drink mixes, etc.)
