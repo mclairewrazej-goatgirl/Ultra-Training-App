@@ -9,7 +9,7 @@ exports.handler = async function(event) {
   if (!clientId || !clientSecret) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Strava credentials not configured. Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in Netlify environment variables.' })
+      body: JSON.stringify({ error: 'Strava credentials not configured. Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in the hosting environment variables (Vercel: Settings → Environment Variables), then redeploy.' })
     };
   }
 
