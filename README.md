@@ -12,7 +12,9 @@ A single-file, browser-based training log built for endurance athletes. Log work
 - Weekly summary stats: distance, elevation, time, and activity count
 - Volume bar chart with toggleable views — weekly or monthly, distance or time
 - Overlay goal bands on the chart to visualize progress against targets
-- Recent activity feed with a mini 7-day week strip
+- Strength and stretch/recovery time shown separately from cross-training
+- Coming Up: planned workouts, races and events for the next 7 days
+- Recent activity feed with a 7-day week strip (dots for activities, plans, races and events; tap a day to open it)
 
 ### Training Log
 - Log runs, rides, cross-training, strength sessions, and recovery activities
@@ -21,9 +23,10 @@ A single-file, browser-based training log built for endurance athletes. Log work
 - Click any entry to view full details or edit/delete it
 
 ### Calendar
-- Monthly calendar view showing completed workouts and planned sessions
-- Add planned workouts to future dates; mark them complete when done
-- Color-coded dots distinguish run types and cross-training
+- Monthly calendar view showing completed workouts, planned sessions, races, and registration / lottery dates
+- Tap any day to see everything on it and add an activity, a planned workout, or an event
+- Training events: mark travel, backcountry trips, sick or injured days as a date range
+- Planned workouts can be edited (including moving the date) and marked complete
 
 ### Goals
 - Set weekly targets for distance, time, and elevation — separately for running and cross-training

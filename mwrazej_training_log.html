@@ -158,7 +158,7 @@ textarea.form-input{resize:vertical}
 select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237b82a0'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
 .pace-prev{font-size:11px;color:var(--blue);margin-top:4px;min-height:16px}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .cal-day-hdr{text-align:center;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:6px 0}
 .cal-cell{background:var(--surface);border:1px solid var(--border);border-radius:7px;min-height:80px;padding:6px;cursor:pointer;transition:.12s}
 .cal-cell:hover{border-color:var(--border2)}
@@ -241,6 +241,22 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .strava-btn{background:#FC4C02;color:#fff}
 .strava-btn:hover{background:#d94102}
 .strava-toast{border-left:3px solid #FC4C02}
+/* Day view, events, week dots */
+.day-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.day-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;cursor:pointer}
+.day-item:hover{background:var(--surface3)}
+.day-item-title{font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day-item-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.day-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.day-actions{display:flex;flex-wrap:wrap;gap:6px}
+.week-dots{display:flex;gap:3px;justify-content:center;height:6px;margin-top:4px}
+.week-dots span{width:5px;height:5px;border-radius:50%}
+.cal-event{border-radius:3px;padding:0 4px;font-weight:600}
+@media(max-width:600px){
+  .cal-cell{min-height:64px;padding:4px}
+  .cal-pip{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #page-calendar .page-header .header-btns{width:100%;justify-content:space-between}
+}
 /* Races */
 .race-card{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .race-card-big{font-size:15px;font-weight:700;white-space:nowrap}
@@ -438,9 +454,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="stat-card pu">
       <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 20 2 20"/></svg></div>
       <div class="stat-label">Total Vert</div><div class="stat-val" id="s-cvert">0 m</div></div>
-    <div class="stat-card bl">
-      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M18 4v16M6 12h12"/></svg></div>
-      <div class="stat-label">Strength Sessions</div><div class="stat-val" id="s-str">0</div></div>
+  </div>
+  <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px">Strength &amp; Recovery</div>
+  <div class="stat-grid">
+    <div class="stat-card am">
+      <div class="stat-icon" style="color:var(--amber)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M18 4v16M6 12h12"/></svg></div>
+      <div class="stat-label">Strength Sessions</div><div class="stat-val" id="s-str">0</div><div class="stat-sub" id="s-str-time">0 h</div></div>
+    <div class="stat-card gr">
+      <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z"/></svg></div>
+      <div class="stat-label">Stretch / Recovery</div><div class="stat-val" id="s-rec-time">0.0</div><div class="stat-sub" id="s-rec-count">0 sessions</div></div>
   </div>
   <div id="ski-season-section" style="display:none">
     <div class="section-title" style="color:var(--text);font-size:13px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between">
@@ -498,9 +520,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </div>
       </div>
     </div>
+    <div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><div class="card-title">Coming Up</div><span class="card-link" onclick="showPage('calendar',document.getElementById('nav-calendar'))">Calendar ›</span></div>
+      <div class="activity-list" id="coming-up"></div>
+    </div>
     <div class="card">
       <div class="card-header"><div class="card-title">Recent Activity</div><span class="card-link" onclick="showPage('log',document.getElementById('nav-log'))">View All ›</span></div>
       <div class="activity-list" id="recent-acts"></div>
+    </div>
     </div>
   </div>
 </div>
@@ -535,6 +563,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <span id="cal-lbl" style="font-size:13px;font-weight:600;padding:0 8px;color:var(--text)"></span>
       <button class="btn btn-outline btn-sm" onclick="changeMonth(1)">Next ›</button>
       <button class="btn btn-pink btn-sm" onclick="openModal('plan')">+ Plan Workout</button>
+      <button class="btn btn-outline btn-sm" onclick="openEventModal()">+ Event</button>
     </div>
   </div>
   <div id="cal-week-hdrs" class="cal-grid" style="margin-bottom:4px"></div>
@@ -772,6 +801,8 @@ function load(){
   document.getElementById('loading-overlay').style.display='flex';
   getDocRef().get().then(function(doc){
     if(doc.exists) DB=Object.assign(DB,doc.data());
+    if(!DB.events)DB.events=[];
+    if(migrateYogaToRecovery())save();
     document.body.setAttribute('data-theme',DB.theme==='light'?'light':'dark');
     document.getElementById('loading-overlay').style.display='none';
     renderAll();
@@ -862,7 +893,7 @@ function importData(e){
   e.target.value='';
 }
 
-function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderRaceStrip();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();renderStravaStatus();}
+function renderAll(){ensureGoalData();renderDash();renderWeekRow();renderVolChart();renderRecentActs();renderLog(logFilter);renderCalendar();renderGoals();renderRaces();renderRaceStrip();renderComingUp();renderNutrition();updateThemeButtons();updateVolumeModeButtons();updateVolumeMetricButtons();updateSportUI();renderStravaStatus();}
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -1165,6 +1196,7 @@ function renderDash(){
   var avg=weeks.length?weeks.reduce((s,w)=>s+w.rkm,0)/weeks.length:0;
   setText('s-wavg','Avg '+avg.toFixed(1)+' km/wk');
   renderSkiStats();
+  renderStrengthRecovery();
 }
 
 function minsToHM(m){var h=Math.floor(m/60),mm=Math.round(m%60);return h+'h '+mm+'m';}
@@ -1188,8 +1220,14 @@ function renderWeekRow(){
     var isToday=ds===todayStr;
     var hasRun=DB.runs.some(r=>r.date===ds);
     var hasCross=DB.crosses.some(r=>r.date===ds)||DB.strengths.some(r=>r.date===ds)||DB.recoveries.some(r=>r.date===ds);
-    var cl='day-cell'+(isToday?' today':'')+(hasRun?' has-act':hasCross?' has-act-blue':'');
-    el.innerHTML+=`<div class="${cl}"><div class="day-label">${days[i]}</div><div class="day-num">${dd.getDate()}</div></div>`;
+    var cl='day-cell'+(isToday?' today':'');
+    var dots='';
+    if(hasRun)dots+='<span style="background:var(--pink)"></span>';
+    if(hasCross)dots+='<span style="background:var(--blue)"></span>';
+    if(DB.plans.some(p=>p.date===ds&&!p.completed))dots+='<span style="background:var(--amber)"></span>';
+    if((DB.races||[]).some(r=>r.date===ds))dots+='<span style="background:var(--pink2);border-radius:2px"></span>';
+    eventsOn(ds).slice(0,1).forEach(e=>{dots+=`<span style="background:${eventColor(e.category)};border-radius:2px"></span>`;});
+    el.innerHTML+=`<div class="${cl}" onclick="openDayView('${ds}')"><div class="day-label">${days[i]}</div><div class="day-num">${dd.getDate()}</div><div class="week-dots">${dots}</div></div>`;
   }
 }
 
@@ -1564,7 +1602,8 @@ function renderCalendar(){
       if(r.regOpenDate===ds&&!r.registered)pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🎟 Register: ${escHtml(r.name)}</div>`;
       if(r.requiresLottery&&r.lotteryDate===ds)pips+=`<div class="cal-pip" style="color:#b388ff;cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🎲 Lottery: ${escHtml(r.name)}</div>`;
     });
-    html+=`<div class="${cl}" onclick="openModalDate('${ds}')"><div class="cal-num${isToday?' today-num':''}">${d}</div>${pips}</div>`;
+    var evPips=eventsOn(ds).map(e=>`<div class="cal-pip cal-event" style="background:${eventColor(e.category)}26;color:${eventColor(e.category)};border-left:2px solid ${eventColor(e.category)}" onclick="event.stopPropagation();openEventModal('${e.id}')">${escHtml(e.title||e.category)}</div>`).join('');
+    html+=`<div class="${cl}" onclick="openDayView('${ds}')"><div class="cal-num${isToday?' today-num':''}">${d}</div>${evPips}${pips}</div>`;
   }
   body.innerHTML=html;
 }
@@ -1970,6 +2009,7 @@ function openModal(type,prefill){
   document.getElementById('modal-container').appendChild(wrap);
   var sel=document.getElementById('f-runtype');
   if(sel)sel.addEventListener('change',onRunTypeChange);
+  if(type==='other')updateOtherSubs();
   if(prefill)fillForm(prefill,type);
 }
 
@@ -3315,7 +3355,7 @@ function stravaAddAsActivity(act){
   var base={id:uid(),date:date,dist:distKm,dur:durMin,vert:vert,hr:hr,notes:act.name||'',stravaId:String(act.id)};
   var runTypes=['Run','TrailRun','VirtualRun'];
   var rideTypes=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
-  var strengthTypes=['RockClimbing','WeightTraining','Crossfit','Yoga'];
+  var strengthTypes=['RockClimbing','WeightTraining','Crossfit'];
   var skiTypes=['NordicSki','BackcountrySki','AlpineSki'];
   if((runTypes.includes(sType)&&!isCycling())||(!rideTypes.includes(sType)&&!strengthTypes.includes(sType)&&!skiTypes.includes(sType)&&!['Hike','Walk'].includes(sType)&&isCycling()===false&&sType!=='')){
     var terrain='road';
@@ -3334,8 +3374,10 @@ function stravaAddAsActivity(act){
       if(sType==='MountainBikeRide')crossBikeType='Mountain Bike';
       DB.crosses.push(Object.assign({},base,{actType:'cross',subtype:crossBikeType,rpe:0,nutritionEntries:[]}));
     }
+  }else if(['Yoga','Pilates'].includes(sType)){
+    DB.recoveries.push(Object.assign({},base,{actType:'recovery',subtype:sType==='Yoga'?'Yoga':'Mobility'}));
   }else if(strengthTypes.includes(sType)){
-    var sub=sType==='Yoga'?'Yoga':sType==='RockClimbing'?'Indoor Climbing':'Gym Strength';
+    var sub=sType==='RockClimbing'?'Indoor Climbing':'Gym Strength';
     DB.strengths.push(Object.assign({},base,{actType:'strength',subtype:sub}));
   }else if(['Hike','Walk'].includes(sType)&&isCycling()===false){
     DB.runs.push(Object.assign({},base,{actType:'run',runType:'hike',terrain:'trail',workoutDetails:'',nutritionEntries:[]}));
@@ -3830,6 +3872,144 @@ function finishRaceSave(id,alreadyCelebrated){
   var cb=raceFinishDone;raceFinishDone=null;if(cb)cb();
 }
 function finishRaceSkip(){closeAllModals();var cb=raceFinishDone;raceFinishDone=null;if(cb)cb();}
+
+
+// ─── STRENGTH / RECOVERY SUBTYPES ───────────────────────────────────────────
+var OTHER_SUBTYPES={
+  strength:['Gym Strength','Indoor Climbing','Core','Other Strength'],
+  recovery:['Yoga','Stretching','Mobility','Foam Rolling','Massage','Physio','Other Recovery']
+};
+function updateOtherSubs(){
+  var cat=document.getElementById('f-category')?.value||'strength';
+  var sel=document.getElementById('f-subtype');if(!sel)return;
+  var cur=sel.value,list=OTHER_SUBTYPES[cat]||OTHER_SUBTYPES.strength;
+  if(cur&&list.indexOf(cur)===-1&&OTHER_SUBTYPES.strength.concat(OTHER_SUBTYPES.recovery).indexOf(cur)===-1)list=list.concat([cur]);
+  sel.innerHTML=list.map(function(s){return'<option'+(s===cur?' selected':'')+'>'+s+'</option>';}).join('');
+}
+// Yoga used to sync from Strava as strength. Move those entries to recovery once.
+function migrateYogaToRecovery(){
+  if(DB.yogaMigrated)return false;
+  var moved=DB.strengths.filter(function(s){return /yoga/i.test(s.subtype||'');});
+  if(moved.length){
+    DB.strengths=DB.strengths.filter(function(s){return!/yoga/i.test(s.subtype||'');});
+    moved.forEach(function(s){DB.recoveries.push(Object.assign({},s,{actType:'recovery',subtype:'Yoga'}));});
+  }
+  DB.yogaMigrated=true;
+  return true;
+}
+
+// ─── TRAINING EVENTS (travel, trips, sick, injured) ─────────────────────────
+var EVENT_CATEGORIES=['Travel','Backcountry Trip','Sick','Injured','Other'];
+function eventColor(cat){return{'Travel':'#00b4d8','Backcountry Trip':'#2ec4b6','Sick':'#ff5252','Injured':'#ffab40'}[cat]||'#7b82a0';}
+function eventsOn(ds){return(DB.events||[]).filter(function(e){return e.startDate<=ds&&ds<=(e.endDate||e.startDate);});}
+function openEventModal(id,date){
+  var e=id?(DB.events||[]).find(function(x){return x.id===id;}):null;
+  var d=date||todayISO();
+  closeAllModals();
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal" style="max-width:440px">'+
+    '<div class="modal-title">'+(e?'Edit Event':'Add Event')+'<button class="modal-close" onclick="closeAllModals()">✕</button></div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Mark time away from normal training, like a trip, travel, or being sick or injured.</div>'+
+    '<div class="form-row">'+
+      '<div class="form-group"><label class="form-label">Type</label><select class="form-input" id="ev-cat">'+EVENT_CATEGORIES.map(function(c){return'<option'+(e&&e.category===c?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'+
+      '<div class="form-group"><label class="form-label">Title (optional)</label><input class="form-input" id="ev-title" placeholder="e.g. Bugaboos trip" value="'+escHtml(e?e.title:'')+'"></div>'+
+    '</div>'+
+    '<div class="form-row">'+
+      '<div class="form-group"><label class="form-label">From</label><input class="form-input" type="date" id="ev-start" value="'+(e?e.startDate:d)+'"></div>'+
+      '<div class="form-group"><label class="form-label">To</label><input class="form-input" type="date" id="ev-end" value="'+(e?e.endDate:d)+'"></div>'+
+    '</div>'+
+    '<div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="ev-notes" rows="2">'+escHtml(e?e.notes:'')+'</textarea></div>'+
+    '<div class="modal-footer">'+(e?'<button class="btn btn-danger" onclick="deleteEvent(\''+e.id+'\')">Delete</button><span style="flex:1"></span>':'')+
+      '<button class="btn btn-outline" onclick="closeAllModals()">Cancel</button><button class="btn btn-pink" onclick="saveEvent(\''+(e?e.id:'')+'\')">Save</button></div>'+
+  '</div>';
+  wrap.addEventListener('click',function(ev){if(ev.target===wrap)closeAllModals();});
+  document.getElementById('modal-container').appendChild(wrap);
+}
+function saveEvent(id){
+  var start=document.getElementById('ev-start').value,end=document.getElementById('ev-end').value||start;
+  if(!start){alert('Please choose a start date.');return;}
+  if(end<start){var t=start;start=end;end=t;}
+  if(!DB.events)DB.events=[];
+  var obj={id:id||uid(),startDate:start,endDate:end,category:document.getElementById('ev-cat').value,
+    title:(document.getElementById('ev-title').value||'').trim(),notes:(document.getElementById('ev-notes').value||'').trim()};
+  var i=DB.events.findIndex(function(x){return x.id===obj.id;});
+  if(i>=0)DB.events[i]=obj;else DB.events.push(obj);
+  save();closeAllModals();renderCalendar();renderWeekRow();renderComingUp();
+}
+function deleteEvent(id){
+  if(!confirm('Delete this event?'))return;
+  DB.events=(DB.events||[]).filter(function(x){return x.id!==id;});
+  save();closeAllModals();renderCalendar();renderWeekRow();renderComingUp();
+}
+
+// ─── DAY VIEW: tap any day on the calendar or week strip ────────────────────
+function actTitle(r,type){
+  var dist=pf(r.dist);
+  if(type==='run')return(dist>0?dist.toFixed(1)+' km ':'')+(r.bikeType?r.bikeType+' ride':((r.runType&&r.runType!=='easy'?r.runType+' ':'')+(r.runType==='hike'?'':'run')));
+  if(type==='cross')return(r.subtype||'Cross train')+(dist>0?' '+dist.toFixed(1)+' km':'');
+  return r.subtype||(type==='strength'?'Strength':'Recovery');
+}
+function openDayView(ds){
+  var rows='';
+  var row=function(color,label,sub,onclick){return'<div class="day-item" onclick="'+onclick+'"><span class="day-dot" style="background:'+color+'"></span><div style="flex:1;min-width:0"><div class="day-item-title">'+label+'</div>'+(sub?'<div class="day-item-sub">'+sub+'</div>':'')+'</div><span style="color:var(--muted2)">›</span></div>';};
+  (DB.races||[]).filter(function(r){return r.date===ds;}).forEach(function(r){rows+=row('var(--pink2)','🏁 '+escHtml(r.name),r.result?'Result '+escHtml(r.result):(r.goal?'Goal '+escHtml(r.goal):'Race day'),"openRaceDetail('"+r.id+"')");});
+  eventsOn(ds).forEach(function(e){rows+=row(eventColor(e.category),escHtml(e.title||e.category),e.category+(e.startDate!==e.endDate?' · '+fmtDateShort(e.startDate)+' – '+fmtDateShort(e.endDate):''),"openEventModal('"+e.id+"')");});
+  DB.plans.filter(function(p){return p.date===ds;}).forEach(function(p){rows+=row(p.completed?'var(--green)':'var(--amber)',(p.completed?'✓ ':'')+escHtml(p.desc||p.type),'Planned'+(pf(p.dist)?' · '+pf(p.dist)+' km':'')+(pi(p.dur)?' · '+pi(p.dur)+' min':''),"closeAllModals();viewPlan('"+p.id+"')");});
+  [['run',DB.runs,'var(--pink)'],['cross',DB.crosses,'var(--blue)'],['strength',DB.strengths,'var(--amber)'],['recovery',DB.recoveries,'var(--green)']].forEach(function(g){
+    g[1].filter(function(r){return r.date===ds;}).forEach(function(r){rows+=row(g[2],escHtml(actTitle(r,g[0])),pi(r.dur)?minsToHM(pi(r.dur)):'',"closeAllModals();viewAct('"+r.id+"','"+g[0]+"')");});
+  });
+  if(!rows)rows='<div class="empty-state" style="padding:18px">Nothing on this day yet.</div>';
+  var d=parseLocalDate(ds),future=ds>todayISO();
+  closeAllModals();
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal" style="max-width:440px">'+
+    '<div class="modal-title">'+d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})+'<button class="modal-close" onclick="closeAllModals()">✕</button></div>'+
+    '<div class="day-list">'+rows+'</div>'+
+    '<div class="day-actions">'+
+      (future?'':'<button class="btn btn-pink btn-sm" onclick="openModalForDate(\''+ds+'\',\''+(isCycling()?'run':'run')+'\')">'+(isCycling()?'+ Log Ride':'+ Log Run')+'</button>'+
+      '<button class="btn btn-blue btn-sm" onclick="openModalForDate(\''+ds+'\',\'cross\')">+ Cross Train</button>'+
+      '<button class="btn btn-outline btn-sm" onclick="openModalForDate(\''+ds+'\',\'other\')">+ Strength / Recovery</button>')+
+      '<button class="btn btn-outline btn-sm" onclick="openModal(\'plan\',{date:\''+ds+'\'})">+ Plan Workout</button>'+
+      '<button class="btn btn-outline btn-sm" onclick="openEventModal(null,\''+ds+'\')">+ Event</button>'+
+    '</div></div>';
+  wrap.addEventListener('click',function(ev){if(ev.target===wrap)closeAllModals();});
+  document.getElementById('modal-container').appendChild(wrap);
+}
+function openModalForDate(ds,type){openModal(type);setTimeout(function(){var e=document.getElementById('f-date');if(e)e.value=ds;},30);}
+
+// ─── DASHBOARD: coming up (planned workouts, races, events in the next 7 days) ─
+function renderComingUp(){
+  var el=document.getElementById('coming-up');if(!el)return;
+  var today=todayISO(),end=addDaysISO(today,7),items=[];
+  DB.plans.filter(function(p){return!p.completed&&p.date>=today&&p.date<=end;}).forEach(function(p){
+    items.push({date:p.date,color:'var(--amber)',title:escHtml(p.desc||p.type),sub:p.type+(pf(p.dist)?' · '+pf(p.dist)+' km':'')+(pi(p.dur)?' · '+pi(p.dur)+' min':''),onclick:"viewPlan('"+p.id+"')"});
+  });
+  (DB.races||[]).filter(function(r){return!r.result&&r.date>=today&&r.date<=end;}).forEach(function(r){
+    items.push({date:r.date,color:'var(--pink2)',title:'🏁 '+escHtml(r.name),sub:'Race day',onclick:"openRaceDetail('"+r.id+"')"});
+  });
+  (DB.events||[]).filter(function(e){return(e.endDate||e.startDate)>=today&&e.startDate<=end;}).forEach(function(e){
+    items.push({date:e.startDate<today?today:e.startDate,color:eventColor(e.category),title:escHtml(e.title||e.category),sub:e.category+(e.startDate!==e.endDate?' until '+fmtDateShort(e.endDate):''),onclick:"openEventModal('"+e.id+"')"});
+  });
+  items.sort(function(a,b){return a.date.localeCompare(b.date);});
+  if(!items.length){el.innerHTML='<div class="empty-state" style="padding:16px">Nothing planned for the next 7 days. <span class="card-link" onclick="openModal(\'plan\')">Plan a workout ›</span></div>';return;}
+  el.innerHTML=items.map(function(it){
+    var n=daysUntilISO(it.date),when=n===0?'Today':n===1?'Tomorrow':fmtDateShort(it.date);
+    return'<div class="act-row" onclick="'+it.onclick+'"><div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="day-dot" style="background:'+it.color+'"></span><div style="min-width:0"><div class="act-info">'+it.title+'</div><div style="font-size:10px;color:var(--muted)">'+it.sub+'</div></div></div><div class="act-date">'+when+'</div></div>';
+  }).join('');
+}
+
+// ─── DASHBOARD: strength and recovery for the selected week ─────────────────
+function renderStrengthRecovery(){
+  var st=DB.strengths.filter(function(r){return inDashWeek(r.date);});
+  var rc=DB.recoveries.filter(function(r){return inDashWeek(r.date);});
+  var hrs=function(arr){var m=arr.reduce(function(s,r){return s+pi(r.dur);},0);return(m/60).toFixed(1);};
+  setText('s-str',st.length+'');
+  setText('s-str-time',hrs(st)+' h total');
+  setText('s-rec-time',hrs(rc)+' h');
+  setText('s-rec-count',rc.length+(rc.length===1?' session':' sessions'));
+}
 
 </script>
 </body>
