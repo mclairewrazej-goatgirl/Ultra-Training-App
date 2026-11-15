@@ -1,0 +1,8 @@
+{
+  "name": "ultra-training-app",
+  "private": true,
+  "description": "Serverless functions for the training log web app (Vercel).",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0"
+  }
+}

@@ -98,6 +98,7 @@ Already-synced activities remain in your log if you later disconnect Strava.
 | Frontend | Vanilla HTML / CSS / JavaScript (single file, no build step) |
 | Auth & database | Firebase 10 (Auth + Firestore) |
 | Strava OAuth | Serverless functions in `netlify/functions/`, served on Vercel through the thin wrappers in `api/` |
+| Plan import | `api/parse-plan.js` (Vercel only) sends an uploaded PDF to the Claude API and returns the workouts; the PDF is never stored |
 | Hosting | Vercel (`vercel.json`); `netlify.toml` still works if you deploy to Netlify |
 
 The entire UI lives in `mwrazej_training_log.html`. There is no framework, no bundler, and no npm install — open the file in a browser and it runs.
@@ -127,5 +128,9 @@ A theme toggle in the sidebar switches between a dark (default) navy palette and
 3. In **Firebase Console → Authentication → Settings → Authorized domains**, add your Vercel domain (e.g. `your-app.vercel.app`).
 4. In **Google Cloud Console → APIs & Services → Credentials**, open the *Web client* OAuth client and add `https://your-app.vercel.app/__/auth/handler` under **Authorized redirect URIs**. Sign-in runs through this site's own domain (see the `/__/auth` rewrite in `vercel.json`) so it works in the iPhone home-screen app.
 5. In **Strava → Settings → My API Application**, set **Authorization Callback Domain** to your Vercel domain. Strava allows only one domain, so Strava connect on any other host stops working after this.
+6. (For **Calendar → Import plan**) Create an API key at [platform.claude.com](https://platform.claude.com), add some prepaid credit and a monthly spend limit, then add these environment variables and redeploy:
+   - `ANTHROPIC_API_KEY`: the key.
+   - `ALLOWED_EMAILS`: the Google sign-in email(s) allowed to import plans, comma-separated. Without it, the import refuses every request, so strangers can't spend your credit.
+   - `PLAN_MODEL` (optional): a different Claude model, e.g. `claude-sonnet-5-5` to halve the cost.
 
 Every push to `main` deploys automatically; pull requests get their own preview link. Google sign-in and Strava only work on the production domain, not on preview links.
