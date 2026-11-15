@@ -2472,9 +2472,9 @@ function openImportPlan(){
     (planLibrary().length?'<div class="form-group"><label class="form-label">Reuse a plan from your library (free)</label><div style="display:flex;gap:8px"><select class="form-input" id="imp-lib">'+
       planLibrary().map(function(l){return'<option value="'+escHtml(l.id)+'">'+escHtml(l.name)+' · '+(l.totalWeeks||'?')+' wk</option>';}).join('')+
       '</select><button class="btn btn-outline btn-sm" onclick="useLibraryPlan()">Use</button></div></div><div class="import-or">or read a new PDF</div>':'')+
-    '<div class="form-group"><label class="form-label">Plan PDF</label>'+
+    '<div class="form-group"><label class="form-label">Plan PDF (or a saved .json plan file)</label>'+
       '<label class="btn btn-outline" style="cursor:pointer;width:100%;justify-content:center"><span id="imp-file-label">Choose PDF…</span>'+
-      '<input type="file" id="imp-file" accept="application/pdf,.pdf" style="display:none" onchange="onImportFileChosen(this)"></label></div>'+
+      '<input type="file" id="imp-file" accept="application/pdf,.pdf,application/json,.json" style="display:none" onchange="onImportFileChosen(this)"></label></div>'+
     '<div class="form-group"><label class="form-label">Line the plan up with</label>'+
       '<select class="form-input" id="imp-anchor" onchange="onImportAnchorChange()">'+
         (races.length?'<option value="race">My race (count back from race day)</option>':'')+
@@ -2515,6 +2515,7 @@ function startPlanImport(){
   var input=document.getElementById('imp-file');
   var file=input&&input.files&&input.files[0];
   if(!file){showImportError('Choose a PDF first.');return;}
+  if(/\.json$/i.test(file.name)||/json/i.test(file.type)){importPlanJsonFile(file);return;}
   if(!/pdf$/i.test(file.type)&&!/\.pdf$/i.test(file.name)){showImportError('That file isn\'t a PDF.');return;}
   if(file.size>IMPORT_MAX_BYTES){showImportError('That PDF is '+(file.size/1048576).toFixed(1)+' MB. Plans up to 3 MB can be imported.');return;}
   if(!navigator.onLine){showImportError('Importing a plan needs an internet connection.');return;}
@@ -2534,7 +2535,29 @@ function startPlanImport(){
     return fetch('/api/parse-plan',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+v[1]},body:JSON.stringify({pdf:v[0]})});
   }).then(function(r){
     return r.json().catch(function(){return{error:r.status===504?'Reading the plan took too long. Please try again.':'Something went wrong ('+r.status+').'};}).then(function(j){if(!r.ok||!j.plan)throw new Error(j.error||'Something went wrong.');return j.plan;});
-  }).then(function(raw){
+  }).then(onPlanRead).catch(function(err){
+    var b=document.getElementById('imp-go');if(b){b.disabled=false;b.textContent='Try again';}
+    var p=document.getElementById('imp-progress');if(p)p.remove();
+    showImportError(err&&err.message&&!/Failed to fetch|NetworkError|Load failed/i.test(err.message)?err.message:'Couldn\'t reach the server. Check your connection and try again.');
+  });
+}
+
+// A plan already transcribed (saved .json) goes straight to the preview: no upload, no cost.
+function importPlanJsonFile(file){
+  planImport.anchor=document.getElementById('imp-anchor').value;
+  planImport.raceId=(document.getElementById('imp-race')||{}).value||'';
+  planImport.startDate=document.getElementById('imp-start').value||planImport.startDate;
+  planImport.fileName=file.name;
+  file.text().then(function(t){
+    var j=JSON.parse(t);
+    var raw=j&&j.plan?j.plan:j;
+    if(raw&&!raw.planName&&raw.name)raw.planName=raw.name;
+    if(!raw||!Array.isArray(raw.workouts)||!raw.workouts.length)throw new Error('bad');
+    onPlanRead(raw);
+  }).catch(function(){showImportError('That file isn\'t a saved training plan.');});
+}
+
+function onPlanRead(raw){
     planImport.raw=raw;
     planImport.libId=saveToLibrary(raw,planImport.fileName);
     planImport.rows=buildImportRows(raw);
@@ -2546,11 +2569,6 @@ function startPlanImport(){
     planImport.startWeek=importFitStartWeek(planImport)||1;
     saveImportDraft();
     renderImportPreview();
-  }).catch(function(err){
-    var b=document.getElementById('imp-go');if(b){b.disabled=false;b.textContent='Try again';}
-    var p=document.getElementById('imp-progress');if(p)p.remove();
-    showImportError(err&&err.message&&!/Failed to fetch|NetworkError|Load failed/i.test(err.message)?err.message:'Couldn\'t reach the server. Check your connection and try again.');
-  });
 }
 
 function resumeImportDraft(){
