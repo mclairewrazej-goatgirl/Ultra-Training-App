@@ -2,7 +2,7 @@
 
 A single-file, browser-based training log built for endurance athletes. Log workouts, track weekly goals, plan your race calendar, and analyze volume trends — all from one page.
 
-**Live app:** [https://wrazej-training-app.netlify.app/](https://wrazej-training-app.netlify.app/)
+**Live app:** hosted on Vercel (previously [wrazej-training-app.netlify.app](https://wrazej-training-app.netlify.app/)). On iPhone, open it in Safari and use Share → Add to Home Screen to install it like an app.
 
 ---
 
@@ -87,8 +87,8 @@ Already-synced activities remain in your log if you later disconnect Strava.
 |---|---|
 | Frontend | Vanilla HTML / CSS / JavaScript (single file, no build step) |
 | Auth & database | Firebase 10 (Auth + Firestore) |
-| Strava OAuth | Netlify serverless functions (`strava-exchange-token`, `strava-refresh-token`) |
-| Hosting | Netlify |
+| Strava OAuth | Serverless functions in `netlify/functions/`, served on Vercel through the thin wrappers in `api/` |
+| Hosting | Vercel (`vercel.json`); `netlify.toml` still works if you deploy to Netlify |
 
 The entire UI lives in `mwrazej_training_log.html`. There is no framework, no bundler, and no npm install — open the file in a browser and it runs.
 
@@ -107,3 +107,15 @@ A theme toggle in the sidebar switches between a dark (default) navy palette and
 3. Create a Firebase project, enable Google Auth and Firestore, and paste your config into the `firebaseConfig` block near the top of the JS section.
 4. (Optional) Create a Strava API app, add `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` as Netlify environment variables, and set the redirect URI to `https://<your-domain>/`.
 5. Update `STRAVA_CLIENT_ID` in the HTML file to match your Strava app.
+
+---
+
+## Deploying on Vercel
+
+1. In Vercel, **Add New → Project**, import this GitHub repo. Leave Framework Preset as **Other** and leave the build command and output directory empty.
+2. In **Settings → Environment Variables**, add `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`.
+3. In **Firebase Console → Authentication → Settings → Authorized domains**, add your Vercel domain (e.g. `your-app.vercel.app`).
+4. In **Google Cloud Console → APIs & Services → Credentials**, open the *Web client* OAuth client and add `https://your-app.vercel.app/__/auth/handler` under **Authorized redirect URIs**. Sign-in runs through this site's own domain (see the `/__/auth` rewrite in `vercel.json`) so it works in the iPhone home-screen app.
+5. In **Strava → Settings → My API Application**, set **Authorization Callback Domain** to your Vercel domain. Strava allows only one domain, so Strava connect on any other host stops working after this.
+
+Every push to `main` deploys automatically; pull requests get their own preview link. Google sign-in and Strava only work on the production domain, not on preview links.
