@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Training">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <title>M Wrazej Training Log</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -233,6 +241,25 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .strava-btn{background:#FC4C02;color:#fff}
 .strava-btn:hover{background:#d94102}
 .strava-toast{border-left:3px solid #FC4C02}
+.tabbar{display:none}
+@media(max-width:600px){
+  /* Phone layout: bottom tab bar replaces the hamburger menu; "More" opens the sidebar */
+  .hamburger{display:none!important}
+  .mobile-topbar{padding-top:calc(10px + env(safe-area-inset-top));justify-content:center}
+  .sidebar{padding-top:env(safe-area-inset-top);padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .main{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .modal-overlay{padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+  .celebrate-toast{bottom:calc(76px + env(safe-area-inset-bottom));left:16px;right:16px;text-align:center}
+  .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:300;background:var(--surface);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--muted);font-family:inherit;font-size:10px;padding:4px 0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .tab svg{width:22px;height:22px}
+  .tab.active{color:var(--pink)}
+  .tab-add .tab-add-circle{width:40px;height:40px;margin-top:-4px;border-radius:50%;background:var(--pink);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(233,30,140,.4)}
+  .tab-add .tab-add-circle svg{width:22px;height:22px}
+  /* the + tab covers these, so drop them from the phone sidebar */
+  #btn-log-primary,#btn-log-primary + div,#btn-log-primary + div + button{display:none!important}
+  .log-sheet .btn{width:100%;justify-content:center;padding:13px;font-size:14px;margin-bottom:8px}
+}
 </style>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -643,6 +670,25 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </main>
 </div>
 
+<!-- Phone bottom tab bar (hidden on wider screens) -->
+<nav class="tabbar" id="tabbar" aria-label="Main">
+  <button class="tab active" id="tab-dashboard" onclick="showPage('dashboard',document.getElementById('nav-dashboard'))">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard
+  </button>
+  <button class="tab" id="tab-calendar" onclick="showPage('calendar',document.getElementById('nav-calendar'))">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Calendar
+  </button>
+  <button class="tab tab-add" id="tab-add" onclick="openLogSheet()" aria-label="Log an activity">
+    <span class="tab-add-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+  </button>
+  <button class="tab" id="tab-races" onclick="showPage('races',document.getElementById('nav-races'))">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Races
+  </button>
+  <button class="tab" id="tab-more" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More
+  </button>
+</nav>
+
 <!-- MODALS -->
 <div id="modal-container"></div>
 
@@ -659,14 +705,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 //      STRAVA_CLIENT_ID     = your Client ID
 //      STRAVA_CLIENT_SECRET = your Client Secret
 var STRAVA_CLIENT_ID = '235428';
-var STRAVA_REDIRECT_URI = 'https://wrazej-training-app.netlify.app/mwrazej_training_log.html';
+// Strava sends you back to whichever site you connected from. Its "Authorization
+// Callback Domain" setting must match that site's domain.
+var STRAVA_REDIRECT_URI = (location.protocol === 'https:') ? location.origin + location.pathname : '';
 // ────────────────────────────────────────────────────────────────────────────
 
 // ─── FIREBASE CONFIG ────────────────────────────────────────────────────────
 // Paste your Firebase project config here (from Firebase Console → Project settings)
 var FIREBASE_CONFIG = {
   apiKey:            "AIzaSyDRiIhhg7Uav6cApyUzea_u_WXSZa5fiZs",
-  authDomain:        "mwrazej-training.firebaseapp.com",
+  // On Vercel, /__/auth is proxied to Firebase (see vercel.json) so sign-in stays on
+  // this site's own domain. That keeps redirect sign-in working in Safari and in the
+  // iPhone home-screen app, which block the cross-site storage it otherwise needs.
+  authDomain:        (location.protocol === 'https:' && !/\.netlify\.app$/.test(location.hostname))
+                       ? location.hostname : "mwrazej-training.firebaseapp.com",
   projectId:         "mwrazej-training",
   storageBucket:     "mwrazej-training.firebasestorage.app",
   messagingSenderId: "528346991243",
@@ -715,9 +767,19 @@ function save(){
   },800);
 }
 
-function signInWithGoogle(){
-  fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(err){alert('Sign-in failed: '+err.message);});
+// Home-screen apps and phones can't reliably use sign-in pop-ups, so they use a
+// full-page redirect instead. Desktop browsers keep the pop-up.
+function useRedirectSignIn(){
+  var standalone=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);
+  var touch=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  return standalone||touch;
 }
+function signInWithGoogle(){
+  var provider=new firebase.auth.GoogleAuthProvider();
+  var p=useRedirectSignIn()?fbAuth.signInWithRedirect(provider):fbAuth.signInWithPopup(provider);
+  p.catch(function(err){alert('Sign-in failed: '+err.message);});
+}
+fbAuth.getRedirectResult().catch(function(err){alert('Sign-in failed: '+err.message);});
 
 function signOutUser(){
   if(confirm('Sign out?')) fbAuth.signOut();
@@ -1799,6 +1861,34 @@ function showPage(id,el){
   if(id==='training-plans')renderTrainingPlans();
   history.replaceState(null,'','#'+id);
   closeSidebar();
+  updateTabbar(id);
+}
+
+// Highlights the matching bottom tab; pages without their own tab live under "More".
+function updateTabbar(id){
+  var tabs=['dashboard','calendar','races'];
+  document.querySelectorAll('#tabbar .tab').forEach(function(t){t.classList.remove('active');});
+  var t=document.getElementById(tabs.indexOf(id)!==-1?'tab-'+id:'tab-more');
+  if(t)t.classList.add('active');
+}
+
+// The "+" tab: one sheet with every way to log something.
+function openLogSheet(){
+  closeSidebar();
+  closeAllModals();
+  var main=isCycling()?'+ Log Ride':'+ Log Run';
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal log-sheet" style="max-width:380px;margin-top:auto;margin-bottom:0">'+
+    '<div class="modal-title">Log something<button class="modal-close" onclick="closeAllModals()">✕</button></div>'+
+    '<button class="btn btn-pink" onclick="openModal(\'run\')">'+main+'</button>'+
+    '<button class="btn btn-blue" onclick="openModal(\'cross\')">Cross Train</button>'+
+    '<button class="btn btn-outline" onclick="openModal(\'other\')">Strength / Recovery</button>'+
+    '<button class="btn btn-outline" onclick="openModal(\'plan\')">Plan a Workout</button>'+
+    '<button class="btn btn-outline" onclick="openModal(\'race\')">Add a Race</button>'+
+  '</div>';
+  wrap.addEventListener('click',function(e){if(e.target===wrap)closeAllModals();});
+  document.getElementById('modal-container').appendChild(wrap);
 }
 
 function navigateToHash(){
@@ -2814,7 +2904,7 @@ async function handleStravaCallback(){
     renderStravaStatus();
     showStravaToast('Strava connected! Hit "Sync Activities" to import your workouts.');
   }catch(e){
-    alert('Strava connection failed: '+e.message+'\n\nMake sure STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are set in Netlify environment variables.');
+    alert('Strava connection failed: '+e.message+'\n\nMake sure STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are set in the hosting environment variables, and that Strava\'s Authorization Callback Domain is '+location.hostname+'.');
   }
 }
 
