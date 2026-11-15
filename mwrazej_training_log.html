@@ -130,6 +130,18 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .plan-add{font-size:16px;line-height:1}
 .import-note{font-size:12px;color:var(--muted);line-height:1.5}
 .import-error{background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.4);color:var(--text);border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px}
+.lib-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;-webkit-overflow-scrolling:touch}
+.lib-chip{flex:none;padding:6px 11px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.lib-chip b{font-weight:500;opacity:.7;margin-left:2px}
+.lib-chip.active{background:var(--pink);border-color:var(--pink);color:#fff}
+.lib-item{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 64px 11px 13px;margin-bottom:8px;cursor:pointer}
+.lib-title{font-size:14px;color:var(--text);font-weight:500}
+.lib-meta{font-size:12px;color:var(--text);opacity:.8;margin-top:2px}
+.lib-from{font-size:11px;color:var(--muted);margin-top:3px}
+.lib-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.lib-tags span{font-size:10px;padding:2px 7px;border-radius:999px;background:var(--surface2);color:var(--muted)}
+.lib-add{position:absolute;right:12px;top:12px;font-size:12px;color:var(--pink);font-weight:600}
+.import-or{text-align:center;font-size:11px;color:var(--muted);margin:-4px 0 12px;text-transform:uppercase;letter-spacing:.05em}
 .import-vol{background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px}
 .import-vol .ftab{flex:1;text-align:center}
 .import-warn{background:rgba(255,171,64,.08);border:1px solid rgba(255,171,64,.35);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text);margin-bottom:12px}
@@ -405,6 +417,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="nav-item" id="nav-plans" onclick="showPage('plans',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Training Plan
   </div>
+  <div class="nav-item" id="nav-library" onclick="showPage('library',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Workout Library
+  </div>
   <div class="nav-section">Tools</div>
   <div class="nav-item" id="nav-calculator" onclick="showPage('calculator',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/></svg>Calculator
@@ -644,6 +659,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="header-btns"><span id="plans-unit"></span><button class="btn btn-outline btn-sm" onclick="openImportPlan()">Import plan</button></div>
   </div>
   <div id="plans-body"></div>
+</div>
+
+<!-- WORKOUT LIBRARY -->
+<div class="page" id="page-library">
+  <div class="page-header">
+    <div><div class="page-title">Workout Library</div><div class="page-sub">Every workout from the plans you've imported. Tap one to add it to your calendar.</div></div>
+    <div class="header-btns"><span id="library-unit"></span></div>
+  </div>
+  <div id="library-body"></div>
 </div>
 
 <!-- CALCULATOR -->
@@ -2026,6 +2050,7 @@ function showPage(id,el){
   if(id==='training-plans')renderTrainingPlans();
   if(id==='stats')renderStats();
   if(id==='plans')renderPlansPage();
+  if(id==='library')renderLibraryPage();
   history.replaceState(null,'','#'+id);
   closeSidebar();
   updateTabbar(id);
@@ -2059,7 +2084,7 @@ function openLogSheet(){
 }
 
 function navigateToHash(){
-  if(location.hash==='#plans'){showPage('plans',document.getElementById('nav-plans'));return;}
+  if(location.hash==='#plans'||location.hash==='#library'){var h=location.hash.slice(1);showPage(h,document.getElementById('nav-'+h));return;}
   var hash=location.hash.replace('#','');
   var valid=['dashboard','log','calendar','calculator','goals','races','nutrition','training-plans','stats'];
   if(valid.indexOf(hash)!==-1){
@@ -2438,7 +2463,8 @@ function importWeek1Monday(st){
     base=addDaysISO(mondayOf(race.date),-(raceWeek-1)*7);
   }else{
     if(!st.startDate)return'';
-    base=mondayOf(st.startDate);
+    // The start date is when your first week (which may be partway in) begins.
+    base=addDaysISO(mondayOf(st.startDate),-((st.startWeek||1)-1)*7);
   }
   return addDaysISO(base,(st.offsetWeeks||0)*7);
 }
@@ -2472,6 +2498,9 @@ function openImportPlan(){
   showImportModal(
     '<div class="modal-title">Import a training plan<button class="modal-close" onclick="closeAllModals()">×</button></div>'+
     (draft&&draft.raw?'<div class="import-note" style="margin-bottom:14px">You have a plan you haven\'t finished reviewing'+(draft.fileName?' ('+escHtml(draft.fileName)+')':'')+'. <span class="card-link" onclick="resumeImportDraft()">Continue reviewing ›</span></div>':'')+
+    (planLibrary().length?'<div class="form-group"><label class="form-label">Reuse a plan from your library (free)</label><div style="display:flex;gap:8px"><select class="form-input" id="imp-lib">'+
+      planLibrary().map(function(l){return'<option value="'+escHtml(l.id)+'">'+escHtml(l.name)+' · '+(l.totalWeeks||'?')+' wk</option>';}).join('')+
+      '</select><button class="btn btn-outline btn-sm" onclick="useLibraryPlan()">Use</button></div></div><div class="import-or">or read a new PDF</div>':'')+
     '<div class="form-group"><label class="form-label">Plan PDF</label>'+
       '<label class="btn btn-outline" style="cursor:pointer;width:100%;justify-content:center"><span id="imp-file-label">Choose PDF…</span>'+
       '<input type="file" id="imp-file" accept="application/pdf,.pdf" style="display:none" onchange="onImportFileChosen(this)"></label></div>'+
@@ -2536,12 +2565,14 @@ function startPlanImport(){
     return r.json().catch(function(){return{error:r.status===504?'Reading the plan took too long. Please try again.':'Something went wrong ('+r.status+').'};}).then(function(j){if(!r.ok||!j.plan)throw new Error(j.error||'Something went wrong.');return j.plan;});
   }).then(function(raw){
     planImport.raw=raw;
+    planImport.libId=saveToLibrary(raw,planImport.fileName);
     planImport.rows=buildImportRows(raw);
     planImport.checks=importChecks(raw,planImport.rows);
     planImport.showRest=false;
     // Default to the race this plan's length fits, when you picked a race.
     var fit=suggestRaceForPlan(planImport);
     if(fit&&planImport.anchor==='race')planImport.raceId=fit.id;
+    planImport.startWeek=importFitStartWeek(planImport)||1;
     saveImportDraft();
     renderImportPreview();
   }).catch(function(err){
@@ -2556,9 +2587,20 @@ function resumeImportDraft(){
   planImport=d;renderImportPreview();
 }
 
+// Rows from the week you start at onward.
+function importActiveRows(st){var k=st.startWeek||1;return st.rows.filter(function(r){return r.week>=k;});}
+// When a race is closer than the whole plan, the week to start at so it still ends on race day.
+function importFitStartWeek(st){
+  if(st.anchor!=='race')return 0;
+  var w1=importWeek1Monday(st);if(!w1)return 0;
+  var thisMon=mondayOf(todayISO()),n=importPlanWeeks(st);
+  for(var k=1;k<=n;k++){if(addDaysISO(w1,(k-1)*7)>=thisMon)return k;}
+  return n;
+}
+function setImportStartWeek(v){planImport.startWeek=Math.max(1,parseInt(v,10)||1);saveImportDraft();renderImportPreview();}
 function importRowsByWeek(st,w1){
   var t=todayISO(),groups={};
-  st.rows.forEach(function(r){r._date=importRowDate(st,r,w1);r._past=!!r._date&&r._date<t;(groups[r.week]=groups[r.week]||[]).push(r);});
+  importActiveRows(st).forEach(function(r){r._date=importRowDate(st,r,w1);r._past=!!r._date&&r._date<t;(groups[r.week]=groups[r.week]||[]).push(r);});
   Object.keys(groups).forEach(function(k){groups[k].sort(function(a,b){return(a._date||'').localeCompare(b._date||'')||IMPORT_DAYS.indexOf(a.day)-IMPORT_DAYS.indexOf(b.day);});});
   return groups;
 }
@@ -2569,10 +2611,11 @@ function renderImportPreview(){
   var groups=importRowsByWeek(st,w1);
   var weeks=Object.keys(groups).map(Number).sort(function(a,b){return a-b;});
   var race=st.anchor==='race'?(DB.races||[]).find(function(r){return r.id===st.raceId;}):null;
-  var included=st.rows.filter(function(r){return r.include&&!(r._past&&!r.keepPast);}).length;
-  var pastCount=st.rows.filter(function(r){return r._past&&r.include;}).length;
-  var restCount=st.rows.filter(function(r){return r.type==='Rest';}).length;
-  var rangeCount=st.rows.filter(function(r){return r.distMax>r.dist||r.durMax>r.dur;}).length;
+  var act=importActiveRows(st);
+  var included=act.filter(function(r){return r.include&&!(r._past&&!r.keepPast);}).length;
+  var pastCount=act.filter(function(r){return r._past&&r.include;}).length;
+  var restCount=act.filter(function(r){return r.type==='Rest';}).length;
+  var rangeCount=act.filter(function(r){return r.distMax>r.dist||r.durMax>r.dur;}).length;
   var n=importPlanWeeks(st),races=upcomingRaces();
   var sel='<select class="form-input" style="margin:6px 0" onchange="setImportAnchor(this.value)">'+
     races.map(function(r){var w=weeksUntilRace(r);return'<option value="race:'+escHtml(r.id)+'"'+(st.anchor==='race'&&st.raceId===r.id?' selected':'')+'>'+escHtml(r.name||'Race')+' · '+fmtDateShort(r.date)+' · '+w+' wk away</option>';}).join('')+
@@ -2582,18 +2625,20 @@ function renderImportPreview(){
   if(race){
     var w=weeksUntilRace(race);
     if(w===n||w===n+1)hint=escHtml(race.name||'Your race')+' is '+w+' weeks away, so this '+n+'-week plan fits'+(w===n?' starting this week.':' starting next Monday.');
-    else if(w<n)hint=escHtml(race.name||'Your race')+' is '+w+' weeks away but this plan is '+n+' weeks, so its first '+(n-w)+' week'+(n-w===1?' has':'s have')+' already passed and won\'t be added.';
+    else if(w<n){var fk=importFitStartWeek(st);hint=escHtml(race.name||'Your race')+' is '+w+' weeks away and this plan is '+n+' weeks, so start at <b>week '+fk+'</b> to finish on race day.'+((st.startWeek||1)!==fk?' <span class="card-link" onclick="setImportStartWeek('+fk+')">Start at week '+fk+' ›</span>':'');}
     else hint=escHtml(race.name||'Your race')+' is '+w+' weeks away, so this '+n+'-week plan starts in '+(w-n)+' week'+(w-n===1?'':'s')+'.';
   }
   var fit=suggestRaceForPlan(st),sugg=fit&&!(st.anchor==='race'&&st.raceId===fit.id)?fit:null;
   var anchorLine='<div style="font-weight:600">Line this plan up with</div>'+sel+
     (sugg?'<div style="color:var(--amber);margin-bottom:6px">'+escHtml(sugg.name)+' is '+weeksUntilRace(sugg)+' weeks away, which matches this '+n+'-week plan. <span class="card-link" onclick="setImportAnchor(\'race:'+escHtml(sugg.id)+'\')">Use it ›</span></div>':'')+
     (hint?'<div style="color:var(--muted);margin-bottom:6px">'+hint+'</div>':'')+
-    (w1?'<div>Week 1 starts <b>'+fmtDateShort(w1)+'</b>'+(st.offsetWeeks?' (moved '+Math.abs(st.offsetWeeks)+' week'+(Math.abs(st.offsetWeeks)===1?'':'s')+' '+(st.offsetWeeks>0?'later':'earlier')+')':'')+'</div>':'<div>Pick a race or start date to place the plan.</div>');
+    '<div style="display:flex;align-items:center;gap:8px;margin:2px 0 6px"><span style="font-weight:600">Start from</span><select class="form-input" style="width:auto;padding:6px 10px" onchange="setImportStartWeek(this.value)">'+
+      Array.from({length:n},function(_,i){return'<option value="'+(i+1)+'"'+((st.startWeek||1)===i+1?' selected':'')+'>Week '+(i+1)+'</option>';}).join('')+'</select></div>'+
+    (w1?'<div>Week '+(st.startWeek||1)+' starts <b>'+fmtDateShort(addDaysISO(w1,((st.startWeek||1)-1)*7))+'</b>'+(st.offsetWeeks?' (moved '+Math.abs(st.offsetWeeks)+' week'+(Math.abs(st.offsetWeeks)===1?'':'s')+' '+(st.offsetWeeks>0?'later':'earlier')+')':'')+'</div>':'<div>Pick a race or start date to place the plan.</div>');
   var warn=(st.raw.warnings||[]).concat(st.checks||[]);
   var html='<div class="modal-title">Review imported plan<button class="modal-close" onclick="closeAllModals()">×</button></div>'+
     '<div style="font-size:14px;font-weight:600;color:var(--text)">'+escHtml(st.raw.planName||st.fileName||'Training plan')+'</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin:2px 0 10px">'+weeks.length+' weeks · '+st.rows.length+' sessions · distances converted to km</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin:2px 0 10px">'+weeks.length+' weeks · '+act.length+' sessions · distances converted to km</div>'+
     '<div class="import-anchor"><div style="flex:1 1 100%">'+anchorLine+'</div><span style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="shiftImport(-1)">‹ Week earlier</button><button class="btn btn-outline btn-sm" onclick="shiftImport(1)">Week later ›</button></span></div>'+
     (warn.length?'<div class="import-warn"><b>Check these against the PDF:</b><ul>'+warn.map(function(w){return'<li>'+escHtml(w)+'</li>';}).join('')+'</ul></div>':'')+
     (pastCount?'<div class="import-note" style="margin-bottom:10px">'+pastCount+' workout'+(pastCount>1?'s fall':' falls')+' before today and won\'t be added.</div>':'')+
@@ -2651,7 +2696,7 @@ function toggleImportRest(on){planImport.showRest=on;planImport.rows.forEach(fun
 function setImportAnchor(v){
   if(v==='start'){planImport.anchor='start';if(!planImport.startDate)planImport.startDate=addDaysISO(mondayOf(todayISO()),7);}
   else{planImport.anchor='race';planImport.raceId=v.slice(5);}
-  planImport.offsetWeeks=0;saveImportDraft();renderImportPreview();
+  planImport.offsetWeeks=0;planImport.startWeek=importFitStartWeek(planImport)||1;saveImportDraft();renderImportPreview();
 }
 function setImportStart(v){planImport.startDate=v;planImport.offsetWeeks=0;saveImportDraft();renderImportPreview();}
 function shiftImport(n){planImport.offsetWeeks=(planImport.offsetWeeks||0)+n;saveImportDraft();renderImportPreview();}
@@ -2673,7 +2718,7 @@ function discardImport(){if(!confirm('Discard this imported plan? Nothing has be
 function commitImport(){
   var st=planImport,w1=importWeek1Monday(st);if(!w1)return;
   var t=todayISO(),importId='imp_'+uid();
-  var rows=st.rows.filter(function(r){var d=importRowDate(st,r,w1);return r.include&&d&&d>=t;});
+  var rows=importActiveRows(st).filter(function(r){var d=importRowDate(st,r,w1);return r.include&&d&&d>=t;});
   if(!rows.length)return;
   var dates=[];
   rows.forEach(function(r){
@@ -2688,7 +2733,7 @@ function commitImport(){
   });
   dates.sort();
   if(!Array.isArray(DB.planImports))DB.planImports=[];
-  DB.planImports.push({id:importId,name:st.raw.planName||st.fileName||'Training plan',fileName:st.fileName||'',raceId:st.anchor==='race'?st.raceId:'',startDate:dates[0],endDate:dates[dates.length-1],count:rows.length,volume:st.volume||'range',importedAt:Date.now()});
+  DB.planImports.push({id:importId,name:st.raw.planName||st.fileName||'Training plan',fileName:st.fileName||'',raceId:st.anchor==='race'?st.raceId:'',startDate:dates[0],endDate:dates[dates.length-1],count:rows.length,volume:st.volume||'range',firstWeek:st.startWeek||1,weekStart:addDaysISO(w1,((st.startWeek||1)-1)*7),libId:st.libId||'',importedAt:Date.now()});
   save();clearImportDraft();planImport=null;closeAllModals();
   var d0=parseLocalDate(dates[0]);calYear=d0.getFullYear();calMonth=d0.getMonth();
   renderAll();
@@ -2721,7 +2766,7 @@ function deleteImportedPlan(id){
 // ─── TRAINING PLAN PAGE (an imported plan laid out week by week) ────────────
 var plansViewId='';
 
-function planWeekStart(imp){return mondayOf(imp.startDate);}
+function planWeekStart(imp){return imp.weekStart||mondayOf(imp.startDate);}
 
 function renderPlansPage(){
   var el=document.getElementById('plans-body');if(!el)return;
@@ -2766,7 +2811,7 @@ function renderPlansPage(){
     var km=list.reduce(function(s,p){return s+pf(p.dist);},0),kmMax=list.reduce(function(s,p){return s+(pf(p.distMax)||pf(p.dist));},0);
     var tot=km?(unit==='mi'?fmtNum(km/MI_KM)+(kmMax>km?'–'+fmtNum(kmMax/MI_KM):''):fmtNum(km)+(kmMax>km?'–'+fmtNum(kmMax):''))+' '+unit:'';
     var isNow=mon===thisMon;
-    body+='<div class="plan-week'+(isNow?' now':'')+'"><div class="plan-week-hdr"><span>Week '+w+(isNow?' · this week':'')+'</span><span>'+fmtDateShort(mon).replace(/^\w+,?\s*/,'')+' – '+fmtDateShort(addDaysISO(mon,6)).replace(/^\w+,?\s*/,'')+(tot?' · '+tot:'')+'</span></div>';
+    body+='<div class="plan-week'+(isNow?' now':'')+'"><div class="plan-week-hdr"><span>Week '+(w+(imp.firstWeek||1)-1)+(isNow?' · this week':'')+'</span><span>'+fmtDateShort(mon).replace(/^\w+,?\s*/,'')+' – '+fmtDateShort(addDaysISO(mon,6)).replace(/^\w+,?\s*/,'')+(tot?' · '+tot:'')+'</span></div>';
     for(var d=0;d<7;d++){
       var ds=addDaysISO(mon,d);
       var day=list.filter(function(p){return p.date===ds;});
@@ -2785,7 +2830,7 @@ function renderPlansPage(){
   el.innerHTML=picker+head+body;
 }
 
-function setPlanUnit(u){DB.planUnit=u==='mi'?'mi':'km';save();renderPlansPage();}
+function setPlanUnit(u){DB.planUnit=u==='mi'?'mi':'km';save();renderPlansPage();renderLibraryPage();}
 
 // Moves a whole imported plan by a week, leaving completed workouts where they were.
 function shiftImportedPlan(id,n){
@@ -2811,6 +2856,192 @@ function setPlanVolume(id,vol){
 }
 
 function openPlansPage(id){if(id)plansViewId=id;showPage('plans',document.getElementById('nav-plans'));}
+
+// ─── WORKOUT LIBRARY (every plan you've read, kept so it can be reused for free) ───
+var libFilter={plan:'',cat:'',q:''};
+var LIB_CATS=[
+  ['long','Long run',function(w,t){return w.type==='Long Run'||/long run/.test(t);}],
+  ['easy','Easy',function(w,t){return w.type==='Run'&&/easy|recovery|shakeout/.test(t);}],
+  ['workout','Workouts',function(w){return w.type==='Workout';}],
+  ['hills','Hills',function(w,t){return/hill/.test(t);}],
+  ['strides','Strides',function(w,t){return/stride/.test(t);}],
+  ['tempo','Tempo / steady',function(w,t){return/tempo|threshold|steady|marathon pace|\bmp\b/.test(t);}],
+  ['intervals','Intervals',function(w,t){return/\d\s*[x×]\s*\d|interval|repeat|fartlek|\breps?\b/.test(t);}],
+  ['vert','Vert',function(w,t){return/vert|climb|uphill|downhill/.test(t);}],
+  ['cross','Cross train',function(w,t){return w.type==='Cross Train'||/x-?train|cross/.test(t);}],
+  ['strength','Strength',function(w,t){return w.type==='Strength'||/strength|core|lift/.test(t);}],
+  ['race','Race',function(w){return w.type==='Race';}]
+];
+// Tagged from the workout's title only; notes mention alternatives ("or x-train") that would mis-tag it.
+function libCats(w){var t=(w.title||'').toLowerCase();return LIB_CATS.filter(function(c){return c[2](w,t);}).map(function(c){return c[0];});}
+function planLibrary(){if(!Array.isArray(DB.planLibrary))DB.planLibrary=[];return DB.planLibrary;}
+// Keeps a plan's transcription (original units) so it can be reused without reading the PDF again.
+function saveToLibrary(raw,fileName){
+  var lib=planLibrary(),name=raw.planName||fileName||'Training plan';
+  var workouts=(raw.workouts||[]).map(function(w){var o={week:+w.week||1,day:w.day,type:w.type,title:w.title||'',distance:w.distance||null,duration:w.duration||null,notes:w.notes||''};if(w.sourceText)o.sourceText=String(w.sourceText).slice(0,300);return o;});
+  var same=lib.find(function(l){return l.name===name&&l.workouts.length===workouts.length;});
+  var entry={id:same?same.id:'lib_'+uid(),name:name,fileName:fileName||'',totalWeeks:+raw.totalWeeks||0,raceDay:raw.raceDay||null,workouts:workouts,savedAt:Date.now()};
+  if(same)lib[lib.indexOf(same)]=entry;else lib.push(entry);
+  save();
+  return entry.id;
+}
+// Plans imported before the library existed get rebuilt from their calendar workouts.
+function migrateImportsToLibrary(){
+  var lib=planLibrary(),changed=false;
+  (DB.planImports||[]).forEach(function(imp){
+    if(imp.libId&&lib.some(function(l){return l.id===imp.libId;}))return;
+    var mine=DB.plans.filter(function(p){return p.importId===imp.id;});if(!mine.length)return;
+    var base=planWeekStart(imp),fw=imp.firstWeek||1;
+    var workouts=mine.map(function(p){
+      var R=planRangeOf(p)||{dist:pf(p.dist),distMax:0,dur:pi(p.dur),durMax:0,unit:p.descMi||p.distUnit==='mi'?'mi':'km'};
+      var c=function(v){return R.unit==='mi'?Math.round(v/MI_KM*100)/100:v;};
+      var wk=Math.floor((parseLocalDate(p.date)-parseLocalDate(base))/604800000)+fw;
+      var notes=String(p.notes||'').replace(/\n*From the plan:[\s\S]*$/,'');
+      return{week:wk,day:IMPORT_DAYS[(parseLocalDate(p.date).getDay()+6)%7],type:p.type,title:p.descMi||p.desc||'',
+        distance:R.dist?{min:c(R.dist),max:c(R.distMax||R.dist),unit:R.unit}:null,duration:R.dur?{min:R.dur,max:R.durMax||R.dur}:null,notes:notes};
+    });
+    var id='lib_'+uid();
+    lib.push({id:id,name:imp.name,fileName:imp.fileName||'',totalWeeks:Math.max.apply(null,workouts.map(function(w){return w.week;})),workouts:workouts,savedAt:imp.importedAt||Date.now(),rebuilt:true});
+    imp.libId=id;changed=true;
+  });
+  if(changed)save();
+}
+function libWorkoutRange(w){
+  var d=w.distance,u=w.duration;
+  return{dist:d&&+d.min>0?toKm(+d.min,d.unit):0,distMax:d&&+d.max>+d.min?toKm(+d.max,d.unit):0,dur:u&&+u.min>0?Math.round(+u.min):0,durMax:u&&+u.max>+u.min?Math.round(+u.max):0,unit:d&&d.unit==='mi'?'mi':'km'};
+}
+function useLibraryPlan(){
+  var id=(document.getElementById('imp-lib')||{}).value;var l=planLibrary().find(function(x){return x.id===id;});if(!l)return;
+  planImport.anchor=document.getElementById('imp-anchor').value;
+  planImport.raceId=(document.getElementById('imp-race')||{}).value||'';
+  planImport.startDate=document.getElementById('imp-start').value||planImport.startDate;
+  planImport.fileName=l.fileName;planImport.libId=l.id;
+  planImport.raw={planName:l.name,totalWeeks:l.totalWeeks,raceDay:l.raceDay,workouts:l.workouts,warnings:[]};
+  planImport.rows=buildImportRows(planImport.raw);
+  planImport.checks=[];planImport.showRest=false;
+  var fit=suggestRaceForPlan(planImport);if(fit&&planImport.anchor==='race')planImport.raceId=fit.id;
+  planImport.startWeek=importFitStartWeek(planImport)||1;
+  saveImportDraft();renderImportPreview();
+}
+
+function renderLibraryPage(){
+  var el=document.getElementById('library-body');if(!el)return;
+  migrateImportsToLibrary();
+  var lib=planLibrary(),unit=planUnitPref();
+  document.getElementById('library-unit').innerHTML='<div class="filter-tabs" style="margin:0"><div class="ftab'+(unit==='km'?' active':'')+'" onclick="setPlanUnit(\'km\')">km</div><div class="ftab'+(unit==='mi'?' active':'')+'" onclick="setPlanUnit(\'mi\')">miles</div></div>';
+  if(!lib.length){el.innerHTML='<div class="plans-empty">Your library is empty.<br><span style="font-size:12px">Every plan you import is saved here, so you can reuse its workouts and weeks any time.</span><br><button class="btn btn-pink btn-sm" style="margin-top:14px" onclick="openImportPlan()">Import plan</button></div>';return;}
+  if(libFilter.plan&&!lib.some(function(l){return l.id===libFilter.plan;}))libFilter.plan='';
+  // Same workout repeated across weeks shows once, with the weeks it appears in.
+  var groups={},order=[];
+  lib.forEach(function(l){
+    if(libFilter.plan&&l.id!==libFilter.plan)return;
+    l.workouts.forEach(function(w,i){
+      if(w.type==='Rest')return;
+      var k=l.id+'|'+w.type+'|'+(w.title||'').toLowerCase()+'|'+JSON.stringify(w.distance||'')+'|'+JSON.stringify(w.duration||'');
+      if(!groups[k]){groups[k]={lib:l,w:w,idx:i,weeks:[],cats:libCats(w)};order.push(k);}
+      groups[k].weeks.push(w.week);
+    });
+  });
+  var counts={};order.forEach(function(k){groups[k].cats.forEach(function(c){counts[c]=(counts[c]||0)+1;});});
+  var q=libFilter.q.trim().toLowerCase();
+  var list=order.map(function(k){return groups[k];}).filter(function(g){
+    if(libFilter.cat&&g.cats.indexOf(libFilter.cat)<0)return false;
+    if(q&&((g.w.title||'')+' '+(g.w.notes||'')+' '+g.w.type+' '+g.lib.name).toLowerCase().indexOf(q)<0)return false;
+    return true;
+  });
+  var planSel='<select class="form-input" style="margin-bottom:10px" onchange="libFilter.plan=this.value;renderLibraryPage()"><option value="">All plans ('+lib.length+')</option>'+lib.map(function(l){return'<option value="'+escHtml(l.id)+'"'+(libFilter.plan===l.id?' selected':'')+'>'+escHtml(l.name)+'</option>';}).join('')+'</select>';
+  var chips='<div class="lib-chips"><span class="lib-chip'+(libFilter.cat?'':' active')+'" onclick="libFilter.cat=\'\';renderLibraryPage()">All</span>'+LIB_CATS.filter(function(c){return counts[c[0]];}).map(function(c){return'<span class="lib-chip'+(libFilter.cat===c[0]?' active':'')+'" onclick="libFilter.cat=\''+c[0]+'\';renderLibraryPage()">'+c[1]+' <b>'+counts[c[0]]+'</b></span>';}).join('')+'</div>';
+  var search='<input class="form-input" id="lib-q" placeholder="Search workouts (e.g. strides, 3 min)" style="margin-bottom:10px" value="'+escHtml(libFilter.q)+'" oninput="libFilter.q=this.value;renderLibraryList()">';
+  var sel=libFilter.plan?lib.find(function(l){return l.id===libFilter.plan;}):null;
+  var planTools=sel?'<div class="plan-head" style="margin-bottom:10px"><div class="plan-meta">'+escHtml(sel.name)+' · '+(sel.totalWeeks||'?')+' weeks · '+sel.workouts.length+' sessions</div><div class="plan-actions"><button class="btn btn-outline btn-sm" onclick="openAddLibWeek(\''+escHtml(sel.id)+'\')">Add a week</button><button class="btn btn-outline btn-sm" onclick="openImportPlan();var s=document.getElementById(\'imp-lib\');if(s)s.value=\''+escHtml(sel.id)+'\'">Use whole plan</button><button class="btn btn-danger btn-sm" onclick="deleteLibraryPlan(\''+escHtml(sel.id)+'\')">Remove</button></div></div>':'';
+  el.innerHTML=planSel+planTools+search+chips+'<div id="lib-list"></div>';
+  window._libList=list;
+  renderLibraryList();
+}
+function renderLibraryList(){
+  var box=document.getElementById('lib-list');if(!box)return;
+  var unit=planUnitPref(),q=libFilter.q.trim().toLowerCase();
+  var list=(window._libList||[]).filter(function(g){return!q||((g.w.title||'')+' '+(g.w.notes||'')+' '+g.w.type+' '+g.lib.name).toLowerCase().indexOf(q)>=0;});
+  if(!list.length){box.innerHTML='<div class="plans-empty" style="padding:24px">No workouts match.</div>';return;}
+  var catName=function(c){var f=LIB_CATS.find(function(x){return x[0]===c;});return f?f[1]:c;};
+  box.innerHTML=list.map(function(g){
+    var R=libWorkoutRange(g.w);
+    var meta=[escHtml(g.w.type==='Race'?'Race':g.w.type),planDistText(R,unit),planDurText(R)].filter(Boolean).join(' · ');
+    var wk=g.weeks.length>1?'weeks '+g.weeks.join(', '):'week '+g.weeks[0]+' '+(g.w.day||'');
+    var title=unit==='mi'||R.unit!=='mi'?g.w.title:milesToKmText(g.w.title);
+    return'<div class="lib-item" onclick="openAddLibWorkout(\''+escHtml(g.lib.id)+'\','+g.idx+')">'+
+      '<div class="lib-title">'+escHtml(title||g.w.type)+'</div>'+
+      '<div class="lib-meta">'+meta+'</div>'+
+      '<div class="lib-from">'+escHtml(g.lib.name)+' · '+escHtml(wk)+'</div>'+
+      (g.cats.length?'<div class="lib-tags">'+g.cats.map(function(c){return'<span>'+catName(c)+'</span>';}).join('')+'</div>':'')+
+      '<span class="lib-add">+ Add</span></div>';
+  }).join('');
+}
+function libVolumeSelect(id,show){
+  if(!show)return'';
+  var v=DB.libVolume||'mid';
+  return'<div class="form-group"><label class="form-label">Volume</label><select class="form-input" id="'+id+'">'+VOLUMES.map(function(x){return'<option value="'+x[0]+'"'+(v===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')+'</select></div>';
+}
+// One planned workout from a library entry, in km, with its original range kept.
+function libToPlan(l,w,date,vol){
+  var R=libWorkoutRange(w),v=volPick(R,vol);
+  var type=w.type==='Race'?'Run':w.type;
+  var notes=milesToKmText(w.notes||'');
+  var p={id:uid(),date:date,type:type,desc:milesToKmText(w.title||''),dist:v.dist||0,dur:v.dur||0,notes:(notes?notes+'\n\n':'')+'From '+l.name+', week '+w.week+(w.day?' '+w.day:''),planned:true,completed:false,libId:l.id};
+  if(R.unit==='mi'&&w.title)p.descMi=w.title;
+  if(v.distMax)p.distMax=v.distMax;if(v.durMax)p.durMax=v.durMax;
+  if(R.distMax>R.dist||R.durMax>R.dur)p.planRange=R;
+  return p;
+}
+function openAddLibWorkout(libId,idx){
+  var l=planLibrary().find(function(x){return x.id===libId;});if(!l)return;var w=l.workouts[idx];if(!w)return;
+  var R=libWorkoutRange(w),unit=planUnitPref();
+  showImportModal('<div class="modal-title">Add to calendar<button class="modal-close" onclick="closeAllModals()">×</button></div>'+
+    '<div style="font-weight:600;color:var(--text)">'+escHtml(unit==='mi'?w.title:milesToKmText(w.title)||w.type)+'</div>'+
+    '<div class="plan-meta" style="margin-bottom:12px">'+[escHtml(w.type),planDistText(R,unit),planDurText(R)].filter(Boolean).join(' · ')+'<br>'+escHtml(l.name)+' · week '+w.week+' '+(w.day||'')+'</div>'+
+    (w.notes?'<div class="import-note" style="margin-bottom:12px;white-space:pre-wrap">'+escHtml(unit==='mi'?w.notes:milesToKmText(w.notes))+'</div>':'')+
+    '<div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="lib-date" value="'+todayISO()+'"></div>'+
+    libVolumeSelect('lib-vol',R.distMax>R.dist||R.durMax>R.dur)+
+    '<div class="modal-footer"><button class="btn btn-outline" onclick="closeAllModals()">Cancel</button><button class="btn btn-pink" onclick="addLibWorkout(\''+escHtml(libId)+'\','+idx+')">Add workout</button></div>');
+}
+function addLibWorkout(libId,idx){
+  var l=planLibrary().find(function(x){return x.id===libId;});if(!l)return;
+  var date=document.getElementById('lib-date').value;if(!date)return;
+  var volEl=document.getElementById('lib-vol'),vol=volEl?volEl.value:'range';if(volEl)DB.libVolume=vol;
+  DB.plans.push(libToPlan(l,l.workouts[idx],date,vol));
+  save();closeAllModals();renderAll();showStravaToast('Added to '+fmtDateShort(date));
+}
+function openAddLibWeek(libId){
+  var l=planLibrary().find(function(x){return x.id===libId;});if(!l)return;
+  var weeks=[];l.workouts.forEach(function(w){if(weeks.indexOf(w.week)<0)weeks.push(w.week);});weeks.sort(function(a,b){return a-b;});
+  var hasRange=l.workouts.some(function(w){var R=libWorkoutRange(w);return R.distMax>R.dist||R.durMax>R.dur;});
+  showImportModal('<div class="modal-title">Add a week from '+escHtml(l.name)+'<button class="modal-close" onclick="closeAllModals()">×</button></div>'+
+    '<div class="form-row"><div class="form-group"><label class="form-label">Plan week</label><select class="form-input" id="libw-week">'+weeks.map(function(w){return'<option value="'+w+'">Week '+w+'</option>';}).join('')+'</select></div>'+
+    '<div class="form-group"><label class="form-label">Week starting</label><input class="form-input" type="date" id="libw-date" value="'+addDaysISO(mondayOf(todayISO()),7)+'"></div></div>'+
+    libVolumeSelect('libw-vol',hasRange)+
+    '<label class="checkbox-label" style="font-size:12px;margin-bottom:6px"><input type="checkbox" id="libw-rest"> Add rest days too</label>'+
+    '<div class="import-note">Monday\'s workout lands on the Monday of the week you pick, and so on.</div>'+
+    '<div class="modal-footer"><button class="btn btn-outline" onclick="closeAllModals()">Cancel</button><button class="btn btn-pink" onclick="addLibWeek(\''+escHtml(libId)+'\')">Add week</button></div>');
+}
+function addLibWeek(libId){
+  var l=planLibrary().find(function(x){return x.id===libId;});if(!l)return;
+  var wk=+document.getElementById('libw-week').value,d=document.getElementById('libw-date').value;if(!d)return;
+  var mon=mondayOf(d),rest=document.getElementById('libw-rest').checked;
+  var volEl=document.getElementById('libw-vol'),vol=volEl?volEl.value:'range';if(volEl)DB.libVolume=vol;
+  var n=0;
+  l.workouts.forEach(function(w){
+    if(w.week!==wk||(w.type==='Rest'&&!rest))return;
+    var i=IMPORT_DAYS.indexOf(w.day);DB.plans.push(libToPlan(l,w,addDaysISO(mon,i<0?0:i),vol));n++;
+  });
+  save();closeAllModals();renderAll();showStravaToast(n+' workout'+(n===1?'':'s')+' added for the week of '+fmtDateShort(mon));
+}
+function deleteLibraryPlan(id){
+  var l=planLibrary().find(function(x){return x.id===id;});if(!l)return;
+  if(!confirm('Remove "'+l.name+'" from your library? Workouts already on your calendar stay.'))return;
+  DB.planLibrary=planLibrary().filter(function(x){return x.id!==id;});
+  (DB.planImports||[]).forEach(function(i){if(i.libId===id)i.libId='__removed';});
+  libFilter.plan='';save();renderLibraryPage();
+}
 
 function fillForm(data,type){
   ['date','dist','dur','vert','hr','notes','elapsed','rpe'].forEach(k=>{
