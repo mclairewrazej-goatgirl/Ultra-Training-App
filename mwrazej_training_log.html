@@ -2326,6 +2326,7 @@ function milesToKmText(s){
   var MI='(?:miles?|mi)\\b';
   s=s.replace(new RegExp('(\\d{1,2}:\\d{2})\\s*[-–]\\s*(\\d{1,2}:\\d{2})\\s*(?:\\/|per\\s*)\\s*'+MI,'gi'),function(m,a,b){return paceMiToKm(a)+'–'+paceMiToKm(b)+'/km';});
   s=s.replace(new RegExp('(\\d{1,2}:\\d{2})\\s*(?:min)?\\s*(?:\\/|per\\s*)\\s*'+MI,'gi'),function(m,a){return paceMiToKm(a)+'/km';});
+  s=s.replace(/(\d+(?:\.\d+)?)\s*mph\b/gi,function(m,a){return fmtNum(+a*MI_KM)+' km/h';});
   s=s.replace(new RegExp('(\\d+(?:\\.\\d+)?)\\s*(?:-|–|to)\\s*(\\d+(?:\\.\\d+)?)\\s*'+MI,'gi'),function(m,a,b){return fmtNum(+a*MI_KM)+'–'+fmtNum(+b*MI_KM)+' km';});
   s=s.replace(new RegExp('(\\d+(?:\\.\\d+)?)[\\s-]*'+MI,'gi'),function(m,a){return fmtNum(+a*MI_KM)+' km';});
   return s;
