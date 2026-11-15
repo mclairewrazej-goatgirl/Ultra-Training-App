@@ -241,6 +241,25 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .strava-btn{background:#FC4C02;color:#fff}
 .strava-btn:hover{background:#d94102}
 .strava-toast{border-left:3px solid #FC4C02}
+/* Step 4: forms, nutrition, stats */
+.more-details{border:1px solid var(--border);border-radius:10px;padding:0 12px;margin:4px 0 6px}
+.more-details>summary{cursor:pointer;padding:11px 0;font-size:12px;font-weight:600;color:var(--text);list-style:none}
+.more-details>summary::-webkit-details-marker{display:none}
+.more-details>summary::before{content:'›';display:inline-block;margin-right:8px;transition:transform .15s;color:var(--muted)}
+.more-details[open]>summary::before{transform:rotate(90deg)}
+.more-details>summary span{font-weight:400;color:var(--muted);font-size:11px;margin-left:4px}
+.more-details[open]{padding-bottom:8px}
+.nutri-group-title{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin:16px 0 6px}
+.stats-table{font-size:12px}
+.stats-row{display:grid;grid-template-columns:42px 2fr 1fr 1.2fr 1fr 1fr;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);color:var(--text)}
+.stats-row span{text-align:right}
+.stats-row span:first-child{text-align:left;color:var(--muted)}
+.stats-head{font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+.stats-empty{color:var(--muted2)}
+.stats-km{position:relative;display:flex;justify-content:flex-end;align-items:center}
+.stats-bar{position:absolute;left:0;top:50%;height:6px;transform:translateY(-50%);background:var(--pink3);border-radius:3px;max-width:60%}
+.stats-km b{position:relative;font-weight:600}
+@media(max-width:600px){.stats-row{grid-template-columns:34px 1.6fr 1fr 1.2fr 1fr 1fr;font-size:11px;gap:4px}}
 /* Day view, events, week dots */
 .day-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .day-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;cursor:pointer}
@@ -355,6 +374,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
   <div class="nav-item" id="nav-nutrition" onclick="showPage('nutrition',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>Nutrition
+  </div>
+  <div class="nav-item" id="nav-stats" onclick="showPage('stats',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Stats
   </div>
   <div class="nav-item" id="nav-training-plans" onclick="showPage('training-plans',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Training Plans
@@ -707,6 +729,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </div>
 
 <!-- TRAINING PLANS -->
+<div class="page" id="page-stats">
+  <div class="page-header">
+    <div><div class="page-title">Stats</div><div class="page-sub">Your year, month by month.</div></div>
+    <div class="header-btns">
+      <button class="btn btn-outline btn-sm" onclick="changeStatsYear(-1)">‹</button>
+      <span id="stats-year" style="font-size:13px;font-weight:600;padding:0 8px;color:var(--text)"></span>
+      <button class="btn btn-outline btn-sm" onclick="changeStatsYear(1)">›</button>
+    </div>
+  </div>
+  <div id="stats-body"></div>
+</div>
+
 <div class="page" id="page-training-plans">
   <div class="page-header">
     <div><div class="page-title">Training Plans</div><div class="page-sub">Upload and view your PDF training plans.</div></div>
@@ -877,7 +911,7 @@ var volumeMetric='dist';
 function exportData(){
   var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='mwrazej_training_log_'+new Date().toISOString().slice(0,10)+'.json';
+  a.download='mwrazej_training_log_'+todayISO()+'.json';
   a.click();URL.revokeObjectURL(a.href);
 }
 function importData(e){
@@ -1206,7 +1240,7 @@ function renderWeekRow(){
   var b=getDashWeekBounds(),mon=b.mon;
   var days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var el=document.getElementById('week-row');el.innerHTML='';
-  var todayStr=new Date().toISOString().slice(0,10);
+  var todayStr=todayISO();
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var titleEl=document.getElementById('week-card-title');
   if(titleEl){
@@ -1587,7 +1621,7 @@ function renderCalendar(){
     var dayRec=DB.recoveries.filter(r=>r.date===ds);
     var dayPlans=DB.plans.filter(p=>p.date===ds);
     var dayRaces=DB.races.filter(r=>r.date===ds);
-    var isToday=ds===new Date().toISOString().slice(0,10);
+    var isToday=ds===todayISO();
     var hasPlan=dayPlans.length>0&&dayRuns.length===0&&dayCross.length===0;
     var cl='cal-cell'+(isToday?' today':hasPlan?' planned':'');
     var pips='';
@@ -1876,7 +1910,7 @@ function celebrate(msg){
 }
 
 function maybeCelebrateWeeklyGoal(){
-  var wk=getWeekKeyFromDate(new Date().toISOString().slice(0,10));
+  var wk=getWeekKeyFromDate(todayISO());
   if((DB.goalCelebrations||{})[wk])return;
   var b=getWeekBounds();
   var g=getGoalsForWeek(wk);
@@ -1935,6 +1969,7 @@ function showPage(id,el){
   if(id==='calculator'){renderPresets();renderConvTable();renderPaceChart();}
   if(id==='nutrition')renderNutrition();
   if(id==='training-plans')renderTrainingPlans();
+  if(id==='stats')renderStats();
   history.replaceState(null,'','#'+id);
   closeSidebar();
   updateTabbar(id);
@@ -1969,7 +2004,7 @@ function openLogSheet(){
 
 function navigateToHash(){
   var hash=location.hash.replace('#','');
-  var valid=['dashboard','log','calendar','calculator','goals','races','nutrition','training-plans'];
+  var valid=['dashboard','log','calendar','calculator','goals','races','nutrition','training-plans','stats'];
   if(valid.indexOf(hash)!==-1){
     showPage(hash,document.getElementById('nav-'+hash));
   }
@@ -2025,7 +2060,7 @@ function buildRunModal(){
   var cycling=isCycling();
   var titleRow=cycling
     ?`<div class="form-row">
-    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${todayISO()}"></div>
     <div class="form-group"><label class="form-label">Ride Type</label><select class="form-input" id="f-runtype"><option value="easy">Easy Ride</option><option value="workout">Workout</option><option value="long">Long Ride</option></select></div>
   </div>
   <div class="form-row">
@@ -2033,7 +2068,7 @@ function buildRunModal(){
     <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="f-dist" oninput="updatePacePreview()"></div>
   </div>`
     :`<div class="form-row">
-    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${todayISO()}"></div>
     <div class="form-group"><label class="form-label">Run Type</label><select class="form-input" id="f-runtype"><option value="easy">Easy</option><option value="recovery">Recovery</option><option value="long">Long Run</option><option value="workout">Workout</option><option value="hike">Hike</option></select></div>
   </div>
   <div class="form-row">
@@ -2044,17 +2079,22 @@ function buildRunModal(){
   <div class="modal-title">${cycling?'Log Ride':'Log Run'} <button class="modal-close" onclick="closeAllModals()">×</button></div>
   ${titleRow}
   <div class="form-row">
-    <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="f-dur" oninput="updatePacePreview();updateNutritionCalc()"></div>
-    <div class="form-group"><label class="form-label">Elev Gain (m)</label><input class="form-input" type="number" id="f-vert"></div>
+    <div class="form-group"><label class="form-label">Moving time (min)</label><input class="form-input" type="number" inputmode="numeric" id="f-dur" oninput="updatePacePreview();updateNutritionCalc()"></div>
+    <div class="form-group"><label class="form-label">Elev Gain (m)</label><input class="form-input" type="number" inputmode="numeric" id="f-vert"></div>
   </div>
-  <div class="form-group"><label class="form-label">Avg HR (bpm)</label><input class="form-input" type="number" id="f-hr"></div>
-  <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="2" placeholder="How did it feel?"></textarea></div>
+  <div class="pace-prev" id="pace-prev"></div>
   <div id="workout-details-section" style="display:none">
     <div class="form-group"><label class="form-label">Workout Details</label><textarea class="form-input" id="f-workout-details" rows="3" placeholder="${cycling?'e.g. 5×5 min @ threshold w/ 3 min recovery...':'e.g. 4×1km @ 4:30/km w/ 90s recovery, 3×10 min tempo...'}"></textarea></div>
   </div>
-  <div class="pace-prev" id="pace-prev"></div>
-  <div class="form-group" style="margin-top:8px">
-    <label class="checkbox-label"><input type="checkbox" id="f-add-nutrition" onchange="toggleNutritionSection()"> Add nutrition?</label>
+  <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="2" placeholder="How did it feel?"></textarea></div>
+  <details class="more-details" id="more-details">
+  <summary>More details <span>heart rate, elapsed time, fuel</span></summary>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Avg HR (bpm)</label><input class="form-input" type="number" inputmode="numeric" id="f-hr"></div>
+    <div class="form-group"><label class="form-label">Elapsed time (min)</label><input class="form-input" type="number" inputmode="numeric" id="f-elapsed" placeholder="incl. stops" oninput="updateNutritionCalc()"></div>
+  </div>
+  <div class="form-group" style="margin-top:4px">
+    <label class="checkbox-label"><input type="checkbox" id="f-add-nutrition" onchange="toggleNutritionSection()"> Add nutrition</label>
   </div>
   <div id="nutrition-section" style="display:none">
     <div class="nutri-section">
@@ -2068,6 +2108,7 @@ function buildRunModal(){
       </div>
     </div>
   </div>
+  </details>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
     <button class="btn btn-pink" onclick="saveRun()">${cycling?'Save Ride':'Save Run'}</button>
@@ -2082,18 +2123,37 @@ function buildCrossModal(){
   return`<div class="modal">
   <div class="modal-title">Log Cross Training <button class="modal-close" onclick="closeAllModals()">×</button></div>
   <div class="form-row">
-    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${todayISO()}"></div>
     <div class="form-group"><label class="form-label">Activity</label><select class="form-input" id="f-subtype">${ctOpts}</select></div>
   </div>
   <div class="form-row">
-    <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" step="0.1" id="f-dist"></div>
-    <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="f-dur"></div>
+    <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-input" type="number" inputmode="decimal" step="0.1" id="f-dist"></div>
+    <div class="form-group"><label class="form-label">Moving time (min)</label><input class="form-input" type="number" inputmode="numeric" id="f-dur" oninput="updateNutritionCalc()"></div>
   </div>
-  <div class="form-row">
-    <div class="form-group"><label class="form-label">Elev Gain (m)</label><input class="form-input" type="number" id="f-vert"></div>
-    <div class="form-group"><label class="form-label">RPE (1-10)</label><input class="form-input" type="number" min="1" max="10" id="f-rpe"></div>
-  </div>
+  <div class="form-group"><label class="form-label">Elev Gain (m)</label><input class="form-input" type="number" inputmode="numeric" id="f-vert"></div>
   <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" rows="2"></textarea></div>
+  <details class="more-details" id="more-details">
+  <summary>More details <span>effort, elapsed time, fuel</span></summary>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">RPE (1-10)</label><input class="form-input" type="number" inputmode="numeric" min="1" max="10" id="f-rpe"></div>
+    <div class="form-group"><label class="form-label">Elapsed time (min)</label><input class="form-input" type="number" inputmode="numeric" id="f-elapsed" placeholder="incl. stops" oninput="updateNutritionCalc()"></div>
+  </div>
+  <div class="form-group" style="margin-top:4px">
+    <label class="checkbox-label"><input type="checkbox" id="f-add-nutrition" onchange="toggleNutritionSection()"> Add nutrition</label>
+  </div>
+  <div id="nutrition-section" style="display:none">
+    <div class="nutri-section">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Nutrition Used</div>
+      <div id="nutri-entries"></div>
+      <button class="btn btn-outline btn-sm" type="button" onclick="addNutritionEntry()" style="margin-top:4px">+ Add Item</button>
+      <div class="nutri-totals" id="nutri-totals" style="display:none">
+        <div><div class="nutri-val" id="nutri-carbs-hr">—</div><div class="nutri-lbl">g carbs / hr</div></div>
+        <div><div class="nutri-val" id="nutri-hydration-hr">—</div><div class="nutri-lbl">mL hydration / hr</div></div>
+        <div><div class="nutri-val" id="nutri-sodium-hr">—</div><div class="nutri-lbl">mg sodium / hr</div></div>
+      </div>
+    </div>
+  </div>
+  </details>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
     <button class="btn btn-blue" onclick="saveCross()">Save</button>
@@ -2103,7 +2163,7 @@ function buildCrossModal(){
 function buildOtherModal(){return`<div class="modal">
   <div class="modal-title">Log Strength / Recovery <button class="modal-close" onclick="closeAllModals()">×</button></div>
   <div class="form-row">
-    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="f-date" value="${todayISO()}"></div>
     <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="f-category" onchange="updateOtherSubs()"><option value="strength">Strength</option><option value="recovery">Recovery</option></select></div>
   </div>
   <div class="form-group"><label class="form-label">Activity</label><select class="form-input" id="f-subtype"><option>Indoor Climbing</option><option>Gym Strength</option></select></div>
@@ -2161,7 +2221,7 @@ function buildRaceModal(){
 </div>`;}
 
 function fillForm(data,type){
-  ['date','dist','dur','vert','hr','notes'].forEach(k=>{
+  ['date','dist','dur','vert','hr','notes','elapsed','rpe'].forEach(k=>{
     var el=document.getElementById('f-'+k);
     if(el&&data[k]!==undefined&&data[k]!=='')el.value=data[k];
   });
@@ -2182,10 +2242,19 @@ function fillForm(data,type){
       var ns=document.getElementById('nutrition-section');
       if(nc)nc.checked=true;
       if(ns)ns.style.display='block';
-      data.nutritionEntries.forEach(function(e){addNutritionEntry(e.nutritionId,e.qty);});
+      data.nutritionEntries.forEach(function(e){addNutritionEntry(nutriId(e),nutriQty(e));});
       setTimeout(updateNutritionCalc,50);
     }
   }
+  if(type==='cross'&&data.nutritionEntries&&data.nutritionEntries.length>0){
+    var cnc=document.getElementById('f-add-nutrition');if(cnc)cnc.checked=true;
+    var cns=document.getElementById('nutrition-section');if(cns)cns.style.display='block';
+    data.nutritionEntries.forEach(function(e){addNutritionEntry(nutriId(e),nutriQty(e));});
+    setTimeout(updateNutritionCalc,50);
+  }
+  // Open "More details" when any of its fields already have something in them.
+  var md=document.getElementById('more-details');
+  if(md&&(pi(data.hr)||pi(data.elapsed)||pi(data.rpe)||(data.nutritionEntries&&data.nutritionEntries.length)))md.open=true;
   if(type==='cross'||type==='other'){
     var st=document.getElementById('f-subtype');if(st&&data.subtype)st.value=data.subtype;
   }
@@ -2225,14 +2294,7 @@ function saveRun(){
   var wasEditing=!!editingId;
   var date=document.getElementById('f-date')?.value;
   if(!date){alert('Please enter a date.');return;}
-  var nutritionEntries=[];
-  document.querySelectorAll('.nutri-entry-row').forEach(function(row){
-    var sel=row.querySelector('select');
-    var inp=row.querySelector('input[type=number]');
-    if(sel&&inp&&sel.value&&parseFloat(inp.value)>0){
-      nutritionEntries.push({nutritionId:sel.value,qty:parseFloat(inp.value)||0});
-    }
-  });
+  var nutritionEntries=readNutritionRows();
   var cycling=isCycling();
   var obj={id:editingId||uid(),date,actType:'run',
     runType:document.getElementById('f-runtype')?.value||'easy',
@@ -2242,11 +2304,12 @@ function saveRun(){
     dur:document.getElementById('f-dur')?.value||0,
     vert:document.getElementById('f-vert')?.value||0,
     hr:document.getElementById('f-hr')?.value||0,
+    elapsed:document.getElementById('f-elapsed')?.value||'',
     notes:document.getElementById('f-notes')?.value||'',
     workoutDetails:document.getElementById('f-workout-details')?.value||'',
     nutritionEntries:nutritionEntries
   };
-  if(editingId){var idx=DB.runs.findIndex(r=>r.id===editingId);if(idx>=0)DB.runs[idx]=obj;else DB.runs.push(obj);}
+  if(editingId){var idx=DB.runs.findIndex(r=>r.id===editingId);if(idx>=0)DB.runs[idx]=Object.assign({},DB.runs[idx],obj);else DB.runs.push(obj);}
   else DB.runs.push(obj);
   if(!wasEditing)celebrate('Good job! Workout logged! 🎉');
   maybeCelebrateWeeklyGoal();
@@ -2264,9 +2327,11 @@ function saveCross(){
     dur:document.getElementById('f-dur')?.value||0,
     vert:document.getElementById('f-vert')?.value||0,
     rpe:document.getElementById('f-rpe')?.value||0,
-    notes:document.getElementById('f-notes')?.value||''
+    elapsed:document.getElementById('f-elapsed')?.value||'',
+    notes:document.getElementById('f-notes')?.value||'',
+    nutritionEntries:readNutritionRows()
   };
-  if(editingId){var idx=DB.crosses.findIndex(r=>r.id===editingId);if(idx>=0)DB.crosses[idx]=obj;else DB.crosses.push(obj);}
+  if(editingId){var idx=DB.crosses.findIndex(r=>r.id===editingId);if(idx>=0)DB.crosses[idx]=Object.assign({},DB.crosses[idx],obj);else DB.crosses.push(obj);}
   else DB.crosses.push(obj);
   if(!wasEditing)celebrate('Good job! Workout logged! 🎉');
   maybeCelebrateWeeklyGoal();
@@ -2398,34 +2463,20 @@ function viewAct(id,type){
     ?`<span class="badge badge-${r.runType||'easy'}">${rideTypeLbl(r.runType)}</span> <span class="badge badge-cross">${r.bikeType}</span>`
     :`<span class="badge badge-${r.runType||'easy'}">${r.runType||'easy'}</span> <span class="badge badge-${r.terrain||'road'}">${r.terrain||'road'}</span>`)
     :`<span class="badge badge-${type==='cross'?'cross':type==='strength'?'strength':'rec'}">${r.subtype||type}</span>`;
-  // Build nutrition summary
+  // Nutrition: what was used, and per hour (elapsed time when known)
   var nutriHtml='';
-  if(r.nutritionEntries&&r.nutritionEntries.length>0&&pi(r.dur)>0){
-    var hrs=pi(r.dur)/60;
-    var totalCarbs=0,totalHyd=0,totalSodium=0;
-    r.nutritionEntries.forEach(function(e){
-      var item=DB.nutrition.find(n=>n.id===e.nutritionId);
-      if(item){
-        totalCarbs+=(pf(item.carbsPerServing)*pf(e.qty));
-        totalHyd+=(pf(item.hydrationPerServing)*pf(e.qty));
-        totalSodium+=(pf(item.sodiumPerServing)*pf(e.qty));
-      }
-    });
-    var carbsHr=hrs>0?(totalCarbs/hrs).toFixed(0):'—';
-    var hydHr=hrs>0?(totalHyd/hrs).toFixed(0):'—';
-    var sodiumHr=hrs>0?(totalSodium/hrs).toFixed(0):'—';
-    var itemLines=r.nutritionEntries.map(function(e){
-      var item=DB.nutrition.find(n=>n.id===e.nutritionId);
-      return item?`<div style="font-size:11px;color:var(--muted)">${pf(e.qty)} × ${item.name}</div>`:'';
-    }).join('');
+  if(r.nutritionEntries&&r.nutritionEntries.length>0){
+    var nt=activityNutrition(r);
+    var perHr=function(v){return nt.hours>0?Math.round(v/nt.hours):'—';};
     nutriHtml=`<div style="background:var(--surface2);border-radius:8px;padding:12px;margin-top:12px">
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Nutrition</div>
-      ${itemLines}
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px">
-        <div><div style="font-size:18px;font-weight:700;color:var(--green)">${carbsHr}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">g carbs / hr</div></div>
-        <div><div style="font-size:18px;font-weight:700;color:var(--blue)">${hydHr}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">mL / hr</div></div>
-        <div><div style="font-size:18px;font-weight:700;color:var(--amber)">${sodiumHr}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">mg sodium / hr</div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+        <div><div style="font-size:20px;font-weight:700;color:var(--green)">${perHr(nt.carbs)}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">g carbs / hr</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--blue)">${perHr(nt.water)}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">mL water / hr</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--amber)">${perHr(nt.sodium)}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">mg sodium / hr</div></div>
       </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Total ${Math.round(nt.carbs)} g carbs · ${Math.round(nt.water)} mL · ${Math.round(nt.sodium)} mg sodium${nt.caffeine?' · '+Math.round(nt.caffeine)+' mg caffeine':''}${nt.hours?' · per hour over '+(nt.basis==='elapsed'?'elapsed':'moving')+' time':''}</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">${nt.lines.join(' · ')}</div>
     </div>`;
   }
   var html=`<div class="view-modal">
@@ -2438,7 +2489,8 @@ function viewAct(id,type){
       <button class="modal-close" onclick="closeAllModals()" style="font-size:22px">×</button>
     </div>
     <div class="detail-grid">
-      ${pi(r.dur)>0?`<div class="detail-box"><div class="detail-val">${minsToHM(pi(r.dur))}</div><div class="detail-lbl">Time</div></div>`:''}
+      ${pi(r.dur)>0?`<div class="detail-box"><div class="detail-val">${minsToHM(pi(r.dur))}</div><div class="detail-lbl">${pi(r.elapsed)?'Moving time':'Time'}</div></div>`:''}
+      ${pi(r.elapsed)>0&&pi(r.elapsed)!==pi(r.dur)?`<div class="detail-box"><div class="detail-val">${minsToHM(pi(r.elapsed))}</div><div class="detail-lbl">Elapsed time</div></div>`:''}
       ${pi(r.vert)>0?`<div class="detail-box"><div class="detail-val">${pi(r.vert)} m</div><div class="detail-lbl">Elevation gain</div></div>`:''}
       ${pace?`<div class="detail-box"><div class="detail-val" style="color:var(--blue)">${pace}</div><div class="detail-lbl">Pace (min/km)</div></div>`:''}
       ${r.hr?`<div class="detail-box"><div class="detail-val">${r.hr}</div><div class="detail-lbl">Avg HR (bpm)</div></div>`:''}
@@ -2734,17 +2786,21 @@ function renderNutrition(){
     el.innerHTML='<div class="empty-state">No nutrition items yet. Add your gels, drinks, and fuel with the button above.</div>';
     return;
   }
-  el.innerHTML=DB.nutrition.map(function(item){
-    return`<div class="nutri-db-row">
+  var groups={};
+  DB.nutrition.forEach(function(item){var c=item.category||'Fuel';(groups[c]=groups[c]||[]).push(item);});
+  var order=NUTRI_CATEGORIES.filter(function(c){return groups[c];}).concat(Object.keys(groups).filter(function(c){return NUTRI_CATEGORIES.indexOf(c)===-1;}));
+  el.innerHTML=order.map(function(cat){
+    return'<div class="nutri-group-title">'+escHtml(cat)+'</div>'+groups[cat].sort(function(a,b){return(a.name||'').localeCompare(b.name||'');}).map(function(item){
+      var meta=[pf(item.carbsPerServing)+' g carbs',pf(item.hydrationPerServing)+' mL',pf(item.sodiumPerServing)+' mg sodium'];
+      if(pf(item.caffeinePerServing))meta.push(pf(item.caffeinePerServing)+' mg caffeine');
+      if(pf(item.caloriesPerServing))meta.push(pf(item.caloriesPerServing)+' kcal');
+      return`<div class="nutri-db-row" onclick="openNutritionItemModal('${item.id}')" style="cursor:pointer">
       <div>
-        <div class="nutri-db-name">${item.name}</div>
-        <div class="nutri-db-meta">${pf(item.carbsPerServing)>0?pf(item.carbsPerServing)+' g carbs':'0 g carbs'} &nbsp;·&nbsp; ${pf(item.hydrationPerServing)>0?pf(item.hydrationPerServing)+' mL':'0 mL'} &nbsp;·&nbsp; ${pf(item.sodiumPerServing)>0?pf(item.sodiumPerServing)+' mg sodium':'0 mg sodium'} &nbsp;·&nbsp; per ${item.servingUnit||'serving'}</div>
+        <div class="nutri-db-name">${escHtml(item.name)}</div>
+        <div class="nutri-db-meta">${meta.join(' &nbsp;·&nbsp; ')}${item.servingUnit?' &nbsp;per '+escHtml(item.servingUnit):''}</div>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-outline btn-sm" onclick="openNutritionItemModal('${item.id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteNutritionItem('${item.id}')">Delete</button>
-      </div>
-    </div>`;
+      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteNutritionItem('${item.id}')">Delete</button>
+    </div>`;}).join('');
   }).join('');
 }
 
@@ -2755,13 +2811,20 @@ function openNutritionItemModal(id){
   wrap.className='modal-overlay';
   wrap.innerHTML=`<div class="modal" style="max-width:420px">
     <div class="modal-title">${item?'Edit':'Add'} Nutrition Item <button class="modal-close" onclick="closeAllModals()">×</button></div>
-    <div class="form-group"><label class="form-label">Item Name</label><input class="form-input" id="ni-name" placeholder="e.g. Maurten Gel 100, Tailwind" value="${item?item.name:''}"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Item Name</label><input class="form-input" id="ni-name" placeholder="e.g. Maurten Gel 100, Tailwind" value="${item?escHtml(item.name):''}"></div>
+      <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="ni-cat">${NUTRI_CATEGORIES.map(c=>`<option ${item&&item.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
     <div class="form-row3">
       <div class="form-group"><label class="form-label">Carbs per serving (g)</label><input class="form-input" type="number" step="0.5" id="ni-carbs" placeholder="25" value="${item?item.carbsPerServing:''}"></div>
       <div class="form-group"><label class="form-label">Hydration per serving (mL)</label><input class="form-input" type="number" step="10" id="ni-hydration" placeholder="500" value="${item?item.hydrationPerServing:''}"></div>
       <div class="form-group"><label class="form-label">Electrolytes / Sodium (mg)</label><input class="form-input" type="number" step="10" id="ni-sodium" placeholder="300" value="${item?item.sodiumPerServing:''}"></div>
     </div>
-    <div class="form-group"><label class="form-label">Serving unit</label><input class="form-input" id="ni-unit" placeholder="e.g. gel, bottle, scoop, sachet" value="${item?item.servingUnit:''}"></div>
+    <div class="form-row3">
+      <div class="form-group"><label class="form-label">Calories</label><input class="form-input" type="number" id="ni-cal" value="${item&&item.caloriesPerServing?item.caloriesPerServing:''}"></div>
+      <div class="form-group"><label class="form-label">Caffeine (mg)</label><input class="form-input" type="number" id="ni-caf" value="${item&&item.caffeinePerServing?item.caffeinePerServing:''}"></div>
+      <div class="form-group"><label class="form-label">Serving unit</label><input class="form-input" id="ni-unit" placeholder="gel, bottle…" value="${item?escHtml(item.servingUnit||''):''}"></div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>
       <button class="btn btn-pink" onclick="saveNutritionItem('${item?item.id:''}')">Save</button>
@@ -2781,9 +2844,12 @@ function saveNutritionItem(id){
     carbsPerServing:parseFloat(document.getElementById('ni-carbs')?.value)||0,
     hydrationPerServing:parseFloat(document.getElementById('ni-hydration')?.value)||0,
     sodiumPerServing:parseFloat(document.getElementById('ni-sodium')?.value)||0,
-    servingUnit:(document.getElementById('ni-unit')?.value||'serving').trim()
+    servingUnit:(document.getElementById('ni-unit')?.value||'serving').trim(),
+    category:document.getElementById('ni-cat')?.value||'Fuel',
+    caloriesPerServing:parseFloat(document.getElementById('ni-cal')?.value)||0,
+    caffeinePerServing:parseFloat(document.getElementById('ni-caf')?.value)||0
   };
-  if(id){var idx=DB.nutrition.findIndex(n=>n.id===id);if(idx>=0)DB.nutrition[idx]=obj;else DB.nutrition.push(obj);}
+  if(id){var idx=DB.nutrition.findIndex(n=>n.id===id);if(idx>=0)DB.nutrition[idx]=Object.assign({},DB.nutrition[idx],obj);else DB.nutrition.push(obj);}
   else DB.nutrition.push(obj);
   save();closeAllModals();renderNutrition();
 }
@@ -2822,7 +2888,7 @@ function addNutritionEntry(preselectedId,preQty){
 
 function updateNutritionCalc(){
   if(!DB.nutrition)return;
-  var durMin=pi(document.getElementById('f-dur')?.value);
+  var durMin=pi(document.getElementById('f-elapsed')?.value)||pi(document.getElementById('f-dur')?.value);
   var hrs=durMin>0?durMin/60:0;
   var totalCarbs=0,totalHyd=0,totalSodium=0,hasEntries=false;
   document.querySelectorAll('.nutri-entry-row').forEach(function(row){
@@ -3143,6 +3209,7 @@ function stravaImportSelected(){
   stravaMatchQueue=[];
   stravaNomatchQueue=[];
   stravaRaceQueue=[];
+  stravaMaybeRaceQueue=[];
   selected.forEach(function(act){
     var date=(act.start_date_local||'').slice(0,10);
     var plansForDate=DB.plans.filter(function(p){return p.date===date&&!p.completed;});
@@ -3159,6 +3226,7 @@ function stravaImportSelected(){
     });
     if(racesForDate.length>0)stravaRaceQueue.push({stravaAct:act,races:racesForDate,plans:plansForDate});
     else if(plansForDate.length>0)stravaMatchQueue.push({stravaAct:act,plans:plansForDate});
+    else if(looksLikeRace(act))stravaMaybeRaceQueue.push(act);
     else stravaNomatchQueue.push(act);
   });
   processNextStravaItem();
@@ -3171,6 +3239,10 @@ function processNextStravaItem(){
   }
   if(stravaMatchQueue.length>0){
     setTimeout(function(){showStravaMatchModal(stravaMatchQueue[0]);},150);
+    return;
+  }
+  if(stravaMaybeRaceQueue.length>0){
+    setTimeout(function(){showStravaMaybeRaceModal(stravaMaybeRaceQueue[0]);},150);
     return;
   }
   if(stravaNomatchQueue.length>0){
@@ -3352,7 +3424,8 @@ function stravaAddAsActivity(act){
   var durMin=Math.round((act.moving_time||0)/60);
   var vert=Math.round(act.total_elevation_gain||0);
   var hr=act.average_heartrate?Math.round(act.average_heartrate):0;
-  var base={id:uid(),date:date,dist:distKm,dur:durMin,vert:vert,hr:hr,notes:act.name||'',stravaId:String(act.id)};
+  var elMin=Math.round((act.elapsed_time||0)/60);
+  var base={id:uid(),date:date,dist:distKm,dur:durMin,elapsed:elMin>durMin?elMin:'',vert:vert,hr:hr,notes:act.name||'',stravaId:String(act.id)};
   var runTypes=['Run','TrailRun','VirtualRun'];
   var rideTypes=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
   var strengthTypes=['RockClimbing','WeightTraining','Crossfit'];
@@ -3766,7 +3839,7 @@ function openRaceDetail(id){
   wrap.addEventListener('click',function(e){if(e.target===wrap)closeRaceDetail();});
   document.getElementById('modal-container').appendChild(wrap);
   if(DB.nutrition&&DB.nutrition.length){
-    (r.fuelPlan||[]).forEach(function(e){addFuelRow(e.nutritionId,e.qty,true);});
+    (r.fuelPlan||[]).forEach(function(e){addFuelRow(nutriId(e),nutriQty(e),true);});
     updateFuelTotals();
   }
 }
@@ -3802,7 +3875,7 @@ function updateFuelTotals(){
   var r=findRace(openRaceId),el=document.getElementById('fuel-totals'),basis=document.getElementById('fuel-basis');
   if(!r||!el)return;
   var plan=readFuelRows(),carbs=0,water=0,sodium=0;
-  plan.forEach(function(e){var n=DB.nutrition.find(function(x){return x.id===e.nutritionId;});if(!n)return;
+  plan.forEach(function(e){var n=DB.nutrition.find(function(x){return x.id===nutriId(e);});if(!n)return;
     carbs+=pf(n.carbsPerServing)*e.qty;water+=pf(n.hydrationPerServing)*e.qty;sodium+=pf(n.sodiumPerServing)*e.qty;});
   if(!plan.length){el.innerHTML='';if(basis)basis.textContent='';return;}
   var secs=parseRaceTime(r.result,r.dist)||parseRaceTime(r.goal,r.dist),hrs=secs/3600;
@@ -4009,6 +4082,123 @@ function renderStrengthRecovery(){
   setText('s-str-time',hrs(st)+' h total');
   setText('s-rec-time',hrs(rc)+' h');
   setText('s-rec-count',rc.length+(rc.length===1?' session':' sessions'));
+}
+
+
+// ─── NUTRITION ENTRIES: read both web ({nutritionId,qty}) and mobile ({itemId,servings}) formats ──
+function nutriId(e){return e?(e.nutritionId||e.itemId):'';}
+function nutriQty(e){return e?pf(e.qty!=null?e.qty:e.servings):0;}
+var NUTRI_CATEGORIES=['Fuel','Real Food','Water','Hydration','Electrolyte','Supplement','Medical','Other'];
+
+// Totals for an activity's fuel, per hour of elapsed time when known (stops count when you eat).
+function activityNutrition(r){
+  var entries=r.nutritionEntries||[];
+  var t={carbs:0,water:0,sodium:0,caffeine:0,lines:[]};
+  entries.forEach(function(e){
+    var item=(DB.nutrition||[]).find(function(n){return n.id===nutriId(e);});
+    var q=nutriQty(e);
+    if(!item||q<=0)return;
+    t.carbs+=pf(item.carbsPerServing)*q;t.water+=pf(item.hydrationPerServing)*q;
+    t.sodium+=pf(item.sodiumPerServing)*q;t.caffeine+=pf(item.caffeinePerServing)*q;
+    t.lines.push(q+' × '+escHtml(item.name));
+  });
+  var mins=pi(r.elapsed)||pi(r.dur);
+  t.hours=mins/60;
+  t.basis=pi(r.elapsed)?'elapsed':'moving';
+  return t;
+}
+
+// ─── STRAVA: "Was this a race?" for imports that don't match a race you entered ──
+var stravaMaybeRaceQueue=[];
+function looksLikeRace(act){
+  if(act.workout_type===1||act.workout_type===11)return true; // marked as Race on Strava
+  return /\b(race|marathon|ultra|[0-9]+ ?k race|50 ?k|100 ?k|50 ?mi(le)?|100 ?mi(le)?|half)\b/i.test(act.name||'');
+}
+function showStravaMaybeRaceModal(act){
+  var date=(act.start_date_local||'').slice(0,10);
+  var km=+((act.distance||0)/1000).toFixed(1),mins=Math.round((act.elapsed_time||act.moving_time||0)/60);
+  var wrap=document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.innerHTML='<div class="modal" style="max-width:420px">'+
+    '<div class="modal-title">🏁 Was this a race?<button class="modal-close" onclick="stravaMaybeRaceAnswer(false)">✕</button></div>'+
+    '<div style="font-size:15px;font-weight:600;color:var(--text)">'+escHtml(act.name||'Activity')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin:4px 0 14px">'+fmtDateShort(date)+(km?' · '+km+' km':'')+(mins?' · '+minsToHM(mins):'')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">If yes, it goes into your race results with this finish time. It\'s added to your training log either way.</div>'+
+    '<div class="modal-footer" style="margin-top:0"><button class="btn btn-outline" onclick="stravaMaybeRaceAnswer(false)">No, just log it</button><button class="btn btn-pink" onclick="stravaMaybeRaceAnswer(true)">Yes, it was a race</button></div>'+
+  '</div>';
+  document.getElementById('modal-container').appendChild(wrap);
+}
+function stravaMaybeRaceAnswer(yes){
+  var act=stravaMaybeRaceQueue.shift();
+  closeAllModals();
+  if(!act){processNextStravaItem();return;}
+  stravaAddAsActivity(act);
+  markStravaProcessed(String(act.id));
+  if(!yes){save();renderAll();processNextStravaItem();return;}
+  var t=act.elapsed_time||act.moving_time||0;
+  var sType=act.type||act.sport_type||'';
+  var raceType=/Ride/.test(sType)?'bike':/Ski/.test(sType)?'skimo':'run';
+  var race={id:uid(),name:act.name||'Race',date:(act.start_date_local||'').slice(0,10),raceType:raceType,
+    bikeType:raceType==='bike'?(sType==='GravelRide'?'Gravel':sType==='MountainBikeRide'?'Mountain':'Road'):'',
+    dist:+((act.distance||0)/1000).toFixed(1),vert:Math.round(act.total_elevation_gain||0),loc:'',goal:'',
+    result:Math.floor(t/3600)+':'+String(Math.floor(t%3600/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'),notes:'',stravaActivityId:String(act.id),registered:true};
+  DB.races.push(race);
+  save();renderAll();
+  openRaceFinish(race.id,{celebrate:true,onDone:function(){processNextStravaItem();}});
+}
+
+// ─── STATS PAGE: monthly breakdown for a year ───────────────────────────────
+var statsYear=new Date().getFullYear();
+function changeStatsYear(d){statsYear+=d;renderStats();}
+function renderStats(){
+  var el=document.getElementById('stats-body');if(!el)return;
+  setText('stats-year',String(statsYear));
+  var cycling=isCycling(),y=String(statsYear);
+  var primary=DB.runs.filter(function(r){return r.date.slice(0,4)===y&&(cycling?!!r.bikeType:!r.bikeType);});
+  var crossRuns=DB.runs.filter(function(r){return r.date.slice(0,4)===y&&(cycling?!r.bikeType:!!r.bikeType);});
+  var cross=DB.crosses.filter(function(r){return r.date.slice(0,4)===y;}).concat(crossRuns);
+  var str=DB.strengths.filter(function(r){return r.date.slice(0,4)===y;});
+  var rec=DB.recoveries.filter(function(r){return r.date.slice(0,4)===y;});
+  var sum=function(a,k){return a.reduce(function(s,r){return s+pf(r[k]);},0);};
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var rows=months.map(function(m,i){
+    var mm=y+'-'+String(i+1).padStart(2,'0');
+    var f=function(a){return a.filter(function(r){return r.date.slice(0,7)===mm;});};
+    var p=f(primary),c=f(cross),s=f(str),rc=f(rec);
+    return{m:m,km:sum(p,'dist'),h:sum(p,'dur')/60,vert:sum(p,'vert'),n:p.length,ch:sum(c,'dur')/60,sn:s.length,rh:sum(rc,'dur')/60};
+  });
+  var maxKm=Math.max.apply(null,rows.map(function(r){return r.km;}).concat([1]));
+  var label=cycling?'Ride':'Run';
+  var tot={km:sum(primary,'dist'),h:sum(primary,'dur')/60,vert:sum(primary,'vert'),n:primary.length,ch:sum(cross,'dur')/60,rh:sum(rec,'dur')/60,sn:str.length};
+  var card=function(v,l,c){return'<div class="stat-card '+c+'"><div class="stat-label">'+l+'</div><div class="stat-val">'+v+'</div></div>';};
+  var html='<div class="stat-grid">'+card(tot.km.toFixed(0)+' km',label+' distance','pk')+card(tot.h.toFixed(0)+' h',label+' time','pu')+card(Math.round(tot.vert).toLocaleString()+' m',label+' vert','bl')+card(tot.n,label+'s','am')+'</div>';
+  html+='<div class="stat-grid">'+card(tot.ch.toFixed(0)+' h','Cross training','bl')+card(tot.sn,'Strength sessions','am')+card(tot.rh.toFixed(0)+' h','Stretch / recovery','gr')+card((DB.races||[]).filter(function(r){return r.result&&r.date.slice(0,4)===y;}).length,'Races finished','pk')+'</div>';
+  html+='<div class="card"><div class="card-header"><div class="card-title">By month</div></div><div class="stats-table">'+
+    '<div class="stats-row stats-head"><span>Month</span><span>'+label+' km</span><span>'+label+' h</span><span>Vert m</span><span>Cross h</span><span>Rest h</span></div>'+
+    rows.map(function(r){
+      var empty=!r.km&&!r.h&&!r.ch&&!r.rh&&!r.sn;
+      return'<div class="stats-row'+(empty?' stats-empty':'')+'"><span>'+r.m+'</span>'+
+        '<span class="stats-km"><span class="stats-bar" style="width:'+Math.round(r.km/maxKm*100)+'%"></span><b>'+(r.km?r.km.toFixed(0):'–')+'</b></span>'+
+        '<span>'+(r.h?r.h.toFixed(1):'–')+'</span><span>'+(r.vert?Math.round(r.vert).toLocaleString():'–')+'</span><span>'+(r.ch?r.ch.toFixed(1):'–')+'</span><span>'+(r.rh?r.rh.toFixed(1):'–')+'</span></div>';
+    }).join('')+'</div></div>';
+  // Cross-training by type
+  var byType={};
+  cross.forEach(function(r){var k=r.subtype||(r.bikeType?r.bikeType+' ride':'Run');byType[k]=byType[k]||{h:0,n:0,km:0};byType[k].h+=pf(r.dur)/60;byType[k].n++;byType[k].km+=pf(r.dist);});
+  var types=Object.keys(byType).sort(function(a,b){return byType[b].h-byType[a].h;});
+  if(types.length){
+    html+='<div class="card" style="margin-top:14px"><div class="card-header"><div class="card-title">Cross training by type</div></div>'+
+      types.map(function(k){var t=byType[k];return'<div class="act-row" style="cursor:default"><div class="act-info">'+escHtml(k)+'</div><div class="act-date">'+t.n+' × · '+t.h.toFixed(1)+' h'+(t.km?' · '+t.km.toFixed(0)+' km':'')+'</div></div>';}).join('')+'</div>';
+  }
+  el.innerHTML=html;
+}
+
+function readNutritionRows(){
+  var out=[];
+  document.querySelectorAll('#nutri-entries .nutri-entry-row').forEach(function(row){
+    var sel=row.querySelector('select'),inp=row.querySelector('input[type=number]');
+    if(sel&&inp&&sel.value&&parseFloat(inp.value)>0)out.push({nutritionId:sel.value,qty:parseFloat(inp.value)||0});
+  });
+  return out;
 }
 
 </script>
