@@ -210,10 +210,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .cal-cell{background:var(--surface);border:1px solid var(--border);border-radius:7px;min-height:80px;padding:6px;cursor:pointer;transition:.12s}
 .cal-cell:hover{border-color:var(--border2)}
 .cal-cell.today{border-color:var(--pink)}
-.cal-cell.planned{border-color:rgba(255,171,64,.4);background:rgba(255,171,64,.03)}
 .cal-num{font-size:11px;color:var(--muted);margin-bottom:4px}
 .cal-num.today-num{color:var(--pink);font-weight:700}
-.cal-pip{font-size:10px;margin-top:2px;line-height:1.4}
+.cal-pip{font-size:10px;margin-top:2px;line-height:1.4;pointer-events:none}
+.cal-plan-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-left:5px;vertical-align:1px;background:var(--amber)}
+.cal-plan-dot.done{background:var(--green)}
+.cal-plan-dot.missed{background:transparent;border:1.5px solid var(--red);width:4px;height:4px}
+.day-sec{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:4px 0 -2px}
+.day-sum{font-size:12px;color:var(--muted);margin:-6px 0 12px}
+.day-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.day-badge.done{color:var(--green);background:rgba(0,200,150,.12)}
+.day-badge.missed{color:var(--red);background:rgba(255,82,82,.12)}
+.day-badge.todo{color:var(--amber);background:rgba(255,171,64,.12)}
 .sub-chips{display:flex;flex-wrap:wrap;gap:6px}
 .sub-chip{font:inherit;font-size:12px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer}
 .sub-chip.on{border-color:var(--green);background:rgba(46,196,182,.15);color:var(--green);font-weight:600}
@@ -632,7 +640,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <!-- CALENDAR -->
 <div class="page" id="page-calendar">
   <div class="page-header">
-    <div><div class="page-title">Calendar</div><div class="page-sub">Training plan and activity history.</div></div>
+    <div><div class="page-title">Calendar</div><div class="page-sub">Your workouts. Tap a day to see what was planned and what you did.</div></div>
     <div class="header-btns">
       <button class="btn btn-outline btn-sm" onclick="changeMonth(-1)">‹ Prev</button>
       <span id="cal-lbl" style="font-size:13px;font-weight:600;padding:0 8px;color:var(--text)"></span>
@@ -1670,25 +1678,31 @@ function renderCalendar(){
     var dayCross=DB.crosses.filter(r=>r.date===ds);
     var daySt=DB.strengths.filter(r=>r.date===ds);
     var dayRec=DB.recoveries.filter(r=>r.date===ds);
-    var dayPlans=DB.plans.filter(p=>p.date===ds);
+    var dayPlans=DB.plans.filter(p=>p.date===ds&&p.type!=='Rest');
     var dayRaces=DB.races.filter(r=>r.date===ds);
     var isToday=ds===todayISO();
-    var hasPlan=dayPlans.length>0&&dayRuns.length===0&&dayCross.length===0;
-    var cl='cal-cell'+(isToday?' today':hasPlan?' planned':'');
+    var cl='cal-cell'+(isToday?' today':'');
+    // Planned workouts stay in the Plan tab; the cell only gets a small status dot.
+    var planDot='';
+    if(dayPlans.length){
+      var allDone=dayPlans.every(p=>p.completed);
+      var st=allDone?'done':(ds<todayISO()?'missed':'planned');
+      planDot=`<span class="cal-plan-dot ${st}" title="${allDone?'Planned workout done':st==='missed'?'Planned workout missed':'Workout planned'}"></span>`;
+    }
+    // Labels are display only: tapping anywhere in the day opens the day preview.
     var pips='';
-    dayRuns.forEach(r=>{var km=pf(r.dist);pips+=`<div class="cal-pip" style="color:var(--pink);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','run')">${km.toFixed(1)}km ${r.bikeType?r.bikeType+' ride':(r.runType||'')}</div>`;});
-    dayCross.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--blue);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','cross')">${r.subtype||'CT'}${pf(r.dist)>0?' '+pf(r.dist).toFixed(1)+'km':''}</div>`;});
-    daySt.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','strength')">${r.subtype||'Strength'}</div>`;});
-    dayRec.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--green);cursor:pointer" onclick="event.stopPropagation();viewAct('${r.id}','recovery')">${r.subtype||'Recovery'}</div>`;});
-    dayPlans.forEach(p=>{var doneIcon=p.completed?'&#10003; ':'';var planColor=p.completed?'var(--green)':'var(--amber)';pips+=`<div class="cal-pip" style="color:${planColor};font-style:italic;cursor:pointer" onclick="event.stopPropagation();viewPlan('${p.id}')">${doneIcon}${escHtml(p.type)}: ${escHtml((p.desc||'').slice(0,18))}</div>`;});
-    dayRaces.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--pink2);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🏁 ${escHtml(r.name)}</div>`;});
+    dayRuns.forEach(r=>{var km=pf(r.dist);pips+=`<div class="cal-pip" style="color:var(--pink)">${km.toFixed(1)}km ${r.bikeType?r.bikeType+' ride':(r.runType||'')}</div>`;});
+    dayCross.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--blue)">${r.subtype||'CT'}${pf(r.dist)>0?' '+pf(r.dist).toFixed(1)+'km':''}</div>`;});
+    daySt.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--amber)">${r.subtype||'Strength'}</div>`;});
+    dayRec.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--green)">${r.subtype||'Recovery'}</div>`;});
+    dayRaces.forEach(r=>{pips+=`<div class="cal-pip" style="color:var(--pink2);font-weight:600">🏁 ${escHtml(r.name)}</div>`;});
     DB.races.forEach(r=>{
       if(r.result)return;
-      if(r.regOpenDate===ds&&!r.registered)pips+=`<div class="cal-pip" style="color:var(--amber);cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🎟 Register: ${escHtml(r.name)}</div>`;
-      if(r.requiresLottery&&r.lotteryDate===ds)pips+=`<div class="cal-pip" style="color:#b388ff;cursor:pointer" onclick="event.stopPropagation();openRaceDetail('${r.id}')">🎲 Lottery: ${escHtml(r.name)}</div>`;
+      if(r.regOpenDate===ds&&!r.registered)pips+=`<div class="cal-pip" style="color:var(--amber)">🎟 Register: ${escHtml(r.name)}</div>`;
+      if(r.requiresLottery&&r.lotteryDate===ds)pips+=`<div class="cal-pip" style="color:#b388ff">🎲 Lottery: ${escHtml(r.name)}</div>`;
     });
-    var evPips=eventsOn(ds).map(e=>`<div class="cal-pip cal-event" style="background:${eventColor(e.category)}26;color:${eventColor(e.category)};border-left:2px solid ${eventColor(e.category)}" onclick="event.stopPropagation();openEventModal('${e.id}')">${escHtml(e.title||e.category)}</div>`).join('');
-    html+=`<div class="${cl}" onclick="openDayView('${ds}')"><div class="cal-num${isToday?' today-num':''}">${d}</div>${evPips}${pips}</div>`;
+    var evPips=eventsOn(ds).map(e=>`<div class="cal-pip cal-event" style="background:${eventColor(e.category)}26;color:${eventColor(e.category)};border-left:2px solid ${eventColor(e.category)}">${escHtml(e.title||e.category)}</div>`).join('');
+    html+=`<div class="${cl}" onclick="openDayView('${ds}')"><div class="cal-num${isToday?' today-num':''}">${d}${planDot}</div>${evPips}${pips}</div>`;
   }
   body.innerHTML=html;
 }
@@ -4912,14 +4926,53 @@ function actTitle(r,type){
   return r.subtype||(type==='strength'?'Strength':'Recovery');
 }
 function openDayView(ds){
-  var rows='';
-  var row=function(color,label,sub,onclick){return'<div class="day-item" onclick="'+onclick+'"><span class="day-dot" style="background:'+color+'"></span><div style="flex:1;min-width:0"><div class="day-item-title">'+label+'</div>'+(sub?'<div class="day-item-sub">'+sub+'</div>':'')+'</div><span style="color:var(--muted2)">›</span></div>';};
-  (DB.races||[]).filter(function(r){return r.date===ds;}).forEach(function(r){rows+=row('var(--pink2)','🏁 '+escHtml(r.name),r.result?'Result '+escHtml(r.result):(r.goal?'Goal '+escHtml(r.goal):'Race day'),"openRaceDetail('"+r.id+"')");});
-  eventsOn(ds).forEach(function(e){rows+=row(eventColor(e.category),escHtml(e.title||e.category),e.category+(e.startDate!==e.endDate?' · '+fmtDateShort(e.startDate)+' – '+fmtDateShort(e.endDate):''),"openEventModal('"+e.id+"')");});
-  DB.plans.filter(function(p){return p.date===ds;}).forEach(function(p){rows+=row(p.completed?'var(--green)':'var(--amber)',(p.completed?'✓ ':'')+escHtml(p.desc||p.type),'Planned'+(planDistText(p)?' · '+planDistText(p):'')+(planDurText(p)?' · '+planDurText(p):''),"closeAllModals();viewPlan('"+p.id+"')");});
+  var rows='',today=todayISO();
+  var row=function(color,label,sub,onclick,badge){return'<div class="day-item" onclick="'+onclick+'"><span class="day-dot" style="background:'+color+'"></span><div style="flex:1;min-width:0"><div class="day-item-title">'+label+'</div>'+(sub?'<div class="day-item-sub">'+sub+'</div>':'')+'</div>'+(badge||'')+'<span style="color:var(--muted2)">›</span></div>';};
+  var sec=function(t){return'<div class="day-sec">'+t+'</div>';};
+  var acts=[];
   [['run',DB.runs,'var(--pink)'],['cross',DB.crosses,'var(--blue)'],['strength',DB.strengths,'var(--amber)'],['recovery',DB.recoveries,'var(--green)']].forEach(function(g){
-    g[1].filter(function(r){return r.date===ds;}).forEach(function(r){rows+=row(g[2],escHtml(actTitle(r,g[0])),pi(r.dur)?minsToHM(pi(r.dur)):'',"closeAllModals();viewAct('"+r.id+"','"+g[0]+"')");});
+    g[1].filter(function(r){return r.date===ds;}).forEach(function(r){acts.push({r:r,type:g[0],color:g[2]});});
   });
+  var actSub=function(a){var r=a.r,bits=[];if(pi(r.dur))bits.push(minsToHM(pi(r.dur)));if(pi(r.vert))bits.push(pi(r.vert)+' m vert');if(pi(r.hr))bits.push(pi(r.hr)+' bpm');return bits.join(' · ');};
+  // Races and events
+  var top='';
+  (DB.races||[]).filter(function(r){return r.date===ds;}).forEach(function(r){top+=row('var(--pink2)','🏁 '+escHtml(r.name),r.result?'Result '+escHtml(r.result):(r.goal?'Goal '+escHtml(r.goal):'Race day'),"openRaceDetail('"+r.id+"')");});
+  (DB.races||[]).forEach(function(r){
+    if(r.result)return;
+    if(r.regOpenDate===ds&&!r.registered)top+=row('var(--amber)','🎟 Register: '+escHtml(r.name),'Registration opens'+(r.regOpenTime?' at '+escHtml(r.regOpenTime):''),"openRaceDetail('"+r.id+"')");
+    if(r.requiresLottery&&r.lotteryDate===ds)top+=row('#b388ff','🎲 Lottery: '+escHtml(r.name),'Lottery draw',"openRaceDetail('"+r.id+"')");
+  });
+  eventsOn(ds).forEach(function(e){top+=row(eventColor(e.category),escHtml(e.title||e.category),e.category+(e.startDate!==e.endDate?' · '+fmtDateShort(e.startDate)+' – '+fmtDateShort(e.endDate):''),"openEventModal('"+e.id+"')");});
+  if(top)rows+=top;
+  // Planned, with whether it was done
+  var plans=DB.plans.filter(function(p){return p.date===ds;});
+  var realPlans=plans.filter(function(p){return p.type!=='Rest';});
+  var doneCount=realPlans.filter(function(p){return p.completed;}).length;
+  if(plans.length){
+    rows+=sec('Planned');
+    plans.forEach(function(p){
+      var isRest=p.type==='Rest';
+      var linked=acts.find(function(a){return a.r.planId===p.id;});
+      var badge=isRest?'':p.completed?'<span class="day-badge done">✓ Done</span>':ds<today?'<span class="day-badge missed">Missed</span>':'<span class="day-badge todo">'+(ds===today?'To do today':'Upcoming')+'</span>';
+      var sub=[escHtml(p.type)];if(planDistText(p))sub.push(planDistText(p));if(planDurText(p))sub.push(planDurText(p));
+      if(linked)sub.push('did '+escHtml(actTitle(linked.r,linked.type)));
+      rows+=row(isRest?'var(--muted2)':p.completed?'var(--green)':ds<today?'var(--red)':'var(--amber)',escHtml(p.desc||p.type),sub.join(' · '),"closeAllModals();viewPlan('"+p.id+"')",badge);
+    });
+  }
+  // What was actually done
+  if(acts.length){
+    rows+=sec('Completed');
+    acts.forEach(function(a){
+      var fromPlan=a.r.planId&&plans.some(function(p){return p.id===a.r.planId;});
+      rows+=row(a.color,escHtml(actTitle(a.r,a.type)),(fromPlan?'From your plan · ':'')+actSub(a),"closeAllModals();viewAct('"+a.r.id+"','"+a.type+"')");
+    });
+  }
+  var summary='';
+  if(realPlans.length){
+    summary=doneCount===realPlans.length?'✓ Planned workout'+(realPlans.length>1?'s':'')+' done':
+      (doneCount?doneCount+' of '+realPlans.length+' planned workouts done':(ds<today?'Planned workout not done':ds===today?'Planned workout to do today':'Workout planned'));
+    if(!doneCount&&ds<today&&acts.length)summary+=', but you logged '+acts.length+' activit'+(acts.length===1?'y':'ies');
+  }else if(acts.length)summary=acts.length+' activit'+(acts.length===1?'y':'ies')+', nothing planned';
   if(!rows)rows='<div class="empty-state" style="padding:18px">Nothing on this day yet.</div>';
   var d=parseLocalDate(ds),future=ds>todayISO();
   closeAllModals();
@@ -4927,6 +4980,7 @@ function openDayView(ds){
   wrap.className='modal-overlay';
   wrap.innerHTML='<div class="modal" style="max-width:440px">'+
     '<div class="modal-title">'+d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})+'<button class="modal-close" onclick="closeAllModals()">✕</button></div>'+
+    (summary?'<div class="day-sum">'+summary+'</div>':'')+
     '<div class="day-list">'+rows+'</div>'+
     '<div class="day-actions">'+
       (future?'':'<button class="btn btn-pink btn-sm" onclick="openModalForDate(\''+ds+'\',\''+(isCycling()?'run':'run')+'\')">'+(isCycling()?'+ Log Ride':'+ Log Run')+'</button>'+
