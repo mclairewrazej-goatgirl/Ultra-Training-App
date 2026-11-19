@@ -107,6 +107,13 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min
 .bar-col.goal{background:#7c4dff}
 .bar-col.total{background:var(--green)}
 .bar-col.current{opacity:1}
+.bar-col.picked{opacity:1;outline:2px solid var(--text);outline-offset:1px}
+#vol-tooltip{pointer-events:auto;white-space:normal;min-width:150px;max-width:220px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.vol-bubble-title{font-weight:700;font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;color:var(--text)}
+.vol-bubble-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.vol-bubble-row{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted);line-height:1.6}
+.vol-bubble-row b{color:var(--text);font-weight:600}
+.vol-bubble-goal{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:10px;color:var(--muted)}
 .bar-lbl{font-size:9px;color:var(--muted);text-align:center}
 .tooltip{position:absolute;background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:8px 12px;font-size:11px;pointer-events:none;z-index:10;white-space:nowrap;display:none;bottom:calc(100% + 6px);left:0}
 .filter-tabs{display:flex;gap:2px;background:var(--surface);border-radius:8px;padding:3px;margin-bottom:16px;border:1px solid var(--border);width:fit-content;flex-wrap:wrap}
@@ -1538,20 +1545,20 @@ function renderVolChart(){
     var isCur=true;
     var bw=document.createElement('div');
     bw.className='bar-wrap';
+    var totalH=Math.max((totalVal/axisMax)*chartH,totalVal>0?2:0);
     bw.innerHTML=`<div class=\"bar-group\">
-      <div class=\"bar-col run ${isCur?'current':''}\" style=\"height:${rh}px;min-height:${rh>0?2:0}px\"></div>
-      <div class=\"bar-col cross ${isCur?'current':''}\" style=\"height:${ch}px;min-height:${ch>0?2:0}px\"></div>
-      <div class=\"bar-col total ${isCur?'current':''}\" style=\"height:${Math.max((totalVal/axisMax)*chartH,totalVal>0?2:0)}px;min-height:${totalVal>0?2:0}px\"></div>
+      <div class=\"bar-col run ${isCur?'current':''}\" data-kind=\"run\" style=\"height:${rh}px;min-height:${rh>0?2:0}px\"></div>
+      <div class=\"bar-col cross ${isCur?'current':''}\" data-kind=\"cross\" style=\"height:${ch}px;min-height:${ch>0?2:0}px\"></div>
+      <div class=\"bar-col total ${isCur?'current':''}\" data-kind=\"total\" style=\"height:${totalH}px;min-height:${totalVal>0?2:0}px\"></div>
     </div>`;
-    bw.addEventListener('mouseenter',function(){
-      var tt=document.getElementById('vol-tooltip');
-      var runGoalMin=pf(w[metricCfg.goalRunMin]),runGoalMax=pf(w[metricCfg.goalRunMax]),crossGoalMin=pf(w[metricCfg.goalCrossMin]),crossGoalMax=pf(w[metricCfg.goalCrossMax]);
-      var runGoalLine=runGoalMax>0?`<br>Run Goal: ${metricCfg.fmt(runGoalMin)}-${metricCfg.fmt(runGoalMax)} ${metricCfg.unit}`:'';
-      var crossGoalLine=crossGoalMax>0?`<br>Cross Goal: ${metricCfg.fmt(crossGoalMin)}-${metricCfg.fmt(crossGoalMax)} ${metricCfg.unit}`:'';
-      tt.innerHTML=`<strong>${w.lbl}</strong><br>Run: ${metricCfg.tt(runVal)}<br>CT: ${metricCfg.tt(crossVal)}<br>Total: ${metricCfg.tt(totalVal)}${runGoalLine}${crossGoalLine}`;
-      tt.style.display='block';tt.style.left=(bw.offsetLeft)+'px';
+    // Tap (or click) a bar to get a bubble with that bar's numbers. Works on
+    // iPhone, where the old hover tooltip never showed.
+    bw.querySelectorAll('.bar-col').forEach(function(col){
+      col.addEventListener('click',function(e){
+        e.stopPropagation();
+        showVolBubble(col,w,col.getAttribute('data-kind'));
+      });
     });
-    bw.addEventListener('mouseleave',function(){document.getElementById('vol-tooltip').style.display='none';});
     chart.appendChild(bw);
     var lw=document.createElement('div');
     lw.style.cssText='flex:1;text-align:center;font-size:9px;color:var(--muted)';
@@ -1559,6 +1566,62 @@ function renderVolChart(){
     labels.appendChild(lw);
   });
 }
+
+var volBubbleOpen=null;
+function hideVolBubble(){
+  var tt=document.getElementById('vol-tooltip');
+  if(tt)tt.style.display='none';
+  document.querySelectorAll('#vol-chart .bar-col.picked').forEach(function(c){c.classList.remove('picked');});
+  volBubbleOpen=null;
+}
+function showVolBubble(col,w,kind){
+  var tt=document.getElementById('vol-tooltip'),chart=document.getElementById('vol-chart');
+  if(!tt||!chart)return;
+  if(volBubbleOpen===kind+'|'+w.key){hideVolBubble();return;}
+  hideVolBubble();
+  var primary=(document.getElementById('vol-legend-primary')||{}).textContent||'Run';
+  var p=kind==='run'?'r':kind==='cross'?'c':'t';
+  var name=kind==='run'?primary:kind==='cross'?'Cross Train':'Total';
+  var color=kind==='run'?'var(--pink)':kind==='cross'?'var(--blue)':'var(--green)';
+  var dist=pf(w[p+'dist']),mins=pi(w[p+'time']),vert=pi(w[p+'vert']);
+  var count=kind==='run'?w.rcount:kind==='cross'?w.ccount:(w.rcount||0)+(w.ccount||0);
+  function row(l,v){return '<div class="vol-bubble-row"><span>'+l+'</span><b>'+v+'</b></div>';}
+  var html='<div class="vol-bubble-title"><span class="vol-bubble-dot" style="background:'+color+'"></span>'+escHtml(name)+' &middot; '+escHtml(w.lbl)+'</div>'+
+    row('Distance',dist.toFixed(1)+' km')+
+    row('Time',minsToHM(mins))+
+    row('Vert',vert+' m')+
+    row('Activities',count||0);
+  if(dist>0&&mins>0&&kind==='run'&&!isCycling())html+=row('Avg pace',formatPace(mins/dist)+' /km');
+  // Goal progress for the metric the chart is showing.
+  var gKey={dist:'Dist',time:'Time',vert:'Vert'}[volumeMetric];
+  var unit={dist:'km',time:'h',vert:'m'}[volumeMetric];
+  var cur={dist:dist,time:mins/60,vert:vert}[volumeMetric];
+  var gp=kind==='run'?'gr':kind==='cross'?'gc':null;
+  if(gp){
+    var gMin=pf(w[gp+gKey+'Min']),gMax=pf(w[gp+gKey+'Max']);
+    if(gMax>0){
+      var fmtG=function(v){return volumeMetric==='vert'?Math.round(v):(+v.toFixed(1));};
+      var pct=Math.round((cur/(gMin>0?gMin:gMax))*100);
+      html+='<div class="vol-bubble-goal">Goal '+fmtG(gMin)+'&ndash;'+fmtG(gMax)+' '+unit+' &middot; '+(cur>=gMin&&gMin>0||cur>=gMax?'<span style="color:var(--green)">hit &#10003;</span>':pct+'% of min')+'</div>';
+    }
+  }
+  tt.innerHTML=html;
+  tt.style.display='block';
+  // Sit the bubble above the tapped bar, kept inside the chart.
+  var cr=chart.getBoundingClientRect(),br=col.getBoundingClientRect();
+  var tw=tt.offsetWidth,th=tt.offsetHeight;
+  var left=br.left-cr.left+br.width/2-tw/2;
+  left=Math.max(0,Math.min(left,cr.width-tw));
+  var top=br.top-cr.top-th-8;
+  tt.style.left=left+'px';
+  tt.style.top=top+'px';
+  tt.style.bottom='auto';
+  col.classList.add('picked');
+  volBubbleOpen=kind+'|'+w.key;
+}
+document.addEventListener('click',function(e){
+  if(volBubbleOpen&&!(e.target.closest&&e.target.closest('#vol-tooltip')))hideVolBubble();
+});
 
 function renderRecentActs(){
   var all=[
@@ -1855,9 +1918,9 @@ function getVolChartSinglePeriod(){
     var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
     var key=mon.toISOString().slice(0,10);
     var lbl=volChartOffset===0?'Current Week':MN[mon.getMonth()]+' '+mon.getDate()+' – '+MN[sun.getMonth()]+' '+sun.getDate();
-    var w=Object.assign({key,lbl,rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0},empty);
-    DB.runs.forEach(function(r){var d=parseLocalDate(r.date);if(d>=mon&&d<=sun){w.rdist+=pf(r.dist);w.rtime+=pi(r.dur);w.rvert+=pi(r.vert);}});
-    DB.crosses.forEach(function(r){var d=parseLocalDate(r.date);if(d>=mon&&d<=sun){w.cdist+=pf(r.dist);w.ctime+=pi(r.dur);w.cvert+=pi(r.vert);}});
+    var w=Object.assign({key,lbl,rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0,rcount:0,ccount:0},empty);
+    DB.runs.forEach(function(r){var d=parseLocalDate(r.date);if(d>=mon&&d<=sun){w.rcount++;w.rdist+=pf(r.dist);w.rtime+=pi(r.dur);w.rvert+=pi(r.vert);}});
+    DB.crosses.forEach(function(r){var d=parseLocalDate(r.date);if(d>=mon&&d<=sun){w.ccount++;w.cdist+=pf(r.dist);w.ctime+=pi(r.dur);w.cvert+=pi(r.vert);}});
     w.tdist=w.rdist+w.cdist;w.ttime=w.rtime+w.ctime;w.tvert=w.rvert+w.cvert;
     applyGoals(w,getGoalsForWeek(key));
     return[w];
@@ -1867,9 +1930,9 @@ function getVolChartSinglePeriod(){
   var monthStart=new Date(yr,mo,1,0,0,0,0),monthEnd=new Date(yr,mo+1,0,23,59,59,999);
   var key=new Date(yr,mo,1,12).toISOString().slice(0,10);
   var lbl=volChartOffset===0?MN[mo]+' (Current)':MN[mo]+' '+yr;
-  var m=Object.assign({key,lbl,rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0},empty);
-  DB.runs.forEach(function(r){var d=parseLocalDate(r.date);if(d>=monthStart&&d<=monthEnd){m.rdist+=pf(r.dist);m.rtime+=pi(r.dur);m.rvert+=pi(r.vert);}});
-  DB.crosses.forEach(function(r){var d=parseLocalDate(r.date);if(d>=monthStart&&d<=monthEnd){m.cdist+=pf(r.dist);m.ctime+=pi(r.dur);m.cvert+=pi(r.vert);}});
+  var m=Object.assign({key,lbl,rdist:0,rtime:0,rvert:0,cdist:0,ctime:0,cvert:0,tdist:0,ttime:0,tvert:0,rcount:0,ccount:0},empty);
+  DB.runs.forEach(function(r){var d=parseLocalDate(r.date);if(d>=monthStart&&d<=monthEnd){m.rcount++;m.rdist+=pf(r.dist);m.rtime+=pi(r.dur);m.rvert+=pi(r.vert);}});
+  DB.crosses.forEach(function(r){var d=parseLocalDate(r.date);if(d>=monthStart&&d<=monthEnd){m.ccount++;m.cdist+=pf(r.dist);m.ctime+=pi(r.dur);m.cvert+=pi(r.vert);}});
   m.tdist=m.rdist+m.cdist;m.ttime=m.rtime+m.ctime;m.tvert=m.rvert+m.cvert;
   var wday=monthStart.getDay()||7,wmon=new Date(monthStart);
   wmon.setDate(monthStart.getDate()-wday+1);wmon.setHours(0,0,0,0);
@@ -3446,6 +3509,7 @@ function uncompletePlan(id){
   p.actualHr=0;
   p.completionNotes='';
   p.completionNutritionEntries=[];
+  delete p.stravaActivityId;
   DB.runs=DB.runs.filter(r=>r.planId!==p.id);
   DB.crosses=DB.crosses.filter(r=>r.planId!==p.id);
   DB.strengths=DB.strengths.filter(r=>r.planId!==p.id);
@@ -3557,6 +3621,7 @@ function upsertActivityFromPlan(p){
     hr:pi(p.actualHr)||0,
     notes:p.completionNotes||p.notes||p.desc||''
   };
+  if(p.stravaActivityId)baseObj.stravaId=String(p.stravaActivityId);
   if(mappedType==='run'){
     DB.runs.push({
       ...baseObj,
@@ -3925,55 +3990,115 @@ async function stravaGetValidToken(){
   return DB.stravaTokens.accessToken;
 }
 
-async function stravaSync(){
+var STRAVA_RANGES=[
+  {key:'day',label:'Last day',days:1,phrase:'in the last day'},
+  {key:'week',label:'Last 7 days',days:7,phrase:'in the last 7 days'},
+  {key:'month',label:'Last month',days:30,phrase:'in the last month'}
+];
+function stravaRangeCfg(key){
+  return STRAVA_RANGES.find(function(r){return r.key===key;})||STRAVA_RANGES[1];
+}
+
+// Every Strava activity id the app has already brought in: log entries,
+// completed plans, race results, and anything a past sync handled (so an
+// activity you later deleted from the log isn't offered again by default).
+function stravaSyncedIdSet(){
+  var ids={};
+  [DB.runs,DB.crosses,DB.strengths,DB.recoveries].forEach(function(arr){
+    (arr||[]).forEach(function(r){if(r.stravaId)ids[String(r.stravaId)]='log';});
+  });
+  (DB.plans||[]).forEach(function(p){if(p.stravaActivityId&&!ids[String(p.stravaActivityId)])ids[String(p.stravaActivityId)]='plan';});
+  (DB.races||[]).forEach(function(r){if(r.stravaActivityId&&!ids[String(r.stravaActivityId)])ids[String(r.stravaActivityId)]='race';});
+  (DB.stravaProcessedIds||[]).forEach(function(id){if(!ids[String(id)])ids[String(id)]='removed';});
+  return ids;
+}
+
+async function stravaFetchActivities(token,afterTs){
+  var all=[];
+  for(var page=1;page<=10;page++){
+    var resp=await fetch(
+      'https://www.strava.com/api/v3/athlete/activities?after='+afterTs+'&per_page=100&page='+page,
+      {headers:{'Authorization':'Bearer '+token}}
+    );
+    if(!resp.ok){var err=new Error('Strava API error '+resp.status);err.status=resp.status;throw err;}
+    var batch=await resp.json();
+    if(!Array.isArray(batch)||!batch.length)break;
+    all=all.concat(batch);
+    if(batch.length<100)break;
+  }
+  return all;
+}
+
+async function stravaSync(rangeKey){
+  if(rangeKey){DB.stravaSyncRange=rangeKey;save();}
+  var range=stravaRangeCfg(DB.stravaSyncRange);
   var btn=document.getElementById('strava-sync-btn');
   if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+  var modalStatus=document.getElementById('strava-sync-status');
+  if(modalStatus)modalStatus.textContent='Looking '+range.phrase+'…';
   try{
     var token=await stravaGetValidToken();
     if(!token)return;
-    var afterTs=Math.floor(Date.now()/1000)-60*24*3600;
-    var resp=await fetch(
-      'https://www.strava.com/api/v3/athlete/activities?after='+afterTs+'&per_page=100',
-      {headers:{'Authorization':'Bearer '+token}}
-    );
-    if(!resp.ok){
-      if(resp.status===401){DB.stravaTokens=null;save();renderStravaStatus();alert('Strava token invalid — please reconnect.');return;}
-      throw new Error('Strava API error '+resp.status);
+    var afterTs=Math.floor(Date.now()/1000)-range.days*24*3600;
+    var activities;
+    try{activities=await stravaFetchActivities(token,afterTs);}
+    catch(e){
+      if(e.status===401){DB.stravaTokens=null;save();renderStravaStatus();closeAllModals();alert('Strava token invalid — please reconnect.');return;}
+      throw e;
     }
-    var activities=await resp.json();
     if(!Array.isArray(DB.stravaProcessedIds))DB.stravaProcessedIds=[];
-    var processed=DB.stravaProcessedIds;
-    var newActs=activities.filter(function(a){
-      var strId=String(a.id);
-      if(!processed.includes(strId))return true;
-      // Re-process if it was marked processed but never actually saved to DB
-      return !DB.runs.some(function(r){return r.stravaId===strId;})&&
-             !DB.crosses.some(function(r){return r.stravaId===strId;})&&
-             !DB.strengths.some(function(r){return r.stravaId===strId;});
-    });
-    if(newActs.length===0){showStravaToast('No new Strava activities to sync.');return;}
-    showStravaSelectModal(newActs);
+    var synced=stravaSyncedIdSet();
+    var newActs=[],doneActs=[];
+    activities.forEach(function(a){(synced[String(a.id)]?doneActs:newActs).push(a);});
+    var byDateDesc=function(a,b){return (b.start_date_local||'').localeCompare(a.start_date_local||'');};
+    newActs.sort(byDateDesc);doneActs.sort(byDateDesc);
+    closeAllModals();
+    showStravaSelectModal(newActs,doneActs,synced,range);
   }catch(e){
     alert('Sync failed: '+e.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='&#8635; Sync Activities';}
+    if(btn){btn.disabled=false;btn.innerHTML='&#8635; Sync Activities';}
   }
 }
 
 var stravaSelectableActs=[];
+var stravaShowSynced=false;
 
-function showStravaSelectModal(acts){
-  stravaSelectableActs=acts;
+function stravaToggleSynced(){
+  stravaShowSynced=!stravaShowSynced;
+  var box=document.getElementById('strava-synced-list');
+  var lbl=document.getElementById('strava-synced-toggle');
+  if(box)box.style.display=stravaShowSynced?'block':'none';
+  if(lbl)lbl.innerHTML=(stravaShowSynced?'&#9662; Hide':'&#9656; Show')+' already synced';
+}
+
+function showStravaSelectModal(acts,doneActs,synced,range){
+  doneActs=doneActs||[];synced=synced||{};range=range||stravaRangeCfg(DB.stravaSyncRange);
+  stravaSelectableActs=acts.concat(doneActs);
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function typeColor(t){
     var rides=['Ride','VirtualRide','GravelRide','MountainBikeRide','EBikeRide','Velomobile'];
     var runs=['Run','TrailRun','VirtualRun'];
     return rides.includes(t)?'var(--blue)':runs.includes(t)?'var(--pink)':'var(--green)';
   }
-  var rowsHtml=acts.map(function(act,idx){
+  function actLine(act){
     var date=(act.start_date_local||'').slice(0,10);
     var distKm=parseFloat(((act.distance||0)/1000).toFixed(1));
     var durMin=Math.round((act.moving_time||0)/60);
+    var sType=stravaSport(act)||'Activity';
+    var d=date?new Date(date+'T12:00:00'):null;
+    var dateStr=d?(months[d.getMonth()]+' '+d.getDate()):date;
+    var stats=[distKm>0?distKm+' km':'',durMin>0?minsToHM(durMin):''].filter(Boolean).join(' · ');
+    return '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(act.name||'Activity')+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+dateStr+
+          ' &middot; <span style="color:'+typeColor(sType)+'">'+escHtml(sType)+'</span>'+
+          (stats?' &middot; '+stats:'')+
+        '</div>'+
+      '</div>';
+  }
+  var rowsHtml=acts.map(function(act,idx){
+    var date=(act.start_date_local||'').slice(0,10);
     var sType=stravaSport(act)||'Activity';
     var hasPlan=DB.plans.some(function(p){return p.date===date&&!p.completed;});
     var actDistKm=(act.distance||0)/1000;
@@ -3986,25 +4111,39 @@ function showStravaSelectModal(acts){
       var skiT=['NordicSki','BackcountrySki','AlpineSki'];
       return (r.raceType==='run'&&runT.includes(sType))||(r.raceType==='bike'&&rideT.includes(sType))||(r.raceType==='skimo'&&skiT.includes(sType));
     });
-    var d=date?new Date(date+'T12:00:00'):null;
-    var dateStr=d?(months[d.getMonth()]+' '+d.getDate()):date;
-    var stats=[distKm>0?distKm+' km':'',durMin>0?minsToHM(durMin):''].filter(Boolean).join(' · ');
     var badge=hasRaceMatch
       ?'<span style="font-size:9px;font-weight:700;color:var(--pink);background:rgba(255,100,130,.15);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">RACE DAY</span>'
       :hasPlan?'<span style="font-size:9px;font-weight:700;color:var(--amber);background:rgba(255,171,64,.12);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">PLAN MATCH</span>':'';
     return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
-      '<input type="checkbox" class="strava-act-chk" data-idx="'+idx+'" checked onchange="updateStravaImportBtn()" style="width:15px;height:15px;accent-color:var(--pink);flex-shrink:0">'+
-      '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(act.name||'Activity')+'</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+dateStr+
-          ' &middot; <span style="color:'+typeColor(sType)+'">'+escHtml(sType)+'</span>'+
-          (stats?' &middot; '+stats:'')+
-        '</div>'+
-      '</div>'+
-      badge+
+      '<input type="checkbox" class="strava-act-chk strava-new-chk" data-idx="'+idx+'" checked onchange="updateStravaImportBtn()" style="width:15px;height:15px;accent-color:var(--pink);flex-shrink:0">'+
+      actLine(act)+badge+
     '</label>';
   }).join('');
+  var syncedRows=doneActs.map(function(act,i){
+    var idx=acts.length+i;
+    var why=synced[String(act.id)];
+    if(why==='removed'){
+      // Synced before but no longer in the log: allow bringing it back, unticked.
+      return '<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;opacity:.75">'+
+        '<input type="checkbox" class="strava-act-chk" data-idx="'+idx+'" onchange="updateStravaImportBtn()" style="width:15px;height:15px;accent-color:var(--pink);flex-shrink:0">'+
+        actLine(act)+
+        '<span style="font-size:9px;font-weight:700;color:var(--muted);background:var(--surface2);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">REMOVED FROM LOG</span>'+
+      '</label>';
+    }
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);opacity:.6">'+
+      '<span style="width:15px;text-align:center;color:var(--green);font-weight:700;flex-shrink:0">&#10003;</span>'+
+      actLine(act)+
+      '<span style="font-size:9px;font-weight:700;color:var(--green);background:rgba(0,200,120,.12);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">SYNCED</span>'+
+    '</div>';
+  }).join('');
+  var chips=STRAVA_RANGES.map(function(r){
+    var on=r.key===range.key;
+    return '<button class="btn btn-sm '+(on?'btn-pink':'btn-outline')+'" onclick="stravaSync(\''+r.key+'\')">'+r.label+'</button>';
+  }).join('');
   var plural=acts.length===1?'y':'ies';
+  var summary=acts.length
+    ?acts.length+' unsynced activit'+plural+' '+range.phrase
+    :'You\'re all caught up. Nothing unsynced '+range.phrase+'.';
   var html='<div class="view-modal" style="max-width:520px">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'+
       '<div style="display:flex;align-items:center;gap:8px">'+
@@ -4013,18 +4152,25 @@ function showStravaSelectModal(acts){
       '</div>'+
       '<button class="modal-close" onclick="closeAllModals()" style="font-size:22px">&times;</button>'+
     '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Choose which activit'+plural+' to add to your training log. <span style="color:var(--pink);font-weight:600">RACE DAY</span> activities match a scheduled race. <span style="color:var(--amber);font-weight:600">PLAN MATCH</span> activities will let you mark a planned workout complete.</div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-      '<span style="font-size:11px;color:var(--muted)">'+acts.length+' new activit'+plural+' available</span>'+
-      '<div style="display:flex;gap:6px">'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Look for unsynced activities from:</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+chips+'</div>'+
+    '<div id="strava-sync-status" style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px">'+summary+'</div>'+
+    (acts.length?
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Choose which to add to your training log. <span style="color:var(--pink);font-weight:600">RACE DAY</span> activities match a scheduled race. <span style="color:var(--amber);font-weight:600">PLAN MATCH</span> activities will let you mark a planned workout complete.</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">'+
         '<button class="btn btn-sm btn-outline" onclick="stravaSelectAll(true)">All</button>'+
         '<button class="btn btn-sm btn-outline" onclick="stravaSelectAll(false)">None</button>'+
       '</div>'+
-    '</div>'+
-    '<div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:14px">'+rowsHtml+'</div>'+
-    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-      '<button class="btn btn-outline" onclick="closeAllModals()">Cancel</button>'+
-      '<button class="btn btn-pink" id="strava-import-btn" onclick="stravaImportSelected()">Import Selected ('+acts.length+')</button>'+
+      '<div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px">'+rowsHtml+'</div>'
+    :'')+
+    (doneActs.length?
+      '<button id="strava-synced-toggle" onclick="stravaToggleSynced()" style="background:none;border:none;padding:0;margin-bottom:8px;font-size:11px;color:var(--muted);cursor:pointer;font-family:inherit">'+(stravaShowSynced?'&#9662; Hide':'&#9656; Show')+' already synced</button>'+
+      '<span style="font-size:11px;color:var(--muted2)"> ('+doneActs.length+')</span>'+
+      '<div id="strava-synced-list" style="display:'+(stravaShowSynced?'block':'none')+';max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px">'+syncedRows+'</div>'
+    :'')+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">'+
+      '<button class="btn btn-outline" onclick="closeAllModals()">'+(acts.length?'Cancel':'Close')+'</button>'+
+      (stravaSelectableActs.length?'<button class="btn btn-pink" id="strava-import-btn" onclick="stravaImportSelected()">Import Selected ('+acts.length+')</button>':'')+
     '</div>'+
   '</div>';
   var wrap=document.createElement('div');
@@ -4032,10 +4178,13 @@ function showStravaSelectModal(acts){
   wrap.addEventListener('click',function(e){if(e.target===wrap)closeAllModals();});
   wrap.innerHTML=html;
   document.getElementById('modal-container').appendChild(wrap);
+  if(!acts.length&&!doneActs.some(function(a){return synced[String(a.id)]==='removed';})){
+    var ib=document.getElementById('strava-import-btn');if(ib)ib.style.display='none';
+  }
 }
 
 function stravaSelectAll(checked){
-  document.querySelectorAll('.strava-act-chk').forEach(function(chk){chk.checked=checked;});
+  document.querySelectorAll('.strava-new-chk').forEach(function(chk){chk.checked=checked;});
   updateStravaImportBtn();
 }
 
